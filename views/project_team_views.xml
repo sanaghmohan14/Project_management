@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Project Team Form View -->
+    <record id="view_project_manage_team_form" model="ir.ui.view">
+        <field name="name">project.manage.team.form</field>
+        <field name="model">project.manage.team</field>
+        <field name="arch" type="xml">
+            <form string="Project Team">
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_projects" type="object" class="oe_stat_button" icon="fa-briefcase">
+                            <field name="project_count" widget="statinfo" string="Projects"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" string="Team Name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. ERP Implementation Team..."/>
+                        </h1>
+                    </div>
+                    <group string="TEAM DETAILS">
+                        <group>
+                            <field name="team_lead_id" widget="many2one_avatar_user"/>
+                            <field name="company_id" groups="base.group_multi_company" placeholder="Visible to all" options="{'no_create': True}"/>
+                            <field name="active" invisible="1"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Members" name="members">
+                            <field name="member_ids" mode="kanban" class="w-100">
+                                <kanban>
+                                    <control>
+                                        <create string="Add Team Members"/>
+                                    </control>
+                                    <templates>
+                                        <t t-name="card" class="flex-row">
+                                            <aside>
+                                                <field name="avatar_128" widget="image" class="o_image_64_cover" alt="Avatar"/>
+                                            </aside>
+                                            <main class="ms-3">
+                                                <field name="name" class="fw-bold fs-5"/>
+                                                <div class="d-flex align-items-baseline text-break" invisible="not email">
+                                                    <i class="fa fa-envelope me-1" role="img" aria-label="Email" title="Email"/>
+                                                    <field name="email"/>
+                                                </div>
+                                            </main>
+                                        </t>
+                                    </templates>
+                                </kanban>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Project Team List View -->
+    <record id="view_project_manage_team_list" model="ir.ui.view">
+        <field name="name">project.manage.team.list</field>
+        <field name="model">project.manage.team</field>
+        <field name="arch" type="xml">
+            <list string="Project Teams">
+                <field name="name"/>
+                <field name="team_lead_id" widget="many2one_avatar_user"/>
+                <field name="member_ids" widget="many2many_tags" options="{'color_field': 'color'}"/>
+                <field name="project_count" string="Projects"/>
+                <field name="company_id" groups="base.group_multi_company"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Project Team Kanban View -->
+    <record id="view_project_manage_team_kanban" model="ir.ui.view">
+        <field name="name">project.manage.team.kanban</field>
+        <field name="model">project.manage.team</field>
+        <field name="arch" type="xml">
+            <kanban class="o_kanban_mobile" sample="1">
+                <field name="name"/>
+                <field name="team_lead_id"/>
+                <field name="member_ids"/>
+                <field name="project_count"/>
+                <templates>
+                    <t t-name="card">
+                        <main>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong class="fs-5 text-dark"><field name="name"/></strong>
+                                <span class="badge text-bg-primary">
+                                    <field name="project_count"/> Projects
+                                </span>
+                            </div>
+                            <div class="d-flex align-items-center mt-2 text-muted small">
+                                <span class="me-2">Leader:</span>
+                                <field name="team_lead_id" widget="many2one_avatar_user"/>
+                            </div>
+                            <div class="mt-2 pt-2 border-top">
+                                <field name="member_ids" widget="many2many_tags"/>
+                            </div>
+                        </main>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Project Team Search View -->
+    <record id="view_project_manage_team_search" model="ir.ui.view">
+        <field name="name">project.manage.team.search</field>
+        <field name="model">project.manage.team</field>
+        <field name="arch" type="xml">
+            <search string="Search Project Teams">
+                <field name="name" string="Team Name"/>
+                <field name="team_lead_id"/>
+                <field name="member_ids"/>
+                <filter string="Archived" name="inactive" domain="[('active', '=', False)]"/>
+                <group>
+                    <filter name="g_leader" string="Team Leader" context="{'group_by': 'team_lead_id'}"/>
+                    <filter name="g_company" string="Company" context="{'group_by': 'company_id'}" groups="base.group_multi_company"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action -->
+    <record id="action_project_manage_team" model="ir.actions.act_window">
+        <field name="name">Project Teams</field>
+        <field name="res_model">project.manage.team</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="search_view_id" ref="view_project_manage_team_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first project team!
+            </p>
+            <p>
+                Organize your project members and assign team leaders to manage projects smoothly.
+            </p>
+        </field>
+    </record>
+</odoo>

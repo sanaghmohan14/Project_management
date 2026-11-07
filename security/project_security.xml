@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Project Management User Privilege Category -->
+    <record id="module_category_project_manage" model="ir.module.category">
+        <field name="name">Project Management</field>
+        <field name="description">Manage user roles and approval privileges in Project Management</field>
+        <field name="sequence">25</field>
+    </record>
+
+    <!-- Project Management Privilege Grouping (Odoo 19) -->
+    <record id="res_groups_privilege_project_manage" model="res.groups.privilege">
+        <field name="name">Project Management</field>
+        <field name="sequence">25</field>
+        <field name="category_id" ref="module_category_project_manage"/>
+    </record>
+
+    <!-- 1. Consultant -->
+    <record id="group_project_manage_consultant" model="res.groups">
+        <field name="name">Consultant</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('base.group_user'))]"/>
+        <field name="comment">Read-only access to assigned projects; can execute and submit assigned tasks for approval.</field>
+    </record>
+
+    <!-- 2. Team Lead -->
+    <record id="group_project_manage_team_lead" model="res.groups">
+        <field name="name">Team Lead</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('group_project_manage_consultant'))]"/>
+        <field name="comment">Access to team projects; first-level approval for consultant tasks; can submit tasks to Project Manager.</field>
+    </record>
+
+    <!-- 3. Project Manager -->
+    <record id="group_project_manage_manager" model="res.groups">
+        <field name="name">Project Manager</field>
+        <field name="sequence">30</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('group_project_manage_team_lead'))]"/>
+        <field name="comment">Full access to assigned projects; second-level approval for tasks; can forward to VP.</field>
+    </record>
+
+    <!-- 4. Vice President (VP) -->
+    <record id="group_project_manage_vp" model="res.groups">
+        <field name="name">Vice President (VP)</field>
+        <field name="sequence">40</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('group_project_manage_manager'))]"/>
+        <field name="comment">Executive access across portfolio; third-level approval; forwards to CEO.</field>
+    </record>
+
+    <!-- 5. Chief Executive Officer (CEO) -->
+    <record id="group_project_manage_ceo" model="res.groups">
+        <field name="name">CEO</field>
+        <field name="sequence">50</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('group_project_manage_vp'))]"/>
+        <field name="comment">Full executive access to all projects, dashboard, and final completion sign-off.</field>
+    </record>
+
+    <!-- 6. Administrator -->
+    <record id="group_project_manage_administrator" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="sequence">60</field>
+        <field name="privilege_id" ref="res_groups_privilege_project_manage"/>
+        <field name="implied_ids" eval="[(4, ref('group_project_manage_ceo'))]"/>
+        <field name="user_ids" eval="[(4, ref('base.user_root')), (4, ref('base.user_admin'))]"/>
+        <field name="comment">Full administrative privileges to manage all project backend, settings, users, and dashboard.</field>
+    </record>
+</odoo>

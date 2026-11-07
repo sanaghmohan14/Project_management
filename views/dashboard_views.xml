@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Project Management Dashboard Client Action -->
+    <record id="action_project_manage_dashboard" model="ir.actions.client">
+        <field name="name">Project Dashboard</field>
+        <field name="tag">project_manage_dashboard</field>
+        <field name="target">current</field>
+    </record>
+</odoo>

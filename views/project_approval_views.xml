@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Rejection Wizard Form View -->
+    <record id="view_project_manage_scope_reject_wizard_form" model="ir.ui.view">
+        <field name="name">project.manage.scope.reject.wizard.form</field>
+        <field name="model">project.manage.scope.reject.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reject Task / Request Re-Work">
+                <sheet>
+                    <div class="alert alert-warning" role="alert">
+                        <strong>Task Rejection:</strong> Returning this task to the assignee will move it back to <em>In Progress</em>. Please clearly outline what needs adjustment or documentation.
+                    </div>
+                    <group>
+                        <field name="scope_id" readonly="1" options="{'no_open': True}"/>
+                        <field name="reason" placeholder="Explain what is missing, incomplete, or requires re-work..." widget="textarea" required="1"/>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_confirm_reject" string="Confirm Rejection &amp; Send Back" type="object" class="btn-danger"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <!-- Approval Requests Custom List View -->
+    <record id="view_project_manage_scope_approval_list" model="ir.ui.view">
+        <field name="name">project.manage.scope.approval.list</field>
+        <field name="model">project.manage.scope</field>
+        <field name="priority">20</field>
+        <field name="arch" type="xml">
+            <list string="Task Approval Requests" decoration-danger="approval_state == 'rejected'" decoration-warning="approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')" decoration-success="approval_state == 'approved'" create="0">
+                <field name="code" string="Code" optional="show"/>
+                <field name="scope" string="Scope" optional="show"/>
+                <field name="name" string="Task / Item"/>
+                <field name="project_id" string="Project"/>
+                <field name="category" string="Category" optional="show"/>
+                <field name="responsible_id" string="Assigned To"/>
+                <field name="submitted_by_id" string="Submitted By" optional="show"/>
+                <field name="submitted_date" string="Submitted On" optional="show"/>
+                <field name="approval_state" string="Approval Status" widget="badge"
+                       decoration-info="approval_state == 'pending_tl'"
+                       decoration-primary="approval_state == 'pending_pm'"
+                       decoration-warning="approval_state == 'pending_vp'"
+                       decoration-danger="approval_state == 'pending_ceo'"
+                       decoration-success="approval_state == 'approved'"/>
+                <field name="can_user_approve" column_invisible="True"/>
+                <button name="action_approve_level" string="Approve" type="object" icon="fa-check text-success"
+                        invisible="not can_user_approve" class="btn-success btn-sm"/>
+                <button name="action_open_reject_wizard" string="Reject" type="object" icon="fa-times text-danger"
+                        invisible="not can_user_approve" class="btn-danger btn-sm"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Approval Requests Search View -->
+    <record id="view_project_manage_scope_approval_search" model="ir.ui.view">
+        <field name="name">project.manage.scope.approval.search</field>
+        <field name="model">project.manage.scope</field>
+        <field name="arch" type="xml">
+            <search string="Search Approval Requests">
+                <field name="name" string="Task" filter_domain="['|', ('name', 'ilike', self), ('code', 'ilike', self)]"/>
+                <field name="project_id" string="Project"/>
+                <field name="responsible_id" string="Assigned To"/>
+                <field name="submitted_by_id" string="Submitted By"/>
+
+                <filter string="Waiting My Approval" name="filter_waiting_my_approval" domain="[('can_user_approve', '=', True)]"/>
+                <separator/>
+                <filter string="Pending Team Lead" name="filter_pending_tl" domain="[('approval_state', '=', 'pending_tl')]"/>
+                <filter string="Pending Project Manager" name="filter_pending_pm" domain="[('approval_state', '=', 'pending_pm')]"/>
+                <filter string="Pending VP" name="filter_pending_vp" domain="[('approval_state', '=', 'pending_vp')]"/>
+                <filter string="Pending CEO" name="filter_pending_ceo" domain="[('approval_state', '=', 'pending_ceo')]"/>
+                <separator/>
+                <filter string="Recently Approved" name="filter_approved" domain="[('approval_state', '=', 'approved')]"/>
+                <filter string="Rejected / Re-Work" name="filter_rejected" domain="[('approval_state', '=', 'rejected')]"/>
+
+                <group>
+                    <filter string="Project" name="group_by_project" context="{'group_by': 'project_id'}"/>
+                    <filter string="Approval Stage" name="group_by_stage" context="{'group_by': 'approval_state'}"/>
+                    <filter string="Assigned Responsible" name="group_by_responsible" context="{'group_by': 'responsible_id'}"/>
+                    <filter string="Category" name="group_by_category" context="{'group_by': 'category'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Action for Approval Requests -->
+    <record id="action_project_manage_approvals" model="ir.actions.act_window">
+        <field name="name">Approval Requests</field>
+        <field name="res_model">project.manage.scope</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="domain">[('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))]</field>
+        <field name="context">{'search_default_filter_waiting_my_approval': 1}</field>
+        <field name="search_view_id" ref="view_project_manage_scope_approval_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No tasks currently waiting for your approval!
+            </p>
+            <p>
+                When consultants and project leads complete their assigned scopes and tasks, their sign-off requests flow hierarchically through Team Lead &gt; Project Manager &gt; VP &gt; CEO approval stages.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_project_manage_approvals_view_list" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_project_manage_scope_approval_list"/>
+        <field name="act_window_id" ref="action_project_manage_approvals"/>
+    </record>
+</odoo>

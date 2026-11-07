@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Documentation List View -->
+    <record id="view_project_manage_doc_list" model="ir.ui.view">
+        <field name="name">project.manage.task.doc.list</field>
+        <field name="model">project.manage.task</field>
+        <field name="arch" type="xml">
+            <list string="Documentation Tasks">
+                <field name="scope_no" string="Scope No."/>
+                <field name="scope_id"/>
+                <field name="item_no" string="Doc No."/>
+                <field name="item_id" optional="show"/>
+                <field name="name" string="Document Name"/>
+                <field name="item_type" string="Document Type"/>
+                <field name="approval_authority" string="Final Approver"/>
+                <field name="project_id" optional="show"/>
+                <field name="responsible_id" widget="many2one_avatar"/>
+                <field name="start_date"/>
+                <field name="end_date"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'todo'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-primary="state == 'under_review'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'cancelled'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Implementation List View -->
+    <record id="view_project_manage_imp_list" model="ir.ui.view">
+        <field name="name">project.manage.task.imp.list</field>
+        <field name="model">project.manage.task</field>
+        <field name="arch" type="xml">
+            <list string="Implementation Tasks">
+                <field name="scope_no" string="Scope No."/>
+                <field name="scope_id"/>
+                <field name="item_no" string="Act No."/>
+                <field name="item_id" optional="show"/>
+                <field name="name" string="Implementation Activity"/>
+                <field name="item_type" string="Activity Type"/>
+                <field name="evidence_proof" string="Evidence / Proof"/>
+                <field name="approval_authority" string="Final Approver"/>
+                <field name="project_id" optional="show"/>
+                <field name="responsible_id" widget="many2one_avatar"/>
+                <field name="start_date"/>
+                <field name="end_date"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'todo'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-primary="state == 'under_review'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'cancelled'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Task Form View -->
+    <record id="view_project_manage_task_form" model="ir.ui.view">
+        <field name="name">project.manage.task.form</field>
+        <field name="model">project.manage.task</field>
+        <field name="arch" type="xml">
+            <form string="Task">
+                <header>
+                    <button name="action_start" string="Start" type="object" class="btn-primary"
+                            invisible="state != 'todo'"/>
+                    <button name="action_submit_review" string="Submit for Review" type="object" class="btn-warning"
+                            invisible="state != 'in_progress'"/>
+                    <button name="action_done" string="Mark Done" type="object" class="btn-success"
+                            invisible="state not in ('in_progress', 'under_review')"/>
+                    <button name="action_reset_todo" string="Reset to To Do" type="object"
+                            invisible="state not in ('cancelled', 'done')"/>
+                    <button name="action_cancel" string="Cancel" type="object"
+                            invisible="state in ('done', 'cancelled')"/>
+                    <field name="state" widget="statusbar" statusbar_visible="todo,in_progress,under_review,done"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name" string="Task / Item Name"/>
+                        <h1>
+                            <field name="name" placeholder="Task description..."/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Classification">
+                            <field name="category"/>
+                            <field name="item_type" string="Type"/>
+                            <field name="item_id"/>
+                            <field name="item_no"/>
+                        </group>
+                        <group string="Hierarchy">
+                            <field name="project_id"/>
+                            <field name="scope_id"/>
+                            <field name="scope_no"/>
+                        </group>
+                    </group>
+                    <group>
+                        <group string="Governance &amp; Accountability">
+                            <field name="approval_authority"/>
+                            <field name="accountable_id"/>
+                            <field name="responsible_id"/>
+                        </group>
+                        <group string="Schedule &amp; Evidence">
+                            <field name="start_date"/>
+                            <field name="end_date"/>
+                            <field name="evidence_proof" invisible="category != 'implementation'"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Notes &amp; Details" name="notes">
+                            <field name="notes" placeholder="Enter notes, guidelines or meeting outcomes..."/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- Task Search View -->
+    <record id="view_project_manage_task_search" model="ir.ui.view">
+        <field name="name">project.manage.task.search</field>
+        <field name="model">project.manage.task</field>
+        <field name="arch" type="xml">
+            <search string="Search Tasks">
+                <field name="name"/>
+                <field name="item_id"/>
+                <field name="scope_id"/>
+                <field name="project_id"/>
+                <field name="item_type"/>
+                <field name="responsible_id"/>
+                <separator/>
+                <filter name="f_doc" string="Documentation" domain="[('category', '=', 'documentation')]"/>
+                <filter name="f_imp" string="Implementation" domain="[('category', '=', 'implementation')]"/>
+                <separator/>
+                <filter name="f_todo" string="To Do" domain="[('state', '=', 'todo')]"/>
+                <filter name="f_in_progress" string="In Progress" domain="[('state', '=', 'in_progress')]"/>
+                <filter name="f_review" string="Under Review" domain="[('state', '=', 'under_review')]"/>
+                <filter name="f_done" string="Done" domain="[('state', '=', 'done')]"/>
+                <separator/>
+                <group>
+                    <filter name="g_scope" string="Scope" context="{'group_by': 'scope_id'}"/>
+                    <filter name="g_project" string="Project" context="{'group_by': 'project_id'}"/>
+                    <filter name="g_type" string="Item Type" context="{'group_by': 'item_type'}"/>
+                    <filter name="g_approver" string="Final Approver" context="{'group_by': 'approval_authority'}"/>
+                    <filter name="g_responsible" string="Responsible" context="{'group_by': 'responsible_id'}"/>
+                    <filter name="g_state" string="Status" context="{'group_by': 'state'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Window Actions -->
+    <record id="action_project_manage_documentation" model="ir.actions.act_window">
+        <field name="name">Documentation Tasks</field>
+        <field name="res_model">project.manage.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('category', '=', 'documentation')]</field>
+        <field name="context">{'default_category': 'documentation', 'search_default_g_scope': 1}</field>
+        <field name="view_id" ref="view_project_manage_doc_list"/>
+        <field name="search_view_id" ref="view_project_manage_task_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Manage all documentation tasks across your project scopes
+            </p>
+        </field>
+    </record>
+
+    <record id="action_project_manage_implementation" model="ir.actions.act_window">
+        <field name="name">Implementation Tasks</field>
+        <field name="res_model">project.manage.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('category', '=', 'implementation')]</field>
+        <field name="context">{'default_category': 'implementation', 'search_default_g_scope': 1}</field>
+        <field name="view_id" ref="view_project_manage_imp_list"/>
+        <field name="search_view_id" ref="view_project_manage_task_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Manage all implementation activities and execution proof across scopes
+            </p>
+        </field>
+    </record>
+
+    <!-- Configuration > Documentation (All Documents Library) -->
+    <record id="action_project_manage_config_documentation" model="ir.actions.act_window">
+        <field name="name">All Documents</field>
+        <field name="res_model">project.manage.task</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('category', '=', 'documentation')]</field>
+        <field name="context">{'default_category': 'documentation', 'search_default_g_scope': 1}</field>
+        <field name="view_id" ref="view_project_manage_doc_list"/>
+        <field name="search_view_id" ref="view_project_manage_task_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Master library of all documentation items
+            </p>
+        </field>
+    </record>
+</odoo>

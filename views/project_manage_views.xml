@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_project_manage_form" model="ir.ui.view">
+        <field name="name">project.manage.form</field>
+        <field name="model">project.manage</field>
+        <field name="arch" type="xml">
+            <form string="Project">
+                <header>
+                    <button name="action_start" string="Start" type="object"
+                            class="btn-primary" invisible="state != 'todo'"/>
+                    <button name="action_done" string="Done" type="object"
+                            class="btn-success" invisible="state != 'in_progress'"/>
+                    <button name="action_cancel" string="Cancel" type="object"
+                            invisible="state not in ('todo', 'in_progress')"
+                            confirm="Are you sure you want to cancel this project?"/>
+                    <button name="action_reset_todo" string="Reset to To Do" type="object"
+                            invisible="state != 'cancelled'"/>
+                    <button name="action_open_import_wizard" string="Import Scopes (Excel/CSV)"
+                            type="object" class="btn-secondary" icon="fa-upload"/>
+                    <button name="action_load_standard_scopes" string="Load Standard 30 Scopes"
+                            type="object" class="btn-outline-primary" icon="fa-magic"
+                            confirm="Load all 30 standard scopes and tasks into this project?"/>
+                    <button name="action_remove_duplicate_scopes" string="Clean Duplicates"
+                            type="object" class="btn-outline-danger" icon="fa-trash-o"
+                            invisible="scope_count == 0"
+                            confirm="Scan and remove any duplicate scope items in this project?"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="todo,in_progress,done"/>
+                </header>
+                <sheet>
+                    <widget name="web_ribbon" title="Cancelled" bg_color="text-bg-danger"
+                            invisible="state != 'cancelled'"/>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_scopes" type="object" class="oe_stat_button" icon="fa-tasks">
+                            <field name="scope_count" string="Scopes" widget="statinfo"/>
+                        </button>
+                        <button name="action_view_docs" type="object" class="oe_stat_button" icon="fa-file-text-o">
+                            <field name="doc_count" string="Documentations" widget="statinfo"/>
+                        </button>
+                        <button name="action_view_imps" type="object" class="oe_stat_button" icon="fa-cogs">
+                            <field name="imp_count" string="Implementations" widget="statinfo"/>
+                        </button>
+                    </div>
+                    <div class="oe_title">
+                        <label for="name" string="Project Name"/>
+                        <h1>
+                            <div class="d-flex align-items-center">
+                                <field name="priority" widget="priority" class="me-3"/>
+                                <field name="name" placeholder="e.g. Website Redesign..."/>
+                            </div>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="General">
+                            <field name="partner_id"/>
+                            <field name="client_coordinator_id"/>
+                            <field name="date_start"/>
+                            <field name="date_end"/>
+                            <field name="tag_ids" widget="many2many_tags"
+                                   options="{'color_field': 'color'}"/>
+                        </group>
+                        <group string="Team">
+                            <field name="team_id"/>
+                            <field name="manager_id"/>
+                            <field name="team_lead_id"/>
+                            <field name="project_coordinator_id"/>
+                            <field name="consultant_ids" widget="many2many_tags"/>
+                            <field name="company_id" groups="base.group_multi_company"/>
+                        </group>
+                        <group string="Health &amp; Progress">
+                            <field name="health" widget="selection"/>
+                            <field name="risk_level" widget="selection"/>
+                            <field name="progress" widget="progressbar"/>
+                            <field name="planned_progress" widget="progressbar"/>
+                            <field name="condition"/>
+                            <field name="running_status"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Scopes &amp; Tasks" name="scopes">
+                            <field name="scope_ids">
+                                <list editable="bottom">
+                                    <field name="scope" string="Scope"/>
+                                    <field name="name" string="Task / Item Name"/>
+                                    <field name="category" string="Category"/>
+                                    <field name="item_type" string="Type"/>
+                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="approval_authority" string="Approver Role"/>
+                                    <field name="approver_id" string="Approver" optional="show"/>
+                                    <field name="start_date" string="Start Date" optional="show"/>
+                                    <field name="end_date" string="End Date" optional="show"/>
+                                    <field name="state" string="Status" widget="selection"
+                                           decoration-info="state == 'todo'"
+                                           decoration-warning="state == 'in_progress'"
+                                           decoration-primary="state == 'under_review'"
+                                           decoration-success="state == 'done'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Documentation Tasks" name="doc_tasks">
+                            <field name="doc_scope_ids">
+                                <list editable="bottom">
+                                    <field name="scope" string="Scope"/>
+                                    <field name="name" string="Document Name"/>
+                                    <field name="item_type" string="Document Type"/>
+                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="approval_authority" string="Approver Role"/>
+                                    <field name="approver_id" string="Approver" optional="show"/>
+                                    <field name="start_date" string="Start Date"/>
+                                    <field name="end_date" string="End Date"/>
+                                    <field name="state" string="Status" widget="selection"
+                                           decoration-info="state == 'todo'"
+                                           decoration-warning="state == 'in_progress'"
+                                           decoration-primary="state == 'under_review'"
+                                           decoration-success="state == 'done'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Implementation Tasks" name="imp_tasks">
+                            <field name="imp_scope_ids">
+                                <list editable="bottom">
+                                    <field name="scope" string="Scope"/>
+                                    <field name="name" string="Activity Name"/>
+                                    <field name="item_type" string="Activity Type"/>
+                                    <field name="evidence_proof" string="Evidence / Proof"/>
+                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="approval_authority" string="Approver Role"/>
+                                    <field name="approver_id" string="Approver" optional="show"/>
+                                    <field name="start_date" string="Start Date"/>
+                                    <field name="end_date" string="End Date"/>
+                                    <field name="state" string="Status" widget="selection"
+                                           decoration-info="state == 'todo'"
+                                           decoration-warning="state == 'in_progress'"
+                                           decoration-primary="state == 'under_review'"
+                                           decoration-success="state == 'done'"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="view_project_manage_list" model="ir.ui.view">
+        <field name="name">project.manage.list</field>
+        <field name="model">project.manage</field>
+        <field name="arch" type="xml">
+            <list string="Projects">
+                <field name="priority" widget="priority"/>
+                <field name="name"/>
+                <field name="team_id" optional="show"/>
+                <field name="partner_id"/>
+                <field name="manager_id"/>
+                <field name="team_lead_id"/>
+                <field name="date_start"/>
+                <field name="date_end"/>
+                <field name="tag_ids" widget="many2many_tags"/>
+                <field name="progress" widget="progressbar" optional="show"/>
+                <field name="health" widget="badge"
+                       decoration-success="health == 'good'"
+                       decoration-warning="health == 'fair'"
+                       decoration-danger="health == 'poor'"
+                       optional="show"/>
+                <field name="condition" optional="show"/>
+                <field name="state" widget="badge"
+                       decoration-info="state == 'todo'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'cancelled'"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="view_project_manage_kanban" model="ir.ui.view">
+        <field name="name">project.manage.kanban</field>
+        <field name="model">project.manage</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="state" quick_create="false">
+                <field name="color"/>
+                <field name="state"/>
+                <templates>
+                    <t t-name="card">
+                        <main>
+                            <div class="d-flex flex-column">
+                                <strong class="o_kanban_record_title"><field name="name"/></strong>
+                                <div class="text-muted"><field name="partner_id"/></div>
+                                <div><field name="tag_ids" widget="many2many_tags"/></div>
+                                <div class="d-flex justify-content-between align-items-center mt-2">
+                                    <field name="priority" widget="priority"/>
+                                    <field name="manager_id" widget="many2one_avatar"/>
+                                </div>
+                            </div>
+                        </main>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <record id="view_project_manage_search" model="ir.ui.view">
+        <field name="name">project.manage.search</field>
+        <field name="model">project.manage</field>
+        <field name="arch" type="xml">
+            <search string="Projects">
+                <field name="name"/>
+                <field name="team_id"/>
+                <field name="partner_id"/>
+                <field name="manager_id"/>
+                <field name="tag_ids"/>
+                <separator/>
+                <filter name="f_todo" string="To Do" domain="[('state','=','todo')]"/>
+                <filter name="f_progress" string="In Progress" domain="[('state','=','in_progress')]"/>
+                <filter name="f_done" string="Done" domain="[('state','=','done')]"/>
+                <filter name="f_cancel" string="Cancelled" domain="[('state','=','cancelled')]"/>
+                <separator/>
+                <group>
+                    <filter name="g_team" string="Project Team" context="{'group_by':'team_id'}"/>
+                    <filter name="g_state" string="Stage" context="{'group_by':'state'}"/>
+                    <filter name="g_client" string="Client" context="{'group_by':'partner_id'}"/>
+                    <filter name="g_manager" string="Project Manager" context="{'group_by':'manager_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <record id="action_project_manage" model="ir.actions.act_window">
+        <field name="name">Projects</field>
+        <field name="res_model">project.manage</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="search_view_id" ref="view_project_manage_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">Create your first project</p>
+        </field>
+    </record>
+
+    <record id="action_project_manage_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="view_project_manage_kanban"/>
+        <field name="act_window_id" ref="action_project_manage"/>
+    </record>
+
+    <record id="action_project_manage_view_list" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_project_manage_list"/>
+        <field name="act_window_id" ref="action_project_manage"/>
+    </record>
+
+    <record id="action_project_manage_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="3"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_project_manage_form"/>
+        <field name="act_window_id" ref="action_project_manage"/>
+    </record>
+
+    <record id="view_project_manage_tag_list" model="ir.ui.view">
+        <field name="name">project.manage.tag.list</field>
+        <field name="model">project.manage.tag</field>
+        <field name="arch" type="xml">
+            <list editable="bottom">
+                <field name="name"/>
+                <field name="color" widget="color_picker"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="action_project_manage_tag" model="ir.actions.act_window">
+        <field name="name">Tags</field>
+        <field name="res_model">project.manage.tag</field>
+        <field name="view_mode">list</field>
+    </record>
+</odoo>

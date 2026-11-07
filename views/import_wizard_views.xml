@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="view_project_scope_import_wizard_form" model="ir.ui.view">
+        <field name="name">project.scope.import.wizard.form</field>
+        <field name="model">project.scope.import.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Import Project Scopes &amp; Tasks">
+                <sheet>
+                    <div class="alert alert-info" role="alert">
+                        Upload your Scope-Wise Task List in <strong>Excel (.xlsx)</strong> or <strong>CSV</strong> format.
+                        Both the flat <code>Upload_Data</code> sheet format (Item_ID, Scope_No, Scope, Category, Item_No, Item_Name, Item_Type, Evidence/Proof, etc.)
+                        and the multi-column <code>Scope_Task_List</code> format are automatically detected and parsed.
+                    </div>
+                    <group>
+                        <group>
+                            <field name="project_id" options="{'no_create': True}"/>
+                            <field name="import_mode" widget="radio"/>
+                        </group>
+                        <group>
+                            <field name="file" filename="filename" widget="binary"/>
+                            <field name="filename" invisible="1"/>
+                        </group>
+                    </group>
+                </sheet>
+                <footer>
+                    <button name="action_import" string="Import Now" type="object" class="btn-primary" icon="fa-upload"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="action_project_scope_import_wizard" model="ir.actions.act_window">
+        <field name="name">Import Scopes &amp; Tasks</field>
+        <field name="res_model">project.scope.import.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="view_id" ref="view_project_scope_import_wizard_form"/>
+    </record>
+</odoo>

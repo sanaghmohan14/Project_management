@@ -1,0 +1,1134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<templates xml:space="preserve">
+    <t t-name="project_manage.Dashboard">
+        <div class="pm-dashboard-wrapper" t-ref="dashboardRoot" t-att-class="state.darkMode ? 'pm-theme-dark' : 'pm-theme-light'">
+            <!-- Top Dashboard Header Bar -->
+            <header class="pm-header">
+                <div class="pm-header-left">
+                    <div class="pm-logo-box">B</div>
+                    <div class="pm-title-box">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <h1 class="pm-main-title">Project Dashboard</h1>
+                            <span class="pm-user-role-badge" t-att-class="state.data.user_info.role_badge_class" t-esc="state.data.user_info.role_badge"/>
+                            <t t-if="state.data.user_info.can_switch_roles">
+                                <div class="pm-role-switcher" role="group">
+                                    <span class="pm-role-switcher-lbl">VIEW AS:</span>
+                                    <button type="button" class="pm-role-switcher-btn"
+                                            t-att-class="state.data.user_info.active_view_mode === 'admin' ? 'active-admin' : ''"
+                                            t-on-click="() => this.switchRoleView('admin')"
+                                            title="View Dashboard as Administrator">
+                                        👑 Admin
+                                    </button>
+                                    <button type="button" class="pm-role-switcher-btn"
+                                            t-att-class="state.data.user_info.active_view_mode === 'ceo' ? 'active-ceo' : ''"
+                                            t-on-click="() => this.switchRoleView('ceo')"
+                                            title="View Dashboard as CEO">
+                                        💼 CEO
+                                    </button>
+                                </div>
+                            </t>
+                        </div>
+                        <p class="pm-sub-title">
+                            <t t-esc="state.data.company_name"/> · <span class="pm-user-name"><t t-esc="state.data.user_info.name"/></span>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Team Quick Filter Pills -->
+                <div class="pm-header-center">
+                    <button class="pm-team-filter-pill"
+                            t-att-class="state.selectedTeamId === null ? 'active' : ''"
+                            t-on-click="() => this.onSelectTeam(null)">
+                        <span class="pm-dot pm-dot-all"></span> All Teams
+                    </button>
+                    <t t-foreach="state.data.all_teams_filter" t-as="team" t-key="team.id">
+                        <button class="pm-team-filter-pill"
+                                t-att-class="state.selectedTeamId === team.id ? 'active' : ''"
+                                t-on-click="() => this.onSelectTeam(team.id)">
+                            <span class="pm-dot" t-att-class="'pm-dot-team-' + ((team_index % 3) + 1)"></span>
+                            <t t-esc="team.name"/>
+                            <t t-if="team.lead_name"> · <t t-esc="team.lead_name"/></t>
+                        </button>
+                    </t>
+                </div>
+
+                <!-- Right Header Controls -->
+                <div class="pm-header-right">
+                    <div class="pm-date-badge" t-esc="state.data.current_date_str"/>
+
+                    <!-- Approvals Shortcut Button -->
+                    <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="viewAllApprovals" title="View Approval Requests">
+                        <i class="fa fa-check-circle me-1 text-warning"></i>
+                        <span>Approvals</span>
+                        <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
+                            <span class="pm-counter-pill bg-danger"><t t-esc="state.data.approvals_summary.pending_my_approval_count"/></span>
+                        </t>
+                    </button>
+
+                    <!-- My Tasks Shortcut Button -->
+                    <button class="pm-nav-pill-btn pm-tasks-pill-btn" t-on-click="viewMyTasks" title="View My Assigned Tasks">
+                        <i class="fa fa-tasks me-1 text-info"></i>
+                        <span>My Tasks</span>
+                        <t t-if="state.data.consultant_workspace.my_total_tasks > 0">
+                            <span class="pm-counter-pill bg-primary"><t t-esc="state.data.consultant_workspace.my_total_tasks"/></span>
+                        </t>
+                    </button>
+
+                    <!-- Dark / Light Mode Toggle Button -->
+                    <button class="pm-theme-toggle-btn" t-on-click="toggleTheme" t-att-title="state.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+                        <t t-if="state.darkMode">
+                            <i class="fa fa-sun-o" style="color: #fbbf24;"></i>
+                            <span>Light</span>
+                        </t>
+                        <t t-else="">
+                            <i class="fa fa-moon-o" style="color: #6366f1;"></i>
+                            <span>Dark</span>
+                        </t>
+                    </button>
+
+                    <!-- Refresh Button -->
+                    <button class="pm-icon-btn" t-on-click="refresh" title="Refresh Live Data">
+                        <i class="fa fa-refresh" t-att-class="state.loading ? 'fa-spin' : ''"></i>
+                    </button>
+
+                    <!-- New Project Button (Executives / Managers) -->
+                    <t t-if="!state.data.user_info.is_consultant">
+                        <button class="pm-action-btn" t-on-click="createNewProject">
+                            <i class="fa fa-plus me-1"></i> New Project
+                        </button>
+                    </t>
+                </div>
+            </header>
+
+            <div class="pm-dashboard-content">
+
+                <!-- ==================== URGENT: APPROVALS PENDING ACTION ==================== -->
+                <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
+                    <section class="pm-approval-section">
+                        <div class="pm-approval-header">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="pm-pulse-badge">
+                                    <i class="fa fa-bell"></i>
+                                </span>
+                                <div>
+                                    <h3 class="pm-section-title text-warning-emphasis mb-0">
+                                        Tasks Waiting For Your Approval (<t t-esc="state.data.approvals_summary.pending_my_approval_count"/>)
+                                    </h3>
+                                    <p class="pm-section-sub mb-0">You are the designated approver in the project management hierarchy.</p>
+                                </div>
+                            </div>
+                            <button class="pm-link-btn" t-on-click="viewAllApprovals">
+                                Open Approvals Center <i class="fa fa-arrow-right ms-1"></i>
+                            </button>
+                        </div>
+
+                        <div class="pm-approval-grid">
+                            <t t-foreach="state.data.approvals_summary.pending_items" t-as="item" t-key="item.id">
+                                <div class="pm-approval-card">
+                                    <div class="pm-approval-card-top">
+                                        <div class="pm-approval-code-box">
+                                            <span class="pm-task-code" t-esc="item.code"/>
+                                            <span class="pm-approval-badge" t-att-class="'pm-badge-' + item.approval_state" t-esc="item.approval_stage_label"/>
+                                        </div>
+                                        <span class="pm-approval-date" t-esc="item.submitted_date"/>
+                                    </div>
+                                    <h4 class="pm-approval-task-name" t-esc="item.name" t-on-click="() => this.openScope(item.id)"/>
+                                    <div class="pm-approval-meta">
+                                        <div class="pm-meta-row">
+                                            <i class="fa fa-folder-o text-muted me-1"></i>
+                                            <span class="text-truncate" t-esc="item.project_name"/>
+                                        </div>
+                                        <div class="pm-meta-row">
+                                            <i class="fa fa-user-o text-muted me-1"></i>
+                                            <span>Assigned: <strong t-esc="item.responsible_name"/></span>
+                                        </div>
+                                    </div>
+                                    <div class="pm-approval-card-actions">
+                                        <button class="pm-btn pm-btn-approve" t-on-click="() => this.approveTask(item.id)">
+                                            <i class="fa fa-check me-1"></i> Approve
+                                        </button>
+                                        <button class="pm-btn pm-btn-reject" t-on-click="() => this.openRejectWizard(item.id)">
+                                            <i class="fa fa-times me-1"></i> Reject / Re-Work
+                                        </button>
+                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(item.id)" title="View Details">
+                                            <i class="fa fa-external-link"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </section>
+                </t>
+
+                <!-- ==================== CONSULTANT / PERSONAL WORKSPACE ==================== -->
+                <t t-if="state.data.user_info.is_consultant">
+                    <section class="pm-consultant-section">
+                        <div class="pm-section-head-row">
+                            <div>
+                                <h3 class="pm-section-title">My Tasks &amp; Execution Hub</h3>
+                                <p class="pm-section-sub">Track assigned deliverables, submission status, and feedback</p>
+                            </div>
+                            <button class="pm-link-btn" t-on-click="viewMyTasks">
+                                View Full Tasks List <i class="fa fa-arrow-right ms-1"></i>
+                            </button>
+                        </div>
+
+                        <!-- 4 Status Counter Cards -->
+                        <div class="pm-consultant-counters">
+                            <div class="pm-c-stat bg-blue-subtle">
+                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_todo_count"/>
+                                <div class="pm-c-lbl">To Do</div>
+                            </div>
+                            <div class="pm-c-stat bg-amber-subtle">
+                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_inprogress_count"/>
+                                <div class="pm-c-lbl">In Progress</div>
+                            </div>
+                            <div class="pm-c-stat bg-indigo-subtle">
+                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_waiting_approval_count"/>
+                                <div class="pm-c-lbl">Waiting Approval</div>
+                            </div>
+                            <div class="pm-c-stat bg-emerald-subtle">
+                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_done_count"/>
+                                <div class="pm-c-lbl">Completed</div>
+                            </div>
+                        </div>
+
+                        <!-- My Tasks Quick Table -->
+                        <div class="pm-mytasks-table-wrap">
+                            <table class="pm-mytasks-table">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Task Name</th>
+                                        <th>Project</th>
+                                        <th>Category</th>
+                                        <th>Due Date</th>
+                                        <th>Stage</th>
+                                        <th>Approval State</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <t t-if="!state.data.consultant_workspace.my_tasks or state.data.consultant_workspace.my_tasks.length === 0">
+                                        <tr>
+                                            <td colspan="8" class="text-center py-4 text-muted">
+                                                <i class="fa fa-check-circle-o fa-2x mb-2 text-success d-block"></i>
+                                                <div>No tasks currently assigned to you.</div>
+                                            </td>
+                                        </tr>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-foreach="state.data.consultant_workspace.my_tasks" t-as="tsk" t-key="tsk.id">
+                                            <tr>
+                                                <td><span class="pm-task-code" t-esc="tsk.code"/></td>
+                                                <td>
+                                                    <strong class="pm-clickable" t-on-click="() => this.openScope(tsk.id)" t-esc="tsk.name"/>
+                                                    <t t-if="tsk.rejection_reason and tsk.approval_state === 'rejected'">
+                                                        <div class="pm-rejection-alert">
+                                                            <i class="fa fa-exclamation-triangle me-1"></i> Re-Work: <t t-esc="tsk.rejection_reason"/>
+                                                        </div>
+                                                    </t>
+                                                </td>
+                                                <td t-esc="tsk.project_name"/>
+                                                <td><span class="badge bg-secondary-subtle text-secondary" t-esc="tsk.category"/></td>
+                                                <td>
+                                                    <span t-att-class="tsk.is_late ? 'text-danger fw-bold' : ''" t-esc="tsk.end_date"/>
+                                                </td>
+                                                <td><span class="pm-badge" t-att-class="'pm-badge-' + tsk.state" t-esc="tsk.state_label"/></td>
+                                                <td><span class="pm-badge" t-att-class="'pm-badge-' + tsk.approval_state" t-esc="tsk.approval_stage_label"/></td>
+                                                <td>
+                                                    <t t-if="tsk.can_submit">
+                                                        <button class="pm-btn pm-btn-submit" t-on-click="() => this.submitTask(tsk.id)">
+                                                            <i class="fa fa-paper-plane me-1"></i> Complete &amp; Submit
+                                                        </button>
+                                                    </t>
+                                                    <t t-else="">
+                                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(tsk.id)">
+                                                            View
+                                                        </button>
+                                                    </t>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </t>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </t>
+
+                <!-- ==================== 1. TOP ROW: 5 METRIC CARDS ==================== -->
+                <section class="pm-kpi-row">
+                    <!-- Total Projects -->
+                    <div class="pm-kpi-card" t-on-click="viewAllProjects">
+                        <div class="pm-kpi-header">
+                            <span class="pm-kpi-title">Total projects</span>
+                            <div class="pm-kpi-icon-box bg-blue-subtle">
+                                <i class="fa fa-th-large text-primary"></i>
+                            </div>
+                        </div>
+                        <div class="pm-kpi-value-row">
+                            <span class="pm-kpi-value" t-esc="state.data.total_projects"/>
+                        </div>
+                        <div class="pm-segmented-bar">
+                            <div class="pm-seg pm-seg-blue" style="width: 50%;"></div>
+                            <div class="pm-seg pm-seg-cyan" style="width: 30%;"></div>
+                            <div class="pm-seg pm-seg-amber" style="width: 20%;"></div>
+                        </div>
+                        <div class="pm-kpi-subtext">
+                            <t t-esc="state.data.total_teams"/> teams · <t t-esc="state.data.total_consultants"/> consultants
+                        </div>
+                    </div>
+
+                    <!-- Running Now -->
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-header">
+                            <span class="pm-kpi-title">Running now</span>
+                            <div class="pm-kpi-icon-box bg-indigo-subtle">
+                                <i class="fa fa-play text-indigo"></i>
+                            </div>
+                        </div>
+                        <div class="pm-kpi-value-row">
+                            <span class="pm-kpi-value" t-esc="state.data.running_count"/>
+                            <span class="pm-kpi-denom">of <t t-esc="state.data.total_projects"/></span>
+                        </div>
+                        <div class="pm-segmented-bar">
+                            <div class="pm-seg pm-seg-indigo" t-attf-style="width: {{ (state.data.running_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.completed_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.on_hold_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-slate" t-attf-style="width: {{ (state.data.not_started_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                        </div>
+                        <div class="pm-kpi-subtext">
+                            <t t-esc="state.data.completed_count"/> completed · <t t-esc="state.data.on_hold_count"/> on hold · <t t-esc="state.data.not_started_count"/> not started
+                        </div>
+                    </div>
+
+                    <!-- Overall Health -->
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-header">
+                            <span class="pm-kpi-title">Overall health</span>
+                            <div class="pm-kpi-icon-box bg-emerald-subtle">
+                                <i class="fa fa-heart-o text-success"></i>
+                            </div>
+                        </div>
+                        <div class="pm-kpi-value-row">
+                            <span class="pm-kpi-value"><t t-esc="state.data.overall_health_score"/>%</span>
+                            <span class="pm-kpi-badge pm-health-good" t-esc="state.data.overall_health_label"/>
+                        </div>
+                        <div class="pm-segmented-bar">
+                            <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.health_good_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.health_fair_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.health_poor_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                        </div>
+                        <div class="pm-kpi-subtext">
+                            <t t-esc="state.data.health_good_count"/> good · <t t-esc="state.data.health_fair_count"/> fair · <t t-esc="state.data.health_poor_count"/> poor
+                        </div>
+                    </div>
+
+                    <!-- High-Risk Projects -->
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-header">
+                            <span class="pm-kpi-title">High-risk projects</span>
+                            <div class="pm-kpi-icon-box bg-rose-subtle">
+                                <i class="fa fa-exclamation-triangle text-danger"></i>
+                            </div>
+                        </div>
+                        <div class="pm-kpi-value-row">
+                            <span class="pm-kpi-value" t-esc="state.data.risk_high_count"/>
+                            <span class="pm-kpi-badge pm-risk-high">need action</span>
+                        </div>
+                        <div class="pm-segmented-bar">
+                            <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.risk_low_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.risk_med_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.risk_high_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                        </div>
+                        <div class="pm-kpi-subtext">
+                            <t t-esc="state.data.risk_low_count"/> low · <t t-esc="state.data.risk_med_count"/> medium · <t t-esc="state.data.risk_high_count"/> high
+                        </div>
+                    </div>
+
+                    <!-- On-Time Delivery -->
+                    <div class="pm-kpi-card">
+                        <div class="pm-kpi-header">
+                            <span class="pm-kpi-title">On-time delivery</span>
+                            <div class="pm-kpi-icon-box bg-cyan-subtle">
+                                <i class="fa fa-clock-o text-cyan"></i>
+                            </div>
+                        </div>
+                        <div class="pm-kpi-value-row">
+                            <span class="pm-kpi-value"><t t-esc="state.data.on_time_pct"/>%</span>
+                            <span class="pm-kpi-denom">on time</span>
+                        </div>
+                        <div class="pm-segmented-bar">
+                            <div class="pm-seg pm-seg-cyan" t-attf-style="width: {{ state.data.on_time_pct }}%;"></div>
+                            <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ 100 - state.data.on_time_pct }}%;"></div>
+                        </div>
+                        <div class="pm-kpi-subtext">
+                            Average progress <t t-esc="state.data.avg_progress"/>% across projects
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 2. MIDDLE ROW: 4 ANALYTICAL CHARTS ==================== -->
+                <section class="pm-charts-row">
+                    <!-- 1. Project Health Donut -->
+                    <div class="pm-widget-card">
+                        <div class="pm-widget-header">
+                            <div>
+                                <h3 class="pm-widget-title">Project health</h3>
+                                <p class="pm-widget-sub">How healthy each project is</p>
+                            </div>
+                        </div>
+                        <div class="pm-widget-body pm-health-body">
+                            <!-- SVG Donut Chart with live data -->
+                            <div class="pm-donut-container">
+                                <svg viewBox="0 0 100 100" class="pm-donut-svg">
+                                    <circle cx="50" cy="50" r="38" class="pm-donut-bg"/>
+                                    <!-- Good segment -->
+                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-green"
+                                            t-att-stroke-dasharray="state.data.donut_good_dash"
+                                            t-att-stroke-dashoffset="state.data.donut_good_offset"/>
+                                    <!-- Fair segment -->
+                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-amber"
+                                            t-att-stroke-dasharray="state.data.donut_fair_dash"
+                                            t-att-stroke-dashoffset="state.data.donut_fair_offset"/>
+                                    <!-- Poor segment -->
+                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-red"
+                                            t-att-stroke-dasharray="state.data.donut_poor_dash"
+                                            t-att-stroke-dashoffset="state.data.donut_poor_offset"/>
+                                </svg>
+                                <div class="pm-donut-center-text">
+                                    <span class="pm-donut-score"><t t-esc="state.data.overall_health_score"/>%</span>
+                                    <span class="pm-donut-lbl">health score</span>
+                                </div>
+                            </div>
+                            <!-- Legend -->
+                            <div class="pm-donut-legend">
+                                <div class="pm-legend-row">
+                                    <span class="pm-legend-dot bg-emerald"></span>
+                                    <span class="pm-legend-label">Good</span>
+                                    <strong class="pm-legend-val" t-esc="state.data.health_good_count"/>
+                                </div>
+                                <div class="pm-legend-row">
+                                    <span class="pm-legend-dot bg-amber"></span>
+                                    <span class="pm-legend-label">Fair</span>
+                                    <strong class="pm-legend-val" t-esc="state.data.health_fair_count"/>
+                                </div>
+                                <div class="pm-legend-row">
+                                    <span class="pm-legend-dot bg-rose"></span>
+                                    <span class="pm-legend-label">Poor</span>
+                                    <strong class="pm-legend-val" t-esc="state.data.health_poor_count"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Running Status 2x2 Grid -->
+                    <div class="pm-widget-card">
+                        <div class="pm-widget-header">
+                            <div>
+                                <h3 class="pm-widget-title">Running status</h3>
+                                <p class="pm-widget-sub">Where each project stands today</p>
+                            </div>
+                        </div>
+                        <div class="pm-widget-body pm-status-body">
+                            <div class="pm-segmented-bar mb-3">
+                                <div class="pm-seg pm-seg-indigo" t-attf-style="width: {{ (state.data.running_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                                <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.completed_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                                <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.on_hold_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                                <div class="pm-seg pm-seg-slate" t-attf-style="width: {{ (state.data.not_started_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            </div>
+                            <div class="pm-status-grid">
+                                <div class="pm-status-tile">
+                                    <div class="pm-tile-icon-box bg-blue"><i class="fa fa-play text-white"></i></div>
+                                    <div class="pm-tile-info">
+                                        <span class="pm-tile-count" t-esc="state.data.running_count"/>
+                                        <span class="pm-tile-label">Running</span>
+                                    </div>
+                                </div>
+                                <div class="pm-status-tile">
+                                    <div class="pm-tile-icon-box bg-emerald"><i class="fa fa-check text-white"></i></div>
+                                    <div class="pm-tile-info">
+                                        <span class="pm-tile-count" t-esc="state.data.completed_count"/>
+                                        <span class="pm-tile-label">Completed</span>
+                                    </div>
+                                </div>
+                                <div class="pm-status-tile">
+                                    <div class="pm-tile-icon-box bg-amber"><i class="fa fa-pause text-white"></i></div>
+                                    <div class="pm-tile-info">
+                                        <span class="pm-tile-count" t-esc="state.data.on_hold_count"/>
+                                        <span class="pm-tile-label">On hold</span>
+                                    </div>
+                                </div>
+                                <div class="pm-status-tile">
+                                    <div class="pm-tile-icon-box bg-slate"><i class="fa fa-hourglass-start text-white"></i></div>
+                                    <div class="pm-tile-info">
+                                        <span class="pm-tile-count" t-esc="state.data.not_started_count"/>
+                                        <span class="pm-tile-label">Not started</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Risk Level Speedometer -->
+                    <div class="pm-widget-card">
+                        <div class="pm-widget-header">
+                            <div>
+                                <h3 class="pm-widget-title">Risk level</h3>
+                                <p class="pm-widget-sub">Overall portfolio risk</p>
+                            </div>
+                        </div>
+                        <div class="pm-widget-body pm-risk-body">
+                            <!-- Gauge Speedometer -->
+                            <div class="pm-gauge-container">
+                                <svg viewBox="0 0 160 85" class="pm-gauge-svg">
+                                    <!-- Low Risk Arc (Green) -->
+                                    <path d="M 18 80 A 62 62 0 0 1 54 26" fill="none" stroke="#10b981" stroke-width="12" stroke-linecap="round"/>
+                                    <!-- Medium Risk Arc (Amber) -->
+                                    <path d="M 59 23 A 62 62 0 0 1 101 23" fill="none" stroke="#f59e0b" stroke-width="12"/>
+                                    <!-- High Risk Arc (Red) -->
+                                    <path d="M 106 26 A 62 62 0 0 1 142 80" fill="none" stroke="#ef4444" stroke-width="12" stroke-linecap="round"/>
+
+                                    <!-- Needle Angle calculation based on high/med/low risk count -->
+                                    <g t-attf-transform="rotate({{ state.data.risk_needle_angle }}, 80, 80)">
+                                        <line x1="80" y1="80" x2="80" y2="28" stroke="var(--pm-target-line)" stroke-width="3" stroke-linecap="round"/>
+                                        <circle cx="80" cy="80" r="5" fill="var(--pm-target-line)"/>
+                                    </g>
+                                </svg>
+                                <div class="pm-gauge-status-text" t-esc="state.data.risk_status_label"/>
+                            </div>
+                            <div class="pm-risk-chips-row">
+                                <div class="pm-risk-chip pm-chip-low">
+                                    <strong t-esc="state.data.risk_low_count"/>
+                                    <span>Low</span>
+                                </div>
+                                <div class="pm-risk-chip pm-chip-med">
+                                    <strong t-esc="state.data.risk_med_count"/>
+                                    <span>Medium</span>
+                                </div>
+                                <div class="pm-risk-chip pm-chip-high">
+                                    <strong t-esc="state.data.risk_high_count"/>
+                                    <span>High</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Project Condition Bars -->
+                    <div class="pm-widget-card">
+                        <div class="pm-widget-header">
+                            <div>
+                                <h3 class="pm-widget-title">Project condition</h3>
+                                <p class="pm-widget-sub">Progress compared with plan</p>
+                            </div>
+                        </div>
+                        <div class="pm-widget-body pm-condition-body">
+                            <div class="pm-condition-chart">
+                                <div class="pm-cond-col">
+                                    <span class="pm-cond-val" t-esc="state.data.condition_ahead_count"/>
+                                    <div class="pm-cond-bar-track">
+                                        <div class="pm-cond-bar bg-ahead" t-attf-style="height: {{ state.data.condition_ahead_count > 0 ? (state.data.condition_ahead_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
+                                    </div>
+                                    <span class="pm-cond-lbl">Ahead</span>
+                                </div>
+                                <div class="pm-cond-col">
+                                    <span class="pm-cond-val" t-esc="state.data.condition_on_plan_count"/>
+                                    <div class="pm-cond-bar-track">
+                                        <div class="pm-cond-bar bg-onplan" t-attf-style="height: {{ state.data.condition_on_plan_count > 0 ? (state.data.condition_on_plan_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
+                                    </div>
+                                    <span class="pm-cond-lbl">On plan</span>
+                                </div>
+                                <div class="pm-cond-col">
+                                    <span class="pm-cond-val" t-esc="state.data.condition_behind_count"/>
+                                    <div class="pm-cond-bar-track">
+                                        <div class="pm-cond-bar bg-behind" t-attf-style="height: {{ state.data.condition_behind_count > 0 ? (state.data.condition_behind_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
+                                    </div>
+                                    <span class="pm-cond-lbl">Behind</span>
+                                </div>
+                                <div class="pm-cond-col">
+                                    <span class="pm-cond-val" t-esc="state.data.condition_overdue_count"/>
+                                    <div class="pm-cond-bar-track">
+                                        <div class="pm-cond-bar bg-overdue" t-attf-style="height: {{ state.data.condition_overdue_count > 0 ? (state.data.condition_overdue_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
+                                    </div>
+                                    <span class="pm-cond-lbl">Overdue</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 3. THIRD ROW: TEAMS + TEAM COMPARISON ==================== -->
+                <section class="pm-teams-row">
+                    <!-- Individual Team Cards -->
+                    <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
+                        <div class="pm-team-card" t-on-click="() => this.openTeam(tm.id)">
+                            <div class="pm-team-card-header">
+                                <div class="pm-team-lead-box">
+                                    <h4 class="pm-team-title" t-esc="tm.name"/>
+                                    <p class="pm-team-lead">Lead <t t-esc="tm.lead_name"/></p>
+                                </div>
+                                <span class="pm-team-badge"
+                                      t-att-class="tm.rating === 'Excellent' ? 'pm-badge-green' : (tm.rating === 'Good' ? 'pm-badge-blue' : 'pm-badge-amber')"
+                                      t-esc="tm.rating"/>
+                            </div>
+
+                            <div class="pm-team-card-body">
+                                <!-- Radial Productivity Ring -->
+                                <div class="pm-productivity-ring-box">
+                                    <svg viewBox="0 0 36 36" class="pm-radial-svg">
+                                        <path class="pm-radial-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                        <path class="pm-radial-fill-blue" t-attf-stroke-dasharray="{{ tm.productivity }}, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    </svg>
+                                    <div class="pm-radial-text">
+                                        <span class="pm-radial-pct"><t t-esc="tm.productivity"/>%</span>
+                                        <span class="pm-radial-lbl">productivity</span>
+                                    </div>
+                                </div>
+
+                                <!-- Progress Metric Bars -->
+                                <div class="pm-team-metrics">
+                                    <div class="pm-metric-line">
+                                        <div class="pm-metric-head">
+                                            <span>Quality</span>
+                                            <strong><t t-esc="tm.quality"/>%</strong>
+                                        </div>
+                                        <div class="pm-metric-track">
+                                            <div class="pm-metric-bar bg-blue-dark" t-attf-style="width: {{ tm.quality }}%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="pm-metric-line">
+                                        <div class="pm-metric-head">
+                                            <span>On-time</span>
+                                            <strong><t t-esc="tm.on_time"/>%</strong>
+                                        </div>
+                                        <div class="pm-metric-track">
+                                            <div class="pm-metric-bar bg-blue-mid" t-attf-style="width: {{ tm.on_time }}%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="pm-metric-line">
+                                        <div class="pm-metric-head">
+                                            <span>Utilisation</span>
+                                            <strong><t t-esc="tm.utilisation"/>%</strong>
+                                        </div>
+                                        <div class="pm-metric-track">
+                                            <div class="pm-metric-bar bg-blue-light" t-attf-style="width: {{ tm.utilisation }}%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pm-team-card-footer">
+                                <div class="pm-team-projects-summary">
+                                    <span><t t-esc="tm.projects_count"/> projects · <t t-esc="tm.healthy_count"/> healthy</span>
+                                    <div class="pm-dots-row">
+                                        <span class="pm-dot-sm bg-success"></span>
+                                        <span class="pm-dot-sm bg-success"></span>
+                                        <span class="pm-dot-sm bg-success"></span>
+                                        <span class="pm-dot-sm" t-att-class="tm.rating === 'Needs support' ? 'bg-danger' : (tm.rating === 'Good' ? 'bg-warning' : 'bg-success')"></span>
+                                    </div>
+                                </div>
+                                <div class="pm-team-trend" t-att-class="'pm-trend-' + tm.trend_color">
+                                    <svg viewBox="0 0 45 14" class="pm-sparkline-svg">
+                                        <path d="M 0 10 Q 15 13 25 7 T 45 3" fill="none" stroke="currentColor" stroke-width="2"/>
+                                    </svg>
+                                    <span t-esc="tm.trend_text"/>
+                                </div>
+                            </div>
+                        </div>
+                    </t>
+
+                    <!-- Team Comparison Widget -->
+                    <div class="pm-team-card pm-comparison-card">
+                        <div class="pm-team-card-header">
+                            <div>
+                                <h4 class="pm-team-title">Team comparison</h4>
+                                <p class="pm-team-lead">Higher is better</p>
+                            </div>
+                        </div>
+                        <div class="pm-comparison-body">
+                            <div class="pm-comp-legend">
+                                <span><span class="pm-legend-sq bg-blue-dark"></span> Productivity</span>
+                                <span><span class="pm-legend-sq bg-blue-mid"></span> Quality</span>
+                                <span><span class="pm-legend-sq bg-blue-light"></span> On-time</span>
+                            </div>
+
+                            <div class="pm-comp-bars-container">
+                                <div class="pm-comp-grid-lines">
+                                    <div class="pm-grid-line"><span>100</span></div>
+                                    <div class="pm-grid-line"><span>75</span></div>
+                                    <div class="pm-grid-line"><span>50</span></div>
+                                </div>
+                                <div class="pm-comp-groups-row">
+                                    <t t-if="!state.data.teams or state.data.teams.length === 0">
+                                        <div class="text-center text-muted w-100 py-3" style="font-size: 0.75rem;">
+                                            No team comparison data
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
+                                            <div class="pm-comp-group">
+                                                <div class="pm-group-bars">
+                                                    <div class="pm-group-bar bg-blue-dark" t-attf-style="height: {{ (tm.productivity / 100) * 85 }}%;" t-att-title="'Productivity: ' + tm.productivity + '%'"></div>
+                                                    <div class="pm-group-bar bg-blue-mid" t-attf-style="height: {{ (tm.quality / 100) * 85 }}%;" t-att-title="'Quality: ' + tm.quality + '%'"></div>
+                                                    <div class="pm-group-bar bg-blue-light" t-attf-style="height: {{ (tm.on_time / 100) * 85 }}%;" t-att-title="'On-time: ' + tm.on_time + '%'"></div>
+                                                </div>
+                                                <span class="pm-group-name" t-esc="tm.name"/>
+                                            </div>
+                                        </t>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
+                <section class="pm-table-section">
+                    <div class="pm-table-header">
+                        <div class="pm-table-title-box">
+                            <h2 class="pm-table-title">Projects</h2>
+                        </div>
+                        <div class="pm-table-legend-note">
+                            <span class="pm-target-marker-sample"></span>
+                            <span>Black line = where the plan says it should be today</span>
+                        </div>
+                    </div>
+
+                    <div class="pm-table-responsive" t-ref="tableResponsive">
+                        <table class="pm-projects-table">
+                            <thead>
+                                <tr>
+                                    <th>Project</th>
+                                    <th>Team</th>
+                                    <th>Running status</th>
+                                    <th>Health</th>
+                                    <th>Risk level</th>
+                                    <th>Progress vs plan</th>
+                                    <th>Due date</th>
+                                    <th>Condition</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="!state.data.projects or state.data.projects.length === 0">
+                                    <tr>
+                                        <td colspan="8" class="text-center py-5">
+                                            <i class="fa fa-folder-open-o text-muted mb-2" style="font-size: 2.2rem; opacity: 0.5;"></i>
+                                            <div class="pm-widget-title mb-1">No Projects Found</div>
+                                            <p class="pm-widget-sub mb-3">Create your first project to view live performance and timeline tracking.</p>
+                                            <button class="pm-action-btn" t-on-click="createNewProject">
+                                                <i class="fa fa-plus me-1"></i> Create Project
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <t t-else="">
+                                    <t t-foreach="state.data.projects" t-as="proj" t-key="proj.id">
+                                        <tr class="pm-project-clickable-row"
+                                            t-att-class="state.selectedProjectId === proj.id ? 'pm-row-selected' : ''"
+                                            t-on-click="(ev) => this.onSelectProject(proj.id, ev)"
+                                            title="Click to view all Scopes, Documentation &amp; Implementation tasks">
+                                            <!-- Project name & client -->
+                                            <td class="pm-td-project">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fa me-2 pm-expand-chevron"
+                                                       t-att-class="state.selectedProjectId === proj.id ? 'fa-chevron-down text-primary' : 'fa-chevron-right text-muted'"></i>
+                                                    <div>
+                                                        <strong class="pm-proj-name" t-esc="proj.name"/>
+                                                        <span class="pm-proj-client">
+                                                            <t t-esc="proj.client_name"/>
+                                                            <t t-if="proj.client_city"> · <t t-esc="proj.client_city"/></t>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </td>
+
+                                            <!-- Team -->
+                                            <td class="pm-td-team">
+                                                <span class="pm-team-dot-pill">
+                                                    <span class="pm-dot pm-dot-team"></span>
+                                                    <t t-esc="proj.team_name"/>
+                                                </span>
+                                            </td>
+
+                                            <!-- Running status -->
+                                            <td class="pm-td-status">
+                                                <span class="pm-badge" t-att-class="'pm-badge-' + proj.running_status" t-esc="proj.running_status_label"/>
+                                            </td>
+
+                                            <!-- Health -->
+                                            <td class="pm-td-health">
+                                                <span class="pm-health-item" t-att-class="'pm-health-' + proj.health">
+                                                    <span class="pm-dot-health"></span>
+                                                    <t t-esc="proj.health_label"/>
+                                                </span>
+                                            </td>
+
+                                            <!-- Risk level -->
+                                            <td class="pm-td-risk">
+                                                <span class="pm-risk-pill" t-att-class="'pm-risk-' + proj.risk_level" t-esc="proj.risk_level_label"/>
+                                            </td>
+
+                                            <!-- Progress vs Plan with Target Line Marker -->
+                                            <td class="pm-td-progress">
+                                                <div class="pm-progress-wrapper">
+                                                    <div class="pm-progress-track">
+                                                        <!-- Filled progress bar -->
+                                                        <div class="pm-progress-fill"
+                                                             t-att-class="'pm-fill-' + (proj.condition === 'overdue' ? 'rose' : (proj.condition === 'behind' ? 'amber' : 'emerald'))"
+                                                             t-attf-style="width: {{ proj.progress }}%;">
+                                                        </div>
+                                                        <!-- Vertical target line marker where plan says it should be today -->
+                                                        <div class="pm-target-marker"
+                                                             t-attf-style="left: {{ proj.planned_progress }}%;"
+                                                             t-att-title="'Target today: ' + proj.planned_progress + '%'">
+                                                        </div>
+                                                    </div>
+                                                    <span class="pm-progress-pct"><t t-esc="proj.progress"/>%</span>
+                                                </div>
+                                            </td>
+
+                                            <!-- Due Date & Variance Points -->
+                                            <td class="pm-td-due">
+                                                <div class="pm-due-content">
+                                                    <span class="pm-variance-pill"
+                                                          t-att-class="'pm-var-' + (proj.condition === 'ahead' ? 'pos' : (proj.condition === 'on_plan' ? 'zero' : 'neg'))"
+                                                          t-esc="proj.variance_str"/>
+                                                    <span class="pm-due-date-str" t-esc="proj.due_date_str"/>
+                                                </div>
+                                            </td>
+
+                                            <!-- Condition -->
+                                            <td class="pm-td-condition">
+                                                <div class="d-flex align-items-center justify-content-between">
+                                                    <span class="pm-condition-pill" t-att-class="'pm-cond-' + proj.condition">
+                                                        <t t-if="proj.condition === 'overdue'">
+                                                            <i class="fa fa-times-circle me-1"></i> Overdue
+                                                        </t>
+                                                        <t t-elif="proj.condition === 'behind'">
+                                                            <i class="fa fa-arrow-down me-1"></i> Behind
+                                                        </t>
+                                                        <t t-elif="proj.condition === 'ahead'">
+                                                            <i class="fa fa-arrow-up me-1"></i> Ahead
+                                                        </t>
+                                                        <t t-else="">
+                                                            <i class="fa fa-arrow-right me-1"></i> On plan
+                                                        </t>
+                                                    </span>
+                                                    <!-- Direct button to open Project Form -->
+                                                    <button class="btn btn-sm btn-link text-muted p-0 ms-2"
+                                                            t-on-click="(ev) => { ev.stopPropagation(); this.openProject(proj.id); }"
+                                                            title="Open Project Form View">
+                                                        <i class="fa fa-external-link"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+
+                                        <!-- EXPANDABLE PROJECT SCOPE & TASK BREAKDOWN -->
+                                        <t t-if="state.selectedProjectId === proj.id">
+                                            <tr class="pm-project-detail-expand-row">
+                                                <td colspan="8" class="p-0">
+                                                    <div class="pm-scope-panel">
+                                                        <!-- Panel Header with Project Summary & Quick Actions -->
+                                                        <div class="pm-scope-panel-header">
+                                                            <div class="pm-scope-header-left">
+                                                                <div class="pm-scope-title-row">
+                                                                    <span class="pm-scope-main-title">
+                                                                        <i class="fa fa-folder-open text-primary me-2"></i>
+                                                                        <t t-esc="proj.name"/> — Scopes &amp; Tasks
+                                                                    </span>
+                                                                    <span class="pm-badge" t-att-class="'pm-badge-' + proj.running_status">
+                                                                        <t t-esc="proj.running_status_label"/>
+                                                                    </span>
+                                                                </div>
+                                                                <div class="pm-scope-sub-meta">
+                                                                    <span>Client: <strong><t t-esc="proj.client_name"/></strong></span>
+                                                                    <span class="mx-2">·</span>
+                                                                    <span>Team: <strong><t t-esc="proj.team_name"/></strong></span>
+                                                                    <span class="mx-2">·</span>
+                                                                    <span>Due: <strong><t t-esc="proj.due_date_str"/></strong></span>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Summary KPI counters -->
+                                                            <div class="pm-scope-header-stats" t-if="state.projectScopesData and state.projectScopesData.stats">
+                                                                <div class="pm-mini-stat">
+                                                                    <span class="pm-mini-stat-label">Scopes</span>
+                                                                    <span class="pm-mini-stat-val text-indigo"><t t-esc="state.projectScopesData.stats.total_scopes"/></span>
+                                                                </div>
+                                                                <div class="pm-mini-stat">
+                                                                    <span class="pm-mini-stat-label">Documentation</span>
+                                                                    <span class="pm-mini-stat-val text-primary">
+                                                                        <t t-esc="state.projectScopesData.stats.done_docs"/>/<t t-esc="state.projectScopesData.stats.total_docs"/>
+                                                                    </span>
+                                                                </div>
+                                                                <div class="pm-mini-stat">
+                                                                    <span class="pm-mini-stat-label">Implementation</span>
+                                                                    <span class="pm-mini-stat-val text-purple">
+                                                                        <t t-esc="state.projectScopesData.stats.done_imps"/>/<t t-esc="state.projectScopesData.stats.total_imps"/>
+                                                                    </span>
+                                                                </div>
+                                                                <div class="pm-mini-stat">
+                                                                    <span class="pm-mini-stat-label">Completed</span>
+                                                                    <span class="pm-mini-stat-val text-success">
+                                                                        <t t-esc="state.projectScopesData.stats.completed_count"/>/<t t-esc="state.projectScopesData.stats.total_items"/> (<t t-esc="state.projectScopesData.stats.completion_pct"/>%)
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <!-- Top Action Buttons -->
+                                                            <div class="pm-scope-header-actions">
+                                                                <button class="btn btn-sm pm-btn-outline-primary"
+                                                                        t-on-click="(ev) => this.openImportWizardForProject(proj.id, ev)"
+                                                                        title="Import tasks from Benac Excel tracker">
+                                                                    <i class="fa fa-upload me-1"></i> Import Scopes
+                                                                </button>
+                                                                <button class="btn btn-sm pm-btn-outline-secondary"
+                                                                        t-on-click="(ev) => { ev.stopPropagation(); this.openProject(proj.id); }"
+                                                                        title="Open project form in Odoo">
+                                                                    <i class="fa fa-pencil me-1"></i> Edit Project
+                                                                </button>
+                                                                <button class="btn btn-sm pm-btn-close-panel"
+                                                                        t-on-click="(ev) => this.onSelectProject(proj.id, ev)"
+                                                                        title="Close details">
+                                                                    <i class="fa fa-times"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- INTERACTIVE FILTER BAR -->
+                                                        <div class="pm-scope-filters-bar">
+                                                            <!-- Category Filters (All, Documentation, Implementation) -->
+                                                            <div class="pm-filter-group">
+                                                                <span class="pm-filter-label">Category:</span>
+                                                                <button class="pm-filter-tab"
+                                                                        t-att-class="state.activeCategoryFilter === 'all' ? 'active' : ''"
+                                                                        t-on-click="() => this.setCategoryFilter('all')">
+                                                                    All (<t t-esc="state.projectScopesData ? state.projectScopesData.stats.total_items : 0"/>)
+                                                                </button>
+                                                                <button class="pm-filter-tab pm-tab-doc"
+                                                                        t-att-class="state.activeCategoryFilter === 'documentation' ? 'active' : ''"
+                                                                        t-on-click="() => this.setCategoryFilter('documentation')">
+                                                                    <i class="fa fa-file-text-o me-1"></i> Documentation (<t t-esc="state.projectScopesData ? state.projectScopesData.stats.total_docs : 0"/>)
+                                                                </button>
+                                                                <button class="pm-filter-tab pm-tab-imp"
+                                                                        t-att-class="state.activeCategoryFilter === 'implementation' ? 'active' : ''"
+                                                                        t-on-click="() => this.setCategoryFilter('implementation')">
+                                                                    <i class="fa fa-cogs me-1"></i> Implementation (<t t-esc="state.projectScopesData ? state.projectScopesData.stats.total_imps : 0"/>)
+                                                                </button>
+                                                            </div>
+
+                                                            <!-- Status Color Filters (Green, Blue, Yellow, Red) -->
+                                                            <div class="pm-filter-group">
+                                                                <span class="pm-filter-label">Status:</span>
+                                                                <button class="pm-filter-pill"
+                                                                        t-att-class="state.activeStatusFilter === 'all' ? 'active' : ''"
+                                                                        t-on-click="() => this.setStatusFilter('all')">
+                                                                    All
+                                                                </button>
+                                                                <button class="pm-filter-pill pm-pill-green"
+                                                                        t-att-class="state.activeStatusFilter === 'completed' ? 'active' : ''"
+                                                                        t-on-click="() => this.setStatusFilter('completed')">
+                                                                    <span class="pm-status-circle bg-green"></span> Completed
+                                                                </button>
+                                                                <button class="pm-filter-pill pm-pill-blue"
+                                                                        t-att-class="state.activeStatusFilter === 'in_progress' ? 'active' : ''"
+                                                                        t-on-click="() => this.setStatusFilter('in_progress')">
+                                                                    <span class="pm-status-circle bg-blue"></span> In Progress
+                                                                </button>
+                                                                <button class="pm-filter-pill pm-pill-yellow"
+                                                                        t-att-class="state.activeStatusFilter === 'pending' ? 'active' : ''"
+                                                                        t-on-click="() => this.setStatusFilter('pending')">
+                                                                    <span class="pm-status-circle bg-yellow"></span> Pending / Review
+                                                                </button>
+                                                                <button class="pm-filter-pill pm-pill-red"
+                                                                        t-att-class="state.activeStatusFilter === 'overdue' ? 'active' : ''"
+                                                                        t-on-click="() => this.setStatusFilter('overdue')">
+                                                                    <span class="pm-status-circle bg-red"></span> Overdue / Cancelled
+                                                                </button>
+                                                            </div>
+
+                                                            <!-- Search Box -->
+                                                            <div class="pm-search-box-wrap">
+                                                                <i class="fa fa-search pm-search-icon"></i>
+                                                                <input type="text"
+                                                                       class="pm-scope-search-input"
+                                                                       placeholder="Search Item ID, task, scope..."
+                                                                       t-att-value="state.searchQuery"
+                                                                       t-on-input="onSearchChange"/>
+                                                                <button t-if="state.searchQuery or state.activeCategoryFilter !== 'all' or state.activeStatusFilter !== 'all' or state.selectedScopeName"
+                                                                        class="btn btn-sm btn-link text-muted p-0 ms-1"
+                                                                        t-on-click="clearFilters"
+                                                                        title="Reset filters">
+                                                                    <i class="fa fa-times-circle"></i>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Functional Scope Area Chips (Horizontal Scroll) -->
+                                                        <t t-if="state.projectScopesData and state.projectScopesData.unique_scopes and state.projectScopesData.unique_scopes.length > 0">
+                                                            <div class="pm-scope-chips-bar">
+                                                                <span class="pm-chips-label">Scopes:</span>
+                                                                <button class="pm-scope-chip"
+                                                                        t-att-class="!state.selectedScopeName ? 'active' : ''"
+                                                                        t-on-click="() => this.setScopeNameFilter(null)">
+                                                                    All Scopes
+                                                                </button>
+                                                                <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
+                                                                    <button class="pm-scope-chip"
+                                                                            t-att-class="state.selectedScopeName === sc.name ? 'active' : ''"
+                                                                            t-on-click="() => this.setScopeNameFilter(sc.name)">
+                                                                        <span class="pm-scope-no-tag">Scope <t t-esc="sc.scope_no"/></span>
+                                                                        <span class="pm-scope-name-text" t-esc="sc.name"/>
+                                                                        <span class="pm-scope-pct-badge"><t t-esc="sc.done"/>/<t t-esc="sc.total"/></span>
+                                                                    </button>
+                                                                </t>
+                                                            </div>
+                                                        </t>
+
+                                                        <!-- SCOPES & TASKS LIST TABLE -->
+                                                        <div class="pm-scope-table-wrap">
+                                                            <t t-if="state.projectScopesLoading">
+                                                                <div class="text-center py-5">
+                                                                    <i class="fa fa-spinner fa-spin text-primary fs-3 mb-2"></i>
+                                                                    <div class="text-muted">Loading project scopes &amp; tasks...</div>
+                                                                </div>
+                                                            </t>
+                                                            <t t-elif="!filteredScopes or filteredScopes.length === 0">
+                                                                <div class="text-center py-5 pm-empty-scopes">
+                                                                    <t t-if="!state.projectScopesData or !state.projectScopesData.scopes or state.projectScopesData.scopes.length === 0">
+                                                                        <i class="fa fa-folder-open-o text-muted fs-1 mb-2" style="opacity: 0.5;"></i>
+                                                                        <div class="fw-bold mb-1">No Scopes or Tasks Loaded Yet</div>
+                                                                        <p class="text-muted small mb-3">Load your project's master scopes, documentation, and implementation items using the Excel tracker import.</p>
+                                                                        <button class="btn btn-sm btn-primary"
+                                                                                t-on-click="(ev) => this.openImportWizardForProject(proj.id, ev)">
+                                                                            <i class="fa fa-upload me-1"></i> Import Tracker Data
+                                                                        </button>
+                                                                    </t>
+                                                                    <t t-else="">
+                                                                        <i class="fa fa-filter text-muted fs-2 mb-2" style="opacity: 0.5;"></i>
+                                                                        <div class="fw-bold mb-1">No Matching Items</div>
+                                                                        <p class="text-muted small mb-2">No tasks match your selected category, color status, or search filters.</p>
+                                                                        <button class="btn btn-sm btn-outline-secondary" t-on-click="clearFilters">
+                                                                            Reset Filters
+                                                                        </button>
+                                                                    </t>
+                                                                </div>
+                                                            </t>
+                                                            <t t-else="">
+                                                                <table class="pm-scopes-table">
+                                                                    <thead>
+                                                                        <tr>
+                                                                            <th style="width: 120px;">Item ID</th>
+                                                                            <th>Scope</th>
+                                                                            <th style="width: 130px;">Category</th>
+                                                                            <th>Task / Document Name</th>
+                                                                            <th>Responsible</th>
+                                                                            <th style="width: 110px;">End Date</th>
+                                                                            <th style="width: 140px;">Status</th>
+                                                                            <th style="width: 80px;">Tier</th>
+                                                                            <th style="width: 130px; text-align: right;">Action</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        <t t-foreach="filteredScopes" t-as="item" t-key="item.id">
+                                                                            <tr class="pm-scope-item-row" t-on-click="(ev) => this.openScopeForm(item.id, ev)">
+                                                                                <!-- Item ID -->
+                                                                                <td class="pm-td-item-id">
+                                                                                    <span class="pm-code-badge" t-esc="item.item_id"/>
+                                                                                </td>
+
+                                                                                <!-- Scope Area -->
+                                                                                <td class="pm-td-scope-name">
+                                                                                    <span class="pm-scope-tag">
+                                                                                        <t t-esc="item.scope_name"/>
+                                                                                    </span>
+                                                                                </td>
+
+                                                                                <!-- Category (Doc vs Imp with distinct colors) -->
+                                                                                <td class="pm-td-cat">
+                                                                                    <span class="pm-cat-pill" t-att-class="item.cat_badge_class">
+                                                                                        <i class="fa me-1" t-att-class="item.cat_icon"></i>
+                                                                                        <t t-esc="item.category_label"/>
+                                                                                    </span>
+                                                                                </td>
+
+                                                                                <!-- Task / Document Name -->
+                                                                                <td class="pm-td-task-name">
+                                                                                    <span class="pm-task-title" t-esc="item.name"/>
+                                                                                    <span t-if="item.item_type" class="pm-item-type-sub" t-esc="item.item_type"/>
+                                                                                </td>
+
+                                                                                <!-- Responsible -->
+                                                                                <td class="pm-td-resp">
+                                                                                    <span class="pm-resp-name">
+                                                                                        <i class="fa fa-user-circle-o text-muted me-1"></i>
+                                                                                        <t t-esc="item.responsible_name"/>
+                                                                                    </span>
+                                                                                </td>
+
+                                                                                <!-- End Date -->
+                                                                                <td class="pm-td-deadline">
+                                                                                    <span class="pm-date-text" t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''">
+                                                                                        <t t-esc="item.end_date_str"/>
+                                                                                    </span>
+                                                                                </td>
+
+                                                                                <!-- Status Badge with Colors (Green, Blue, Yellow, Red) -->
+                                                                                <td class="pm-td-status-badge">
+                                                                                    <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color">
+                                                                                        <span class="pm-status-dot" t-att-class="'dot-' + item.status_color"></span>
+                                                                                        <t t-esc="item.status_label"/>
+                                                                                    </span>
+                                                                                </td>
+
+                                                                                <!-- Tier -->
+                                                                                <td class="pm-td-tier">
+                                                                                    <span class="pm-tier-pill" t-esc="item.approval_authority"/>
+                                                                                </td>
+
+                                                                                <!-- Actions -->
+                                                                                <td class="pm-td-scope-actions" style="text-align: right;">
+                                                                                    <t t-if="item.can_submit">
+                                                                                        <button class="btn btn-sm pm-btn-action-submit"
+                                                                                                t-on-click="(ev) => this.submitScopeDashboard(item.id, ev)"
+                                                                                                title="Mark done and submit for approval">
+                                                                                            <i class="fa fa-check me-1"></i> Submit
+                                                                                        </button>
+                                                                                    </t>
+                                                                                    <t t-elif="item.can_approve and state.data.user_info.can_approve">
+                                                                                        <button class="btn btn-sm pm-btn-action-approve"
+                                                                                                t-on-click="(ev) => this.approveScopeDashboard(item.id, ev)"
+                                                                                                title="Approve this task">
+                                                                                            <i class="fa fa-thumbs-up me-1"></i> Approve
+                                                                                        </button>
+                                                                                    </t>
+                                                                                    <t t-else="">
+                                                                                        <button class="btn btn-sm pm-btn-action-view"
+                                                                                                t-on-click="(ev) => this.openScopeForm(item.id, ev)"
+                                                                                                title="Open details">
+                                                                                            <i class="fa fa-eye"></i> View
+                                                                                        </button>
+                                                                                    </t>
+                                                                                </td>
+                                                                            </tr>
+                                                                        </t>
+                                                                    </tbody>
+                                                                </table>
+                                                            </t>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </t>
+                                    </t>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </t>
+</templates>

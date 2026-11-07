@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Root Menu -->
+    <menuitem id="menu_project_manage_root" name="Project Management" sequence="20"/>
+
+    <!-- Main Navigation Menus -->
+    <menuitem id="menu_project_manage_dashboard" name="Dashboard"
+              parent="menu_project_manage_root" action="action_project_manage_dashboard" sequence="5"/>
+
+    <menuitem id="menu_project_manage_projects" name="Projects"
+              parent="menu_project_manage_root" action="action_project_manage" sequence="10"/>
+
+    <menuitem id="menu_project_manage_approvals" name="Approval Requests"
+              parent="menu_project_manage_root" action="action_project_manage_approvals" sequence="15"/>
+
+    <!-- Scopes Dropdown Menu -->
+    <menuitem id="menu_project_manage_scopes_menu" name="Scopes"
+              parent="menu_project_manage_root" sequence="20"/>
+
+    <menuitem id="menu_project_manage_scopes" name="Scopes"
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_scope" sequence="10"/>
+
+    <menuitem id="menu_project_manage_documentation" name="Documentation Tasks"
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_documentation" sequence="20"/>
+
+    <menuitem id="menu_project_manage_implementation" name="Implementation Tasks"
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_implementation" sequence="30"/>
+
+    <!-- Configuration Menu -->
+    <menuitem id="menu_project_manage_config" name="Configuration"
+              parent="menu_project_manage_root" sequence="99"/>
+
+    <menuitem id="menu_project_config_documentation" name="Documentation"
+              parent="menu_project_manage_config" action="action_project_manage_config_documentation" sequence="10"/>
+
+    <menuitem id="menu_project_manage_teams" name="Project Teams"
+              parent="menu_project_manage_config" action="action_project_manage_team" sequence="15"/>
+
+    <menuitem id="menu_project_config_scopes" name="Scopes"
+              parent="menu_project_manage_config" action="action_project_manage_scope" sequence="20"/>
+
+    <menuitem id="menu_project_config_import" name="Import Scopes (Excel/CSV)"
+              parent="menu_project_manage_config" action="action_project_scope_import_wizard" sequence="30"/>
+
+    <menuitem id="menu_project_manage_tags" name="Tags"
+              parent="menu_project_manage_config" action="action_project_manage_tag" sequence="40"/>
+
+    <menuitem id="menu_project_manage_users" name="Manage Users &amp; Privileges"
+              parent="menu_project_manage_config" action="base.action_res_users"
+              groups="project_manage.group_project_manage_administrator" sequence="90"/>
+</odoo>
