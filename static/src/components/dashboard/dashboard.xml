@@ -879,10 +879,30 @@
 
                                                             <!-- Top Action Buttons -->
                                                             <div class="pm-scope-header-actions">
+                                                                <button class="btn btn-sm pm-btn-add-scope"
+                                                                        t-on-click="(ev) => this.openScopeWizard(null, ev)"
+                                                                        title="Fill or add a scope task with the dashboard wizard">
+                                                                    <i class="fa fa-plus me-1"></i> Fill / Add Scope
+                                                                </button>
+                                                                <button class="btn btn-sm pm-btn-bulk-fill"
+                                                                        t-on-click="(ev) => this.openBulkFillWizard(ev)"
+                                                                        title="Bulk assign Responsible, End Date, or Status across scopes">
+                                                                    <i class="fa fa-bolt me-1"></i> Bulk Fill
+                                                                </button>
                                                                 <button class="btn btn-sm pm-btn-outline-primary"
                                                                         t-on-click="(ev) => this.openImportWizardForProject(proj.id, ev)"
                                                                         title="Import tasks from Benac Excel tracker">
                                                                     <i class="fa fa-upload me-1"></i> Import Scopes
+                                                                </button>
+                                                                <button class="btn btn-sm pm-btn-send-update"
+                                                                        t-on-click="(ev) => this.openClientUpdateWizard(proj.id, ev)"
+                                                                        title="Send live progress update or completion report to the client">
+                                                                    <i class="fa fa-paper-plane me-1"></i> Send Client Update
+                                                                </button>
+                                                                <button class="btn btn-sm pm-btn-reviews"
+                                                                        t-on-click="(ev) => this.openCustomerReviews(proj.id, ev)"
+                                                                        title="View or record customer reviews for this project">
+                                                                    <i class="fa fa-star me-1 text-warning"></i> Reviews (<t t-esc="proj.review_count || 0"/>)
                                                                 </button>
                                                                 <button class="btn btn-sm pm-btn-outline-secondary"
                                                                         t-on-click="(ev) => { ev.stopPropagation(); this.openProject(proj.id); }"
@@ -954,7 +974,7 @@
                                                                 <i class="fa fa-search pm-search-icon"></i>
                                                                 <input type="text"
                                                                        class="pm-scope-search-input"
-                                                                       placeholder="Search Item ID, task, scope..."
+                                                                       placeholder="Search task, scope, category..."
                                                                        t-att-value="state.searchQuery"
                                                                        t-on-input="onSearchChange"/>
                                                                 <button t-if="state.searchQuery or state.activeCategoryFilter !== 'all' or state.activeStatusFilter !== 'all' or state.selectedScopeName"
@@ -1020,28 +1040,21 @@
                                                                 <table class="pm-scopes-table">
                                                                     <thead>
                                                                         <tr>
-                                                                            <th style="width: 120px;">Item ID</th>
-                                                                            <th>Scope</th>
-                                                                            <th style="width: 130px;">Category</th>
-                                                                            <th>Task / Document Name</th>
-                                                                            <th>Responsible</th>
-                                                                            <th style="width: 110px;">End Date</th>
-                                                                            <th style="width: 140px;">Status</th>
-                                                                            <th style="width: 80px;">Tier</th>
-                                                                            <th style="width: 130px; text-align: right;">Action</th>
+                                                                            <th style="width: 17%;">Scope</th>
+                                                                            <th style="width: 12%;">Category</th>
+                                                                            <th style="width: 33%;">Task / Document Name</th>
+                                                                            <th style="width: 14%;">Responsible</th>
+                                                                            <th style="width: 8%;">Start Date</th>
+                                                                            <th style="width: 8%;">End Date</th>
+                                                                            <th style="width: 8%;">Status</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
                                                                         <t t-foreach="filteredScopes" t-as="item" t-key="item.id">
-                                                                            <tr class="pm-scope-item-row" t-on-click="(ev) => this.openScopeForm(item.id, ev)">
-                                                                                <!-- Item ID -->
-                                                                                <td class="pm-td-item-id">
-                                                                                    <span class="pm-code-badge" t-esc="item.item_id"/>
-                                                                                </td>
-
+                                                                            <tr class="pm-scope-item-row" t-on-click="(ev) => this.openScopeWizard(item, ev)" title="Click to edit in wizard">
                                                                                 <!-- Scope Area -->
                                                                                 <td class="pm-td-scope-name">
-                                                                                    <span class="pm-scope-tag">
+                                                                                    <span class="pm-scope-tag text-truncate d-block" t-att-title="item.scope_name">
                                                                                         <t t-esc="item.scope_name"/>
                                                                                     </span>
                                                                                 </td>
@@ -1056,61 +1069,48 @@
 
                                                                                 <!-- Task / Document Name -->
                                                                                 <td class="pm-td-task-name">
-                                                                                    <span class="pm-task-title" t-esc="item.name"/>
-                                                                                    <span t-if="item.item_type" class="pm-item-type-sub" t-esc="item.item_type"/>
+                                                                                    <span class="pm-task-title" t-att-title="item.name" t-esc="item.name"/>
+                                                                                    <span t-if="item.item_type" class="pm-item-type-sub text-truncate d-block" t-att-title="item.item_type" t-esc="item.item_type"/>
+                                                                                    <div t-if="item.rejection_reason" class="text-danger small mt-1 text-truncate" t-att-title="item.rejection_reason">
+                                                                                        <i class="fa fa-exclamation-circle me-1"></i><t t-esc="item.rejection_reason"/>
+                                                                                    </div>
                                                                                 </td>
 
                                                                                 <!-- Responsible -->
                                                                                 <td class="pm-td-resp">
-                                                                                    <span class="pm-resp-name">
-                                                                                        <i class="fa fa-user-circle-o text-muted me-1"></i>
-                                                                                        <t t-esc="item.responsible_name"/>
+                                                                                    <div class="d-flex align-items-center text-truncate">
+                                                                                        <i class="fa fa-user-circle-o text-muted me-1 flex-shrink-0"></i>
+                                                                                        <span class="pm-resp-name text-truncate" t-att-title="item.responsible_name" t-esc="item.responsible_name"/>
+                                                                                    </div>
+                                                                                </td>
+
+                                                                                <!-- Start Date -->
+                                                                                <td class="pm-td-start-date">
+                                                                                    <span class="pm-date-text text-nowrap">
+                                                                                        <t t-esc="item.start_date_str || '-'"/>
                                                                                     </span>
                                                                                 </td>
 
                                                                                 <!-- End Date -->
                                                                                 <td class="pm-td-deadline">
-                                                                                    <span class="pm-date-text" t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''">
+                                                                                    <span class="pm-date-text text-nowrap" t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''">
                                                                                         <t t-esc="item.end_date_str"/>
                                                                                     </span>
                                                                                 </td>
 
-                                                                                <!-- Status Badge with Colors (Green, Blue, Yellow, Red) -->
+                                                                                <!-- Status Badge with Colors (Green, Blue, Yellow, Red) & Edit Button -->
                                                                                 <td class="pm-td-status-badge">
-                                                                                    <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color">
-                                                                                        <span class="pm-status-dot" t-att-class="'dot-' + item.status_color"></span>
-                                                                                        <t t-esc="item.status_label"/>
-                                                                                    </span>
-                                                                                </td>
-
-                                                                                <!-- Tier -->
-                                                                                <td class="pm-td-tier">
-                                                                                    <span class="pm-tier-pill" t-esc="item.approval_authority"/>
-                                                                                </td>
-
-                                                                                <!-- Actions -->
-                                                                                <td class="pm-td-scope-actions" style="text-align: right;">
-                                                                                    <t t-if="item.can_submit">
-                                                                                        <button class="btn btn-sm pm-btn-action-submit"
-                                                                                                t-on-click="(ev) => this.submitScopeDashboard(item.id, ev)"
-                                                                                                title="Mark done and submit for approval">
-                                                                                            <i class="fa fa-check me-1"></i> Submit
-                                                                                        </button>
-                                                                                    </t>
-                                                                                    <t t-elif="item.can_approve and state.data.user_info.can_approve">
-                                                                                        <button class="btn btn-sm pm-btn-action-approve"
-                                                                                                t-on-click="(ev) => this.approveScopeDashboard(item.id, ev)"
-                                                                                                title="Approve this task">
-                                                                                            <i class="fa fa-thumbs-up me-1"></i> Approve
-                                                                                        </button>
-                                                                                    </t>
-                                                                                    <t t-else="">
-                                                                                        <button class="btn btn-sm pm-btn-action-view"
-                                                                                                t-on-click="(ev) => this.openScopeForm(item.id, ev)"
-                                                                                                title="Open details">
-                                                                                            <i class="fa fa-eye"></i> View
-                                                                                        </button>
-                                                                                    </t>
+                                                                                    <div class="d-flex align-items-center justify-content-between">
+                                                                                        <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color">
+                                                                                            <span class="pm-status-dot" t-att-class="'dot-' + item.status_color"></span>
+                                                                                            <t t-esc="item.status_label"/>
+                                                                                        </span>
+                                                                                        <div class="pm-row-hover-actions">
+                                                                                            <button class="btn btn-sm pm-btn-row-wizard" title="Edit in wizard" t-on-click="(ev) => this.openScopeWizard(item, ev)">
+                                                                                                <i class="fa fa-pencil"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
                                                                                 </td>
                                                                             </tr>
                                                                         </t>
@@ -1128,6 +1128,303 @@
                         </table>
                     </div>
                 </section>
+
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL WIZARD: FILL / ADD / EDIT SCOPE TASK     -->
+                <!-- ======================================================== -->
+                <t t-if="state.scopeWizardOpen">
+                    <div class="pm-modal-backdrop" t-on-click="closeScopeWizard">
+                        <div class="pm-modal-dialog" t-on-click.stop="">
+                            <div class="pm-modal-content">
+                                <div class="pm-modal-header">
+                                    <div>
+                                        <h5 class="pm-modal-title">
+                                            <i class="fa fa-tasks me-2 text-primary"></i>
+                                            <t t-if="state.wizardData.id">Edit Scope Task</t>
+                                            <t t-else="">Fill / Add New Scope Task</t>
+                                        </h5>
+                                        <div class="pm-modal-subtitle text-muted small">
+                                            Project: <span class="fw-semibold text-primary"><t t-esc="state.projectScopesData and state.projectScopesData.project.name"/></span>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeScopeWizard" aria-label="Close"></button>
+                                </div>
+
+                                <div class="pm-modal-body">
+                                    <!-- WHEN EDITING: Read-Only Task Details Header -->
+                                    <t t-if="state.wizardData.id">
+                                        <div class="pm-wizard-task-banner mb-3 p-3 rounded">
+                                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                                <span class="badge pm-wizard-scope-badge text-truncate">
+                                                    <i class="fa fa-folder-open-o me-1 text-primary"></i>
+                                                    <t t-esc="state.wizardData.scope"/>
+                                                </span>
+                                                <span class="pm-cat-pill" t-att-class="state.wizardData.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-imp'">
+                                                    <t t-esc="state.wizardData.category"/>
+                                                </span>
+                                            </div>
+                                            <h5 class="fw-bold pm-wizard-task-title mb-1" t-esc="state.wizardData.name"/>
+                                            <div t-if="state.wizardData.item_type" class="pm-wizard-item-type small">
+                                                <i class="fa fa-tag me-1"></i> <t t-esc="state.wizardData.item_type"/>
+                                            </div>
+                                        </div>
+                                    </t>
+
+                                    <!-- WHEN CREATING NEW: Scope, Category, and Task Name inputs -->
+                                    <t t-else="">
+                                        <!-- Scope Selection -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold small text-uppercase text-muted">Scope (Functional Area) <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control pm-form-control"
+                                                   t-model="state.wizardData.scope"
+                                                   placeholder="e.g. Scope 0 Project Initiation &amp; Governance"
+                                                   list="pm-scope-datalist-modal"
+                                                   required="1"/>
+                                            <datalist id="pm-scope-datalist-modal">
+                                                <t t-if="state.projectScopesData and state.projectScopesData.available_scopes">
+                                                    <t t-foreach="state.projectScopesData.available_scopes" t-as="sc" t-key="sc">
+                                                        <option t-att-value="sc"/>
+                                                    </t>
+                                                </t>
+                                            </datalist>
+                                            <!-- Quick Scope Chips -->
+                                            <div class="d-flex flex-wrap gap-1 mt-2" t-if="state.projectScopesData and state.projectScopesData.available_scopes">
+                                                <t t-foreach="state.projectScopesData.available_scopes" t-as="sc" t-key="sc">
+                                                    <button type="button" class="btn btn-xs pm-scope-mini-chip"
+                                                            t-att-class="state.wizardData.scope === sc ? 'active' : ''"
+                                                            t-on-click="() => this.state.wizardData.scope = sc">
+                                                        <t t-esc="sc"/>
+                                                    </button>
+                                                </t>
+                                            </div>
+                                        </div>
+
+                                        <!-- Category & Type -->
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold small text-uppercase text-muted">Category <span class="text-danger">*</span></label>
+                                                <div class="btn-group w-100" role="group">
+                                                    <button type="button" class="btn btn-sm"
+                                                            t-att-class="state.wizardData.category === 'Documentation' ? 'btn-primary active' : 'btn-outline-secondary'"
+                                                            t-on-click="() => this.state.wizardData.category = 'Documentation'">
+                                                        <i class="fa fa-file-text-o me-1"></i> Documentation
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm"
+                                                            t-att-class="state.wizardData.category === 'Implementation' ? 'btn-purple active' : 'btn-outline-secondary'"
+                                                            t-on-click="() => this.state.wizardData.category = 'Implementation'">
+                                                        <i class="fa fa-cogs me-1"></i> Implementation
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold small text-uppercase text-muted">Item Type / Deliverable</label>
+                                                <input type="text" class="form-control pm-form-control"
+                                                       t-model="state.wizardData.item_type"
+                                                       placeholder="e.g. Client Data, Framework, MoM, Matrix"/>
+                                            </div>
+                                        </div>
+
+                                        <!-- Task / Document Name -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold small text-uppercase text-muted">Task / Document Name <span class="text-danger">*</span></label>
+                                            <input type="text" class="form-control pm-form-control"
+                                                   t-model="state.wizardData.name"
+                                                   placeholder="e.g. Client basic data form (company profile, turnover band)..."
+                                                   required="1"/>
+                                        </div>
+                                    </t>
+
+                                    <!-- EDITABLE FIELDS SECTION -->
+                                    <div class="pm-wizard-editable-section p-3 rounded border">
+                                        <div class="fw-bold small text-uppercase pm-editable-section-title mb-3">
+                                            <i class="fa fa-edit me-1"></i> Editable Task Details
+                                        </div>
+
+                                        <!-- Responsible Consultant / Employee -->
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold small text-uppercase text-muted">Responsible Consultant / Employee</label>
+                                            <select class="form-select pm-form-control" t-model="state.wizardData.responsible_id">
+                                                <option value="">-- Unassigned --</option>
+                                                <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                                    <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
+                                                        <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                                    </t>
+                                                </t>
+                                            </select>
+                                        </div>
+
+                                        <!-- Start Date & End Date -->
+                                        <div class="row g-3 mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold small text-uppercase text-muted">Start Date</label>
+                                                <input type="date" class="form-control pm-form-control"
+                                                       t-model="state.wizardData.start_date"/>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold small text-uppercase text-muted">End Date (Deadline)</label>
+                                                <input type="date" class="form-control pm-form-control"
+                                                       t-model="state.wizardData.end_date"/>
+                                            </div>
+                                        </div>
+
+                                        <!-- Status / State -->
+                                        <div class="mb-1">
+                                            <label class="form-label fw-bold small text-uppercase text-muted">Status / State</label>
+                                            <select class="form-select pm-form-control" t-model="state.wizardData.state">
+                                                <option value="todo">To Do</option>
+                                                <option value="in_progress">In Progress</option>
+                                                <option value="under_review">Under Review</option>
+                                                <option value="done">Done</option>
+                                                <option value="cancelled">Cancelled</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="pm-modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary pm-btn-modal-cancel" t-on-click="closeScopeWizard">
+                                        Cancel
+                                    </button>
+                                    <t t-if="state.wizardData.id">
+                                        <button type="button" class="btn btn-outline-primary pm-btn-modal-next"
+                                                t-att-disabled="state.savingScope"
+                                                t-on-click="() => this.saveScopeWizard(true)"
+                                                title="Save current and automatically open the next task in the list">
+                                            <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i></t>
+                                            <i t-else="" class="fa fa-arrow-right me-1"></i> Save &amp; Next Task
+                                        </button>
+                                    </t>
+                                    <button type="button" class="btn btn-primary pm-btn-modal-save"
+                                            t-att-disabled="state.savingScope"
+                                            t-on-click="() => this.saveScopeWizard(false)">
+                                        <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i> Saving...</t>
+                                        <t t-elif="state.wizardData.id"><i class="fa fa-check me-1"></i> Save Changes</t>
+                                        <t t-else=""><i class="fa fa-plus me-1"></i> Create Scope Task</t>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL WIZARD: BULK FILL SCOPES                 -->
+                <!-- ======================================================== -->
+                <t t-if="state.bulkWizardOpen">
+                    <div class="pm-modal-backdrop" t-on-click="closeBulkFillWizard">
+                        <div class="pm-modal-dialog pm-modal-dialog-md" t-on-click.stop="">
+                            <div class="pm-modal-content">
+                                <div class="pm-modal-header">
+                                    <div>
+                                        <h5 class="pm-modal-title">
+                                            <i class="fa fa-bolt me-2 text-warning"></i> Bulk Fill Scopes &amp; Tasks
+                                        </h5>
+                                        <div class="pm-modal-subtitle text-muted small">
+                                            Quickly assign Responsible, End Date, or Status across multiple tasks at once.
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeBulkFillWizard" aria-label="Close"></button>
+                                </div>
+
+                                <div class="pm-modal-body">
+                                    <!-- Scope Target -->
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold small text-uppercase text-muted">Target Tasks</label>
+                                        <div class="d-flex gap-3 mb-2">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="bulkTarget" id="targetScope" value="scope"
+                                                       t-model="state.bulkData.target"/>
+                                                <label class="form-check-label" for="targetScope">By Specific Scope Area</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="radio" name="bulkTarget" id="targetAll" value="all"
+                                                       t-model="state.bulkData.target"/>
+                                                <label class="form-check-label" for="targetAll">All Tasks in Project</label>
+                                            </div>
+                                        </div>
+
+                                        <t t-if="state.bulkData.target === 'scope'">
+                                            <select class="form-select pm-form-control" t-model="state.bulkData.scope_name_filter">
+                                                <option value="">-- Choose Scope Area --</option>
+                                                <t t-if="state.projectScopesData and state.projectScopesData.available_scopes">
+                                                    <t t-foreach="state.projectScopesData.available_scopes" t-as="sc" t-key="sc">
+                                                        <option t-att-value="sc"><t t-esc="sc"/></option>
+                                                    </t>
+                                                </t>
+                                            </select>
+                                        </t>
+                                    </div>
+
+                                    <hr class="my-3 opacity-25"/>
+
+                                    <div class="fw-bold small text-uppercase text-muted mb-2">
+                                        Fields to Fill (Leave empty to keep existing values):
+                                    </div>
+
+                                    <!-- Assign Responsible -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Assign Responsible Consultant:</label>
+                                        <select class="form-select pm-form-control" t-model="state.bulkData.responsible_id">
+                                            <option value="">-- Do Not Change --</option>
+                                            <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                                <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
+                                                    <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                                </t>
+                                            </t>
+                                        </select>
+                                    </div>
+
+                                    <!-- Set Start Date -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Set Start Date:</label>
+                                        <input type="date" class="form-control pm-form-control" t-model="state.bulkData.start_date"/>
+                                    </div>
+
+                                    <!-- Set End Date -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Set End Date (Deadline):</label>
+                                        <input type="date" class="form-control pm-form-control" t-model="state.bulkData.end_date"/>
+                                    </div>
+
+                                    <!-- Set Status -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Set Status:</label>
+                                        <select class="form-select pm-form-control" t-model="state.bulkData.state">
+                                            <option value="">-- Do Not Change --</option>
+                                            <option value="todo">To Do</option>
+                                            <option value="in_progress">In Progress</option>
+                                            <option value="under_review">Under Review</option>
+                                            <option value="done">Done</option>
+                                            <option value="cancelled">Cancelled</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Set Category -->
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Set Category:</label>
+                                        <select class="form-select pm-form-control" t-model="state.bulkData.category">
+                                            <option value="">-- Do Not Change --</option>
+                                            <option value="Documentation">Documentation</option>
+                                            <option value="Implementation">Implementation</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="pm-modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary pm-btn-modal-cancel" t-on-click="closeBulkFillWizard">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-warning pm-btn-modal-save fw-bold"
+                                            t-att-disabled="state.savingScope"
+                                            t-on-click="applyBulkFill">
+                                        <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i> Applying...</t>
+                                        <t t-else=""><i class="fa fa-bolt me-1"></i> Apply Bulk Fill</t>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
             </div>
         </div>
     </t>

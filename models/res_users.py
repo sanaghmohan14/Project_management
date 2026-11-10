@@ -136,17 +136,139 @@ class ResUsers(models.Model):
                 WHERE name = 'Project Scope Multi-Company';
             """, (domain_multi_comp,))
 
-            # 6. Ensure rule_project_scope_exec includes base.group_system in DB
-            if sys_grp:
-                rule_scope_exec = self.env.ref('project_manage.rule_project_scope_exec', raise_if_not_found=False)
-                if rule_scope_exec:
+            # 6. Ensure rule_project_scope_exec and rule_project_manage_exec include Manager, VP, CEO, Admin, System
+            mgr_grp = self.env.ref('project_manage.group_project_manage_manager', raise_if_not_found=False)
+            rule_proj_exec = self.env.ref('project_manage.rule_project_manage_exec', raise_if_not_found=False)
+            rule_scope_exec = self.env.ref('project_manage.rule_project_scope_exec', raise_if_not_found=False)
+            for rule_rec in (rule_proj_exec, rule_scope_exec):
+                if rule_rec:
                     self.env.cr.execute("""
-                        INSERT INTO rule_group_rel (rule_group_id, group_id)
-                        SELECT %s, %s
+                        UPDATE ir_rule
+                        SET domain_force = '[(1, ''='', 1)]'
+                        WHERE id = %s;
+                    """, (rule_rec.id,))
+                    for g in (sys_grp, mgr_grp, admin_grp):
+                        if g:
+                            self.env.cr.execute("""
+                                INSERT INTO rule_group_rel (rule_group_id, group_id)
+                                SELECT %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM rule_group_rel WHERE rule_group_id = %s AND group_id = %s
+                                );
+                            """, (rule_rec.id, g.id, rule_rec.id, g.id))
+
+            # Deactivate legacy rule_project_manage_pm if present so manager has full exec access
+            rule_pm = self.env.ref('project_manage.rule_project_manage_pm', raise_if_not_found=False)
+            if rule_pm:
+                self.env.cr.execute("UPDATE ir_rule SET active = false WHERE id = %s;", (rule_pm.id,))
+
+            # 7. Ensure Team Lead and Consultant project & team access rules
+            tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
+            consultant_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
+            rule_proj_tl = self.env.ref('project_manage.rule_project_manage_tl', raise_if_not_found=False)
+            if rule_proj_tl:
+                domain_tl = "['|', '|', '|', ('team_lead_id.user_id', '=', user.id), ('team_id.team_lead_id', '=', user.id), ('team_id.member_ids', 'in', [user.id]), ('consultant_ids.user_id', '=', user.id)]"
+                self.env.cr.execute("UPDATE ir_rule SET domain_force = %s WHERE id = %s;", (domain_tl, rule_proj_tl.id))
+
+            # Ensure project.manage.team rules exist in DB
+            team_model = self.env['ir.model'].search([('model', '=', 'project.manage.team')], limit=1)
+            if team_model:
+                # 7a. Team Exec/Manager Rule
+                self.env.cr.execute("""
+                    INSERT INTO ir_rule (name, model_id, domain_force, active)
+                    SELECT 'Executive and Manager Teams Access', %s, '[(1, ''='', 1)]', true
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM ir_rule WHERE name = 'Executive and Manager Teams Access' AND model_id = %s
+                    );
+                """, (team_model.id, team_model.id))
+                self.env.cr.execute("SELECT id FROM ir_rule WHERE name = 'Executive and Manager Teams Access' AND model_id = %s LIMIT 1;", (team_model.id,))
+                team_exec_row = self.env.cr.fetchone()
+                if team_exec_row:
+                    team_exec_rule_id = team_exec_row[0]
+                    for g in (sys_grp, mgr_grp, admin_grp):
+                        if g:
+                            self.env.cr.execute("""
+                                INSERT INTO rule_group_rel (rule_group_id, group_id)
+                                SELECT %s, %s
+                                WHERE NOT EXISTS (
+                                    SELECT 1 FROM rule_group_rel WHERE rule_group_id = %s AND group_id = %s
+                                );
+                            """, (team_exec_rule_id, g.id, team_exec_rule_id, g.id))
+
+                # 7b. Team Lead Assigned Team Rule
+                if tl_grp:
+                    domain_team_tl = "['|', ('team_lead_id', '=', user.id), ('member_ids', 'in', [user.id])]"
+                    self.env.cr.execute("""
+                        INSERT INTO ir_rule (name, model_id, domain_force, active)
+                        SELECT 'Team Lead Assigned Team Access', %s, %s, true
                         WHERE NOT EXISTS (
-                            SELECT 1 FROM rule_group_rel WHERE rule_group_id = %s AND group_id = %s
+                            SELECT 1 FROM ir_rule WHERE name = 'Team Lead Assigned Team Access' AND model_id = %s
                         );
-                    """, (rule_scope_exec.id, sys_grp.id, rule_scope_exec.id, sys_grp.id))
+                    """, (team_model.id, domain_team_tl, team_model.id))
+                    self.env.cr.execute("SELECT id FROM ir_rule WHERE name = 'Team Lead Assigned Team Access' AND model_id = %s LIMIT 1;", (team_model.id,))
+                    team_tl_row = self.env.cr.fetchone()
+                    if team_tl_row:
+                        team_tl_rule_id = team_tl_row[0]
+                        self.env.cr.execute("""
+                            INSERT INTO rule_group_rel (rule_group_id, group_id)
+                            SELECT %s, %s
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM rule_group_rel WHERE rule_group_id = %s AND group_id = %s
+                            );
+                        """, (team_tl_rule_id, tl_grp.id, team_tl_rule_id, tl_grp.id))
+
+                # 7c. Consultant Assigned Team Rule
+                if consultant_grp:
+                    domain_team_cons = "[('member_ids', 'in', [user.id])]"
+                    self.env.cr.execute("""
+                        INSERT INTO ir_rule (name, model_id, domain_force, active)
+                        SELECT 'Consultant Assigned Team Access', %s, %s, true
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM ir_rule WHERE name = 'Consultant Assigned Team Access' AND model_id = %s
+                        );
+                    """, (team_model.id, domain_team_cons, team_model.id))
+                    self.env.cr.execute("SELECT id FROM ir_rule WHERE name = 'Consultant Assigned Team Access' AND model_id = %s LIMIT 1;", (team_model.id,))
+                    team_cons_row = self.env.cr.fetchone()
+                    if team_cons_row:
+                        team_cons_rule_id = team_cons_row[0]
+                        self.env.cr.execute("""
+                            INSERT INTO rule_group_rel (rule_group_id, group_id)
+                            SELECT %s, %s
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM rule_group_rel WHERE rule_group_id = %s AND group_id = %s
+                            );
+                        """, (team_cons_rule_id, consultant_grp.id, team_cons_rule_id, consultant_grp.id))
+
+            # 8. Ensure approval log model access has create/write permissions for all active roles
+            log_model = self.env['ir.model'].search([('model', '=', 'project.manage.scope.approval.log')], limit=1)
+            if log_model:
+                consultant_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
+                if consultant_grp:
+                    self.env.cr.execute("""
+                        UPDATE ir_model_access
+                        SET perm_create = true, perm_write = true, perm_read = true
+                        WHERE model_id = %s AND group_id = %s;
+                    """, (log_model.id, consultant_grp.id))
+                user_grp = self.env.ref('base.group_user', raise_if_not_found=False)
+                if user_grp:
+                    self.env.cr.execute("""
+                        UPDATE ir_model_access
+                        SET perm_create = true, perm_write = true, perm_read = true
+                        WHERE model_id = %s AND group_id = %s;
+                    """, (log_model.id, user_grp.id))
+
+            # 8. Sync consultant rule domain in DB so consultants strictly see assigned tasks
+            domain_consultant = "[('responsible_id.user_id', '=', user.id)]"
+            self.env.cr.execute("""
+                UPDATE ir_rule
+                SET domain_force = %s
+                WHERE name = 'Consultant Assigned Tasks';
+            """, (domain_consultant,))
+
+            # 9. Recalculate dynamic metrics (Health, Risk Level, Condition) for existing projects
+            all_projects = self.env['project.manage'].search([])
+            if all_projects:
+                all_projects._compute_metrics()
 
             # Clear access rule caches so changes take effect immediately
             self.env.registry.clear_cache()

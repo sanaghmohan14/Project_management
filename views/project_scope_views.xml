@@ -25,8 +25,6 @@
                        decoration-danger="state == 'cancelled'"/>
                 <field name="start_date" string="Start Date"/>
                 <field name="end_date" string="End Date"/>
-                <field name="approval_authority" string="Final Approval Authority" optional="hide"/>
-                <field name="approver_id" string="Approver" optional="hide"/>
                 <field name="can_user_approve" column_invisible="True"/>
                 <button name="action_approve_level" string="Approve" type="object" icon="fa-check text-success"
                         invisible="not can_user_approve" class="btn-success btn-sm"/>
@@ -34,7 +32,6 @@
                         invisible="not can_user_approve" class="btn-danger btn-sm"/>
                 <field name="responsible" string="Responsible (Text)" optional="hide"/>
                 <field name="evidence_proof" string="Proof" optional="hide"/>
-                <field name="accountable_id" string="Accountable" optional="hide"/>
                 <field name="project_id" string="Project" optional="hide"/>
             </list>
         </field>
@@ -89,10 +86,7 @@
                         <group string="Project &amp; Schedule">
                             <field name="project_id"/>
                             <field name="evidence_proof" invisible="category != 'Implementation'"/>
-                            <field name="approval_authority"/>
-                            <field name="approver_id"/>
                             <field name="responsible_id"/>
-                            <field name="accountable_id"/>
                             <field name="start_date"/>
                             <field name="end_date"/>
                         </group>
@@ -155,8 +149,6 @@
                 <field name="project_id"/>
                 <field name="responsible_id"/>
                 <field name="responsible"/>
-                <field name="approver_id"/>
-                <field name="approval_authority"/>
                 <separator/>
                 <filter name="f_doc" string="Documentation" domain="[('category', '=', 'Documentation')]"/>
                 <filter name="f_imp" string="Implementation" domain="[('category', '=', 'Implementation')]"/>
@@ -180,8 +172,6 @@
                     <filter name="g_scope" string="Scope" context="{'group_by': 'scope'}"/>
                     <filter name="g_category" string="Category" context="{'group_by': 'category'}"/>
                     <filter name="g_responsible" string="Responsible" context="{'group_by': 'responsible_id'}"/>
-                    <filter name="g_approver" string="Approver" context="{'group_by': 'approver_id'}"/>
-                    <filter name="g_approver_role" string="Approver Role" context="{'group_by': 'approval_authority'}"/>
                     <filter name="g_project" string="Project" context="{'group_by': 'project_id'}"/>
                     <filter name="g_type" string="Item Type" context="{'group_by': 'item_type'}"/>
                     <filter name="g_state" string="Status" context="{'group_by': 'state'}"/>
@@ -201,7 +191,6 @@
                 <field name="scope"/>
                 <field name="item_type"/>
                 <field name="responsible"/>
-                <field name="approval_authority"/>
                 <field name="end_date"/>
                 <field name="color"/>
                 <field name="document_count"/>
@@ -232,10 +221,6 @@
                                         <i class="fa fa-tag me-1" title="Type" role="img" aria-label="Type"/>
                                         <field name="item_type"/>
                                     </span>
-                                    <span invisible="not approval_authority" class="badge text-bg-dark">
-                                        <i class="fa fa-check-circle me-1" title="Approver" role="img" aria-label="Approver"/>
-                                        <field name="approval_authority"/>
-                                    </span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top small text-muted">
                                     <div class="d-flex align-items-center text-truncate me-2" invisible="not responsible">
@@ -259,7 +244,7 @@
     <record id="action_project_manage_scope" model="ir.actions.act_window">
         <field name="name">Scopes</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">kanban,list,form</field>
+        <field name="view_mode">list,kanban,form</field>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
@@ -271,7 +256,7 @@
     <record id="action_project_manage_documentation" model="ir.actions.act_window">
         <field name="name">Documentation Tasks</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">kanban,list,form</field>
+        <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Documentation')]</field>
         <field name="context">{'default_category': 'Documentation'}</field>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
@@ -285,7 +270,7 @@
     <record id="action_project_manage_implementation" model="ir.actions.act_window">
         <field name="name">Implementation Tasks</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">kanban,list,form</field>
+        <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Implementation')]</field>
         <field name="context">{'default_category': 'Implementation'}</field>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
@@ -300,7 +285,7 @@
     <record id="action_project_manage_config_documentation" model="ir.actions.act_window">
         <field name="name">Documentation (All Documents)</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">kanban,list,form</field>
+        <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Documentation')]</field>
         <field name="context">{'default_category': 'Documentation'}</field>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>

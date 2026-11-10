@@ -1,0 +1,349 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!-- Sequence for Review Reference -->
+    <record id="seq_project_manage_review" model="ir.sequence">
+        <field name="name">Project Customer Review Sequence</field>
+        <field name="code">project.manage.review</field>
+        <field name="prefix">REV/%(year)s/</field>
+        <field name="padding">4</field>
+        <field name="company_id" eval="False"/>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- CUSTOMER REVIEWS: LIST / TREE VIEW                       -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_review_tree" model="ir.ui.view">
+        <field name="name">project.manage.review.list</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <list string="Customer Reviews"
+                  decoration-success="state == 'approved'"
+                  decoration-info="state == 'submitted'"
+                  decoration-warning="state == 'under_review'"
+                  decoration-muted="state == 'draft'">
+                <field name="reference" string="Ref"/>
+                <field name="name" string="Review Title"/>
+                <field name="project_id" string="Project"/>
+                <field name="partner_id" string="Client"/>
+                <field name="reviewer_name" string="Reviewer" optional="show"/>
+                <field name="rating" string="Rating" widget="badge"
+                       decoration-success="rating in ('4', '5')"
+                       decoration-warning="rating == '3'"
+                       decoration-danger="rating in ('1', '2')"/>
+                <field name="review_date" string="Review Date"/>
+                <field name="review_type" string="Review Type" optional="show"/>
+                <field name="team_id" string="Team" optional="hide"/>
+                <field name="manager_id" string="Project Manager" optional="hide"/>
+                <field name="state" string="Status" widget="badge"
+                       decoration-success="state == 'approved'"
+                       decoration-info="state == 'submitted'"
+                       decoration-warning="state == 'under_review'"
+                       decoration-muted="state == 'draft'"/>
+                <field name="response_sent" string="Ack Sent" widget="boolean" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- CUSTOMER REVIEWS: FORM VIEW                              -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_review_form" model="ir.ui.view">
+        <field name="name">project.manage.review.form</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <form string="Customer Review">
+                <header>
+                    <button name="action_submit" string="Submit Review" type="object"
+                            class="btn-primary" invisible="state != 'draft'"/>
+                    <button name="action_review" string="Mark Under Review" type="object"
+                            class="btn-secondary" invisible="state != 'submitted'"/>
+                    <button name="action_approve" string="Review &amp; Acknowledge" type="object"
+                            class="btn-success" invisible="state not in ('submitted', 'under_review')"/>
+                    <button name="action_send_acknowledgement" string="Send Thank You Email" type="object"
+                            class="btn-outline-primary" icon="fa-paper-plane"
+                            invisible="state == 'draft'"/>
+                    <button name="action_reset_draft" string="Reset to Draft" type="object"
+                            invisible="state == 'draft'"/>
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,submitted,under_review,approved"/>
+                </header>
+                <sheet>
+                    <div class="oe_button_box" name="button_box">
+                        <button name="action_view_project" type="object"
+                                class="oe_stat_button" icon="fa-folder-open-o">
+                            <div class="o_stat_info">
+                                <span class="o_stat_text">View</span>
+                                <span class="o_stat_text">Project</span>
+                            </div>
+                        </button>
+                    </div>
+
+                    <div class="oe_title">
+                        <span class="text-muted small">
+                            <field name="reference" readonly="1"/>
+                        </span>
+                        <h1>
+                            <field name="name" placeholder="e.g. Milestone 2 Delivery Feedback..."/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <group string="Project &amp; Client Details">
+                            <field name="project_id" options="{'no_create': True}"/>
+                            <field name="partner_id" options="{'no_create': True}"/>
+                            <field name="client_coordinator_id" optional="show"/>
+                            <field name="team_id" readonly="1"/>
+                            <field name="manager_id" readonly="1"/>
+                            <field name="team_lead_id" readonly="1"/>
+                        </group>
+                        <group string="Reviewer &amp; Rating">
+                            <field name="reviewer_name"/>
+                            <field name="reviewer_email"/>
+                            <field name="reviewer_phone"/>
+                            <field name="review_date"/>
+                            <field name="review_type"/>
+                            <field name="rating"/>
+                            <field name="nps_score"/>
+                        </group>
+                    </group>
+
+                    <notebook>
+                        <page string="Customer Feedback &amp; Comments" name="feedback">
+                            <group string="Overall Feedback">
+                                <field name="feedback" nolabel="1" placeholder="Enter customer feedback, meeting minutes, or direct comments..."/>
+                            </group>
+                            <group>
+                                <group string="What Went Well (Key Strengths)">
+                                    <field name="strengths" nolabel="1" placeholder="Highlights, positive observations, or praised team members..."/>
+                                </group>
+                                <group string="Areas for Improvement / Bottlenecks">
+                                    <field name="areas_for_improvement" nolabel="1" placeholder="Bottlenecks, delayed deliverables, or suggestions..."/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Internal Action &amp; Response" name="response">
+                            <group string="Internal Action Plan">
+                                <field name="internal_response" nolabel="1" placeholder="Corrective actions taken, internal response notes..."/>
+                            </group>
+                            <group>
+                                <group string="Acknowledgement Status">
+                                    <field name="response_sent" readonly="1"/>
+                                    <field name="response_date" readonly="1"/>
+                                </group>
+                            </group>
+                        </page>
+
+                        <page string="Project Snapshot" name="snapshot">
+                            <group>
+                                <group string="Status at Review Date">
+                                    <field name="project_progress" widget="progressbar"/>
+                                    <field name="project_health"/>
+                                    <field name="project_risk"/>
+                                </group>
+                                <group string="Organization">
+                                    <field name="company_id" groups="base.group_multi_company"/>
+                                </group>
+                            </group>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- CUSTOMER REVIEWS: KANBAN VIEW                            -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_review_kanban" model="ir.ui.view">
+        <field name="name">project.manage.review.kanban</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <kanban default_group_by="rating" class="o_kanban_small_column" sample="1">
+                <field name="name"/>
+                <field name="reference"/>
+                <field name="project_id"/>
+                <field name="partner_id"/>
+                <field name="rating"/>
+                <field name="review_date"/>
+                <field name="state"/>
+                <templates>
+                    <t t-name="card">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="badge text-bg-secondary text-truncate">
+                                <t t-esc="record.reference.value"/>
+                            </span>
+                            <span class="badge" t-att-class="{
+                                'text-bg-success': record.state.raw_value == 'approved',
+                                'text-bg-info': record.state.raw_value == 'submitted',
+                                'text-bg-warning': record.state.raw_value == 'under_review',
+                                'text-bg-light': record.state.raw_value == 'draft'
+                            }">
+                                <t t-esc="record.state.value"/>
+                            </span>
+                        </div>
+                        <h5 class="fw-bold text-truncate mb-1">
+                            <t t-esc="record.name.value"/>
+                        </h5>
+                        <div class="text-muted small mb-2">
+                            <i class="fa fa-folder-open-o me-1"></i> <t t-esc="record.project_id.value"/>
+                        </div>
+                        <div class="text-muted small mb-2">
+                            <i class="fa fa-user-circle-o me-1"></i> <t t-esc="record.partner_id.value"/>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                            <span class="fw-bold text-warning">
+                                <t t-esc="record.rating.value"/>
+                            </span>
+                            <span class="text-muted small">
+                                <t t-esc="record.review_date.value"/>
+                            </span>
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- CUSTOMER REVIEWS: PIVOT & GRAPH VIEWS                    -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_review_pivot" model="ir.ui.view">
+        <field name="name">project.manage.review.pivot</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <pivot string="Customer Reviews Analysis" sample="1">
+                <field name="project_id" type="row"/>
+                <field name="review_type" type="col"/>
+                <field name="rating_value" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="view_project_manage_review_graph" model="ir.ui.view">
+        <field name="name">project.manage.review.graph</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <graph string="Customer Satisfaction Rating" sample="1">
+                <field name="project_id"/>
+                <field name="rating_value" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- CUSTOMER REVIEWS: SEARCH & FILTER VIEW                   -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_review_search" model="ir.ui.view">
+        <field name="name">project.manage.review.search</field>
+        <field name="model">project.manage.review</field>
+        <field name="arch" type="xml">
+            <search string="Search Customer Reviews">
+                <field name="name" string="Review Title"/>
+                <field name="reference" string="Reference"/>
+                <field name="project_id" string="Project"/>
+                <field name="partner_id" string="Client"/>
+                <field name="reviewer_name" string="Reviewer"/>
+                <separator/>
+                <filter string="5 Stars (Excellent)" name="rating_5" domain="[('rating', '=', '5')]"/>
+                <filter string="4 Stars (Good)" name="rating_4" domain="[('rating', '=', '4')]"/>
+                <filter string="Low Rating (&lt;= 3 Stars)" name="low_rating" domain="[('rating', 'in', ('1', '2', '3'))]"/>
+                <separator/>
+                <filter string="Completion Reviews" name="completion_reviews" domain="[('review_type', '=', 'completion')]"/>
+                <filter string="Milestone Reviews" name="milestone_reviews" domain="[('review_type', '=', 'milestone')]"/>
+                <separator/>
+                <filter string="Needs Acknowledgement" name="needs_ack" domain="[('response_sent', '=', False)]"/>
+                <filter string="Reviewed &amp; Acknowledged" name="approved" domain="[('state', '=', 'approved')]"/>
+                <group>
+                    <filter string="Project" name="group_project" context="{'group_by': 'project_id'}"/>
+                    <filter string="Client" name="group_client" context="{'group_by': 'partner_id'}"/>
+                    <filter string="Rating" name="group_rating" context="{'group_by': 'rating'}"/>
+                    <filter string="Review Type" name="group_type" context="{'group_by': 'review_type'}"/>
+                    <filter string="Status" name="group_state" context="{'group_by': 'state'}"/>
+                    <filter string="Review Month" name="group_date" context="{'group_by': 'review_date:month'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- ======================================================== -->
+    <!-- ACTION: CUSTOMER REVIEWS                                 -->
+    <!-- ======================================================== -->
+    <record id="action_project_manage_review" model="ir.actions.act_window">
+        <field name="name">Customer Reviews</field>
+        <field name="res_model">project.manage.review</field>
+        <field name="view_mode">list,kanban,form,pivot,graph</field>
+        <field name="search_view_id" ref="view_project_manage_review_search"/>
+        <field name="context">{'search_default_group_project': 1}</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Record your first customer review!
+            </p>
+            <p>
+                Track feedback, milestone reviews, and completion sign-offs received from clients.
+            </p>
+        </field>
+    </record>
+
+
+    <!-- ======================================================== -->
+    <!-- WIZARD: SEND PROJECT UPDATE TO CLIENT                    -->
+    <!-- ======================================================== -->
+    <record id="view_project_manage_client_update_wizard_form" model="ir.ui.view">
+        <field name="name">project.manage.client.update.wizard.form</field>
+        <field name="model">project.manage.client.update.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Send Project Update to Client">
+                <sheet>
+                    <div class="alert alert-info d-flex align-items-center" role="alert" invisible="is_completed">
+                        <i class="fa fa-info-circle fa-2x me-3" title="Info"></i>
+                        <div>
+                            <strong>Sending Progress Update</strong><br/>
+                            This will send a live schedule, health, and deliverables progress report to the client.
+                        </div>
+                    </div>
+                    <div class="alert alert-success d-flex align-items-center" role="alert" invisible="not is_completed">
+                        <i class="fa fa-check-circle fa-2x me-3" title="Success"></i>
+                        <div>
+                            <strong>Sending Project Completion Report</strong><br/>
+                            This project is completed! The client will receive a final sign-off summary and a review invitation.
+                        </div>
+                    </div>
+
+                    <group>
+                        <group string="Recipients">
+                            <field name="project_id" readonly="1"/>
+                            <field name="partner_id" readonly="1"/>
+                            <field name="client_coordinator_id" readonly="1" invisible="not client_coordinator_id"/>
+                            <field name="recipient_partner_ids" widget="many2many_tags" options="{'no_create': True}"/>
+                            <field name="cc_manager"/>
+                            <field name="cc_team_lead"/>
+                        </group>
+                        <group string="Update Options">
+                            <field name="is_completed"/>
+                            <field name="include_scope_breakdown"/>
+                            <field name="include_review_invitation"/>
+                        </group>
+                    </group>
+
+                    <group string="Message Customization">
+                        <field name="subject"/>
+                        <field name="custom_message" placeholder="Add a personal greeting or note to the client at the top of the update..."/>
+                    </group>
+
+                    <notebook>
+                        <page string="Email Report Preview" name="preview">
+                            <field name="body_html" widget="html" readonly="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+                <footer>
+                    <button name="action_send_update_email" string="Send Email to Client"
+                            type="object" class="btn-primary" icon="fa-paper-plane"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

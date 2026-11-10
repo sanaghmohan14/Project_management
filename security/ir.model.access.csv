@@ -30,13 +30,12 @@ access_pm_doc_vp,project.manage.scope.document vp,model_project_manage_scope_doc
 access_pm_doc_ceo,project.manage.scope.document ceo,model_project_manage_scope_document,group_project_manage_ceo,1,1,1,1
 access_pm_doc_admin,project.manage.scope.document administrator,model_project_manage_scope_document,group_project_manage_administrator,1,1,1,1
 
-access_pm_log_consultant,project.manage.scope.approval.log consultant,model_project_manage_scope_approval_log,group_project_manage_consultant,1,0,0,0
+access_pm_log_consultant,project.manage.scope.approval.log consultant,model_project_manage_scope_approval_log,group_project_manage_consultant,1,1,1,0
 access_pm_log_tl,project.manage.scope.approval.log team lead,model_project_manage_scope_approval_log,group_project_manage_team_lead,1,1,1,0
 access_pm_log_manager,project.manage.scope.approval.log manager,model_project_manage_scope_approval_log,group_project_manage_manager,1,1,1,0
 access_pm_log_vp,project.manage.scope.approval.log vp,model_project_manage_scope_approval_log,group_project_manage_vp,1,1,1,1
 access_pm_log_ceo,project.manage.scope.approval.log ceo,model_project_manage_scope_approval_log,group_project_manage_ceo,1,1,1,1
 access_pm_log_admin,project.manage.scope.approval.log administrator,model_project_manage_scope_approval_log,group_project_manage_administrator,1,1,1,1
-
 access_pm_wizard_tl,project.scope.import.wizard team lead,model_project_scope_import_wizard,group_project_manage_team_lead,1,1,1,0
 access_pm_wizard_manager,project.scope.import.wizard manager,model_project_scope_import_wizard,group_project_manage_manager,1,1,1,1
 access_pm_wizard_vp,project.scope.import.wizard vp,model_project_scope_import_wizard,group_project_manage_vp,1,1,1,1
@@ -51,7 +50,7 @@ access_pm_user_read,project.manage base user,model_project_manage,base.group_use
 access_pm_team_user_read,project.manage.team base user,model_project_manage_team,base.group_user,1,0,0,0
 access_pm_scope_user_read,project.manage.scope base user,model_project_manage_scope,base.group_user,1,1,1,0
 access_pm_doc_user_read,project.manage.scope.document base user,model_project_manage_scope_document,base.group_user,1,1,1,0
-access_pm_log_user_read,project.manage.scope.approval.log base user,model_project_manage_scope_approval_log,base.group_user,1,0,0,0
+access_pm_log_user_read,project.manage.scope.approval.log base user,model_project_manage_scope_approval_log,base.group_user,1,1,1,0
 access_pm_sys_manage,project.manage system admin,model_project_manage,base.group_system,1,1,1,1
 access_pm_sys_team,project.manage.team system admin,model_project_manage_team,base.group_system,1,1,1,1
 access_pm_sys_tag,project.manage.tag system admin,model_project_manage_tag,base.group_system,1,1,1,1
@@ -60,3 +59,17 @@ access_pm_sys_doc,project.manage.scope.document system admin,model_project_manag
 access_pm_sys_log,project.manage.scope.approval.log system admin,model_project_manage_scope_approval_log,base.group_system,1,1,1,1
 access_pm_sys_wizard,project.scope.import.wizard system admin,model_project_scope_import_wizard,base.group_system,1,1,1,1
 access_pm_sys_reject_wiz,project.manage.scope.reject.wizard system admin,model_project_manage_scope_reject_wizard,base.group_system,1,1,1,1
+access_pm_review_consultant,project.manage.review consultant,model_project_manage_review,group_project_manage_consultant,1,1,1,0
+access_pm_review_tl,project.manage.review team lead,model_project_manage_review,group_project_manage_team_lead,1,1,1,0
+access_pm_review_manager,project.manage.review manager,model_project_manage_review,group_project_manage_manager,1,1,1,1
+access_pm_review_vp,project.manage.review vp,model_project_manage_review,group_project_manage_vp,1,1,1,1
+access_pm_review_ceo,project.manage.review ceo,model_project_manage_review,group_project_manage_ceo,1,1,1,1
+access_pm_review_admin,project.manage.review administrator,model_project_manage_review,group_project_manage_administrator,1,1,1,1
+access_pm_review_base_user,project.manage.review base user,model_project_manage_review,base.group_user,1,0,0,0
+access_pm_sys_review,project.manage.review system admin,model_project_manage_review,base.group_system,1,1,1,1
+access_pm_client_upd_wiz_tl,project.manage.client.update.wizard team lead,model_project_manage_client_update_wizard,group_project_manage_team_lead,1,1,1,1
+access_pm_client_upd_wiz_mgr,project.manage.client.update.wizard manager,model_project_manage_client_update_wizard,group_project_manage_manager,1,1,1,1
+access_pm_client_upd_wiz_vp,project.manage.client.update.wizard vp,model_project_manage_client_update_wizard,group_project_manage_vp,1,1,1,1
+access_pm_client_upd_wiz_ceo,project.manage.client.update.wizard ceo,model_project_manage_client_update_wizard,group_project_manage_ceo,1,1,1,1
+access_pm_client_upd_wiz_admin,project.manage.client.update.wizard administrator,model_project_manage_client_update_wizard,group_project_manage_administrator,1,1,1,1
+access_pm_sys_client_upd_wiz,project.manage.client.update.wizard system admin,model_project_manage_client_update_wizard,base.group_system,1,1,1,1

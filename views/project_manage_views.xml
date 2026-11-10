@@ -24,6 +24,12 @@
                             type="object" class="btn-outline-danger" icon="fa-trash-o"
                             invisible="scope_count == 0"
                             confirm="Scan and remove any duplicate scope items in this project?"/>
+                    <button name="action_open_client_update_wizard" string="Send Update to Client"
+                            type="object" class="btn-info" icon="fa-paper-plane"
+                            invisible="state == 'cancelled'"/>
+                    <button name="action_create_review" string="Add Customer Review"
+                            type="object" class="btn-outline-warning" icon="fa-star"
+                            invisible="state == 'cancelled'"/>
                     <field name="state" widget="statusbar"
                            statusbar_visible="todo,in_progress,done"/>
                 </header>
@@ -39,6 +45,9 @@
                         </button>
                         <button name="action_view_imps" type="object" class="oe_stat_button" icon="fa-cogs">
                             <field name="imp_count" string="Implementations" widget="statinfo"/>
+                        </button>
+                        <button name="action_view_reviews" type="object" class="oe_stat_button" icon="fa-star">
+                            <field name="review_count" string="Reviews" widget="statinfo"/>
                         </button>
                     </div>
                     <div class="oe_title">
@@ -85,8 +94,6 @@
                                     <field name="category" string="Category"/>
                                     <field name="item_type" string="Type"/>
                                     <field name="responsible_id" string="Responsible"/>
-                                    <field name="approval_authority" string="Approver Role"/>
-                                    <field name="approver_id" string="Approver" optional="show"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date" optional="show"/>
                                     <field name="state" string="Status" widget="selection"
@@ -104,9 +111,7 @@
                                     <field name="name" string="Document Name"/>
                                     <field name="item_type" string="Document Type"/>
                                     <field name="responsible_id" string="Responsible"/>
-                                    <field name="approval_authority" string="Approver Role"/>
-                                    <field name="approver_id" string="Approver" optional="show"/>
-                                    <field name="start_date" string="Start Date"/>
+                                    <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
                                     <field name="state" string="Status" widget="selection"
                                            decoration-info="state == 'todo'"
@@ -124,15 +129,36 @@
                                     <field name="item_type" string="Activity Type"/>
                                     <field name="evidence_proof" string="Evidence / Proof"/>
                                     <field name="responsible_id" string="Responsible"/>
-                                    <field name="approval_authority" string="Approver Role"/>
-                                    <field name="approver_id" string="Approver" optional="show"/>
-                                    <field name="start_date" string="Start Date"/>
+                                    <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
                                     <field name="state" string="Status" widget="selection"
                                            decoration-info="state == 'todo'"
                                            decoration-warning="state == 'in_progress'"
                                            decoration-primary="state == 'under_review'"
                                            decoration-success="state == 'done'"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Customer Reviews" name="customer_reviews">
+                            <field name="review_ids" readonly="1">
+                                <list string="Customer Reviews"
+                                      decoration-success="state == 'approved'"
+                                      decoration-info="state == 'submitted'"
+                                      decoration-warning="state == 'under_review'">
+                                    <field name="reference" string="Ref"/>
+                                    <field name="name" string="Review Title"/>
+                                    <field name="partner_id" string="Client"/>
+                                    <field name="reviewer_name" string="Reviewer"/>
+                                    <field name="rating" string="Rating" widget="badge"
+                                           decoration-success="rating in ('4', '5')"
+                                           decoration-warning="rating == '3'"
+                                           decoration-danger="rating in ('1', '2')"/>
+                                    <field name="review_date" string="Review Date"/>
+                                    <field name="review_type" string="Type"/>
+                                    <field name="state" string="Status" widget="badge"
+                                           decoration-success="state == 'approved'"
+                                           decoration-info="state == 'submitted'"
+                                           decoration-warning="state == 'under_review'"/>
                                 </list>
                             </field>
                         </page>

@@ -21,7 +21,6 @@ class ProjectManageScope(models.Model):
     name = fields.Char(string='Name', required=True, tracking=True)
     item_type = fields.Char(string='Type', tracking=True)
     evidence_proof = fields.Char(string='Proof', tracking=True)
-    accountable = fields.Char(string='Accountable (Text)', tracking=True)
     responsible = fields.Char(string='Responsible (Text)', tracking=True)
     start_date = fields.Date(string='Start Date', tracking=True)
     end_date = fields.Date(string='End Date', tracking=True)
@@ -29,17 +28,7 @@ class ProjectManageScope(models.Model):
     # ---- Governance, Project & Status ----
     project_id = fields.Many2one(
         'project.manage', string='Project', ondelete='cascade', index=True)
-    approval_authority = fields.Selection([
-        ('TL', 'Team Lead (TL)'),
-        ('PM', 'Project Manager (PM)'),
-        ('VP', 'Vice President (VP)'),
-        ('CEO', 'CEO'),
-    ], string='Approver Role', tracking=True)
-    approver_id = fields.Many2one(
-        'hr.employee', string='Approver', tracking=True)
 
-    accountable_id = fields.Many2one(
-        'hr.employee', string='Accountable', tracking=True)
     responsible_id = fields.Many2one(
         'hr.employee', string='Responsible', tracking=True)
 
@@ -96,7 +85,11 @@ class ProjectManageScope(models.Model):
 
     def _compute_can_user_approve(self):
         user = self.env.user
-        is_admin = user.has_group('project_manage.group_project_manage_administrator')
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
         is_ceo = user.has_group('project_manage.group_project_manage_ceo')
         is_vp = user.has_group('project_manage.group_project_manage_vp')
         is_pm = user.has_group('project_manage.group_project_manage_manager')
@@ -106,14 +99,18 @@ class ProjectManageScope(models.Model):
             st = rec.approval_state
             if not st or st in ('draft', 'in_progress', 'approved'):
                 rec.can_user_approve = False
-            elif is_admin or is_ceo:
+            elif is_admin:
                 rec.can_user_approve = True
-            elif is_vp and st in ('pending_tl', 'pending_pm', 'pending_vp'):
-                rec.can_user_approve = True
-            elif is_pm and st in ('pending_tl', 'pending_pm'):
-                rec.can_user_approve = True
-            elif is_tl and st == 'pending_tl':
-                rec.can_user_approve = True
+            elif st == 'pending_tl':
+                is_proj_tl = (rec.project_id.team_lead_id.user_id == user) or (rec.project_id.team_id.team_lead_id == user)
+                rec.can_user_approve = bool(is_tl or is_proj_tl or is_ceo)
+            elif st == 'pending_pm':
+                is_proj_pm = (rec.project_id.manager_id.user_id == user)
+                rec.can_user_approve = bool(is_pm or is_proj_pm or is_ceo)
+            elif st == 'pending_vp':
+                rec.can_user_approve = bool(is_vp or is_ceo)
+            elif st == 'pending_ceo':
+                rec.can_user_approve = bool(is_ceo)
             else:
                 rec.can_user_approve = False
 
@@ -127,7 +124,11 @@ class ProjectManageScope(models.Model):
 
     def _search_can_user_approve(self, operator, value):
         user = self.env.user
-        is_admin = user.has_group('project_manage.group_project_manage_administrator')
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
         is_ceo = user.has_group('project_manage.group_project_manage_ceo')
         is_vp = user.has_group('project_manage.group_project_manage_vp')
         is_pm = user.has_group('project_manage.group_project_manage_manager')
@@ -137,9 +138,9 @@ class ProjectManageScope(models.Model):
         if is_admin or is_ceo:
             allowed_states = ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo']
         elif is_vp:
-            allowed_states = ['pending_tl', 'pending_pm', 'pending_vp']
+            allowed_states = ['pending_vp']
         elif is_pm:
-            allowed_states = ['pending_tl', 'pending_pm']
+            allowed_states = ['pending_pm']
         elif is_tl:
             allowed_states = ['pending_tl']
 
@@ -202,7 +203,7 @@ class ProjectManageScope(models.Model):
             else:
                 rec.display_name = rec.name or rec.item_id or _("New Scope Item")
 
-    # Automatically link employee when accountable / responsible text matches
+    # Automatically link employee when responsible text matches
     @api.onchange('responsible_id')
     def _onchange_responsible_id(self):
         if self.responsible_id:
@@ -237,10 +238,6 @@ class ProjectManageScope(models.Model):
         for vals in records_vals:
             if not isinstance(vals, dict):
                 continue
-            if vals.get('accountable') and not vals.get('accountable_id'):
-                emp = self.env['hr.employee'].sudo().search([('name', '=ilike', vals['accountable'])], limit=1)
-                if emp:
-                    vals['accountable_id'] = emp.id
             if vals.get('responsible') and not vals.get('responsible_id'):
                 emp = self.env['hr.employee'].sudo().search([('name', '=ilike', vals['responsible'])], limit=1)
                 if emp:
@@ -248,10 +245,6 @@ class ProjectManageScope(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
-        if vals.get('accountable') and not vals.get('accountable_id'):
-            emp = self.env['hr.employee'].sudo().search([('name', '=ilike', vals['accountable'])], limit=1)
-            if emp:
-                vals['accountable_id'] = emp.id
         if vals.get('responsible') and not vals.get('responsible_id'):
             emp = self.env['hr.employee'].sudo().search([('name', '=ilike', vals['responsible'])], limit=1)
             if emp:
@@ -265,6 +258,15 @@ class ProjectManageScope(models.Model):
                 'state': 'in_progress',
                 'approval_state': 'in_progress',
                 'start_date': rec.start_date or fields.Date.context_today(rec),
+            })
+            rec.env['project.manage.scope.approval.log'].sudo().create({
+                'scope_id': rec.id,
+                'user_id': self.env.user.id,
+                'role_name': self.env.user.name,
+                'action': 'start',
+                'from_state': 'todo',
+                'to_state': 'in_progress',
+                'note': _('Task started by %s.', self.env.user.name),
             })
 
     def action_submit_for_approval(self):
@@ -303,7 +305,7 @@ class ProjectManageScope(models.Model):
                 'submitted_date': fields.Datetime.now(),
             })
 
-            rec.env['project.manage.scope.approval.log'].create({
+            rec.env['project.manage.scope.approval.log'].sudo().create({
                 'scope_id': rec.id,
                 'user_id': user.id,
                 'role_name': user.name,
@@ -349,7 +351,7 @@ class ProjectManageScope(models.Model):
 
             rec.write(vals)
 
-            rec.env['project.manage.scope.approval.log'].create({
+            rec.env['project.manage.scope.approval.log'].sudo().create({
                 'scope_id': rec.id,
                 'user_id': user.id,
                 'role_name': role_label,
@@ -374,7 +376,7 @@ class ProjectManageScope(models.Model):
                 'state': 'in_progress',
                 'rejection_reason': reason or _('Re-work requested by %s.', user.name),
             })
-            rec.env['project.manage.scope.approval.log'].create({
+            rec.env['project.manage.scope.approval.log'].sudo().create({
                 'scope_id': rec.id,
                 'user_id': user.id,
                 'role_name': user.name,

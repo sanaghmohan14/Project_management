@@ -10,6 +10,9 @@
     <menuitem id="menu_project_manage_projects" name="Projects"
               parent="menu_project_manage_root" action="action_project_manage" sequence="10"/>
 
+    <menuitem id="menu_project_manage_reviews" name="Customer Reviews"
+              parent="menu_project_manage_root" action="action_project_manage_review" sequence="12"/>
+
     <menuitem id="menu_project_manage_approvals" name="Approval Requests"
               parent="menu_project_manage_root" action="action_project_manage_approvals" sequence="15"/>
 
@@ -34,7 +37,8 @@
               parent="menu_project_manage_config" action="action_project_manage_config_documentation" sequence="10"/>
 
     <menuitem id="menu_project_manage_teams" name="Project Teams"
-              parent="menu_project_manage_config" action="action_project_manage_team" sequence="15"/>
+              parent="menu_project_manage_config" action="action_project_manage_team"
+              groups="project_manage.group_project_manage_manager" sequence="15"/>
 
     <menuitem id="menu_project_config_scopes" name="Scopes"
               parent="menu_project_manage_config" action="action_project_manage_scope" sequence="20"/>

@@ -1,4 +1,5 @@
 import base64
+import uuid
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
 
@@ -37,6 +38,18 @@ class ProjectManage(models.Model):
     project_coordinator_id = fields.Many2one(
         'hr.employee', string='Project Implementation Coordinator', tracking=True)
     tag_ids = fields.Many2many('project.manage.tag', string='Tags')
+    access_token = fields.Char(
+        string='Review Access Token',
+        copy=False,
+        default=lambda self: uuid.uuid4().hex
+    )
+
+    def _get_review_url(self):
+        self.ensure_one()
+        if not self.access_token:
+            self.access_token = uuid.uuid4().hex
+        base_url = self.env['ir.config_parameter'].sudo().get_param('web.base.url') or 'http://localhost:8069'
+        return f"{base_url.rstrip('/')}/project/review/{self.id}?token={self.access_token}"
 
     @api.onchange('team_id')
     def _onchange_team_id(self):
@@ -71,12 +84,12 @@ class ProjectManage(models.Model):
         ('good', 'Good'),
         ('fair', 'Fair'),
         ('poor', 'Poor'),
-    ], string='Health', default='good', compute='_compute_metrics', store=True, readonly=False, tracking=True)
+    ], string='Health', compute='_compute_metrics', store=True, readonly=False, tracking=True)
     risk_level = fields.Selection([
         ('low', 'Low'),
         ('medium', 'Medium'),
         ('high', 'High'),
-    ], string='Risk Level', default='low', compute='_compute_metrics', store=True, readonly=False, tracking=True)
+    ], string='Risk Level', compute='_compute_metrics', store=True, readonly=False, tracking=True)
     progress = fields.Float(
         string='Progress (%)', compute='_compute_metrics', store=True, readonly=False, tracking=True)
     planned_progress = fields.Float(
@@ -94,37 +107,60 @@ class ProjectManage(models.Model):
         ('not_started', 'Not started'),
     ], string='Running Status', compute='_compute_metrics', store=True)
 
-    @api.depends('scope_ids.state', 'date_start', 'date_end', 'state')
+    @api.depends(
+        'date_start', 'date_end', 'state',
+        'scope_ids.state', 'scope_ids.approval_state', 'scope_ids.end_date'
+    )
     def _compute_metrics(self):
         today = fields.Date.today()
         for rec in self:
-            # 1. Progress from tasks if present, otherwise based on stage
-            if rec.scope_ids:
-                total_tasks = len(rec.scope_ids)
-                done_tasks = len(rec.scope_ids.filtered(lambda s: s.state == 'done'))
-                rec.progress = round((done_tasks / total_tasks) * 100, 1)
-            elif not rec.progress:
-                if rec.state == 'done':
-                    rec.progress = 100.0
-                elif rec.state == 'in_progress':
-                    rec.progress = 50.0
+            # 1. Scope & Task Completion Metrics
+            total_tasks = len(rec.scope_ids)
+            done_tasks = len(rec.scope_ids.filtered(lambda s: s.state == 'done'))
+            review_tasks = len(rec.scope_ids.filtered(
+                lambda s: s.state == 'under_review' or (s.approval_state and s.approval_state.startswith('pending'))
+            ))
+            in_prog_tasks = len(rec.scope_ids.filtered(lambda s: s.state == 'in_progress'))
+            overdue_tasks = len(rec.scope_ids.filtered(
+                lambda s: s.end_date and today > s.end_date and s.state != 'done'
+            ))
+            rejected_tasks = len(rec.scope_ids.filtered(
+                lambda s: s.approval_state == 'rejected'
+            ))
+
+            # 2. Project Progress (%) derived from Scope/Task Completion & Stage
+            if rec.state == 'done':
+                rec.progress = 100.0
+            elif total_tasks > 0:
+                # Weighted completion: Done (100%), In Review/Pending (75%), In Progress (40%)
+                effective_score = (done_tasks * 1.0) + (review_tasks * 0.75) + (in_prog_tasks * 0.40)
+                rec.progress = min(max(round((effective_score / total_tasks) * 100, 1), 0.0), 100.0)
+            else:
+                if rec.state == 'in_progress':
+                    if not rec.progress or rec.progress == 0.0:
+                        rec.progress = 50.0
+                elif rec.state == 'cancelled':
+                    pass
                 else:
                     rec.progress = 0.0
 
-            # 2. Planned progress based on elapsed time vs total duration
+            # 3. Planned Progress (%) based on Closing Date (date_end) & Timeline Duration
+            days_remaining = None
             if rec.date_start and rec.date_end:
                 total_days = (rec.date_end - rec.date_start).days
                 elapsed_days = (today - rec.date_start).days
+                days_remaining = (rec.date_end - today).days
+
                 if elapsed_days <= 0:
                     rec.planned_progress = 0.0
                 elif total_days > 0:
-                    rec.planned_progress = min(round((elapsed_days / total_days) * 100, 1), 100.0)
+                    rec.planned_progress = min(max(round((elapsed_days / total_days) * 100, 1), 0.0), 100.0)
                 else:
                     rec.planned_progress = 100.0
             else:
                 rec.planned_progress = rec.progress
 
-            # 3. Running status derived from stage
+            # 4. Running Status derived from Project Stage
             if rec.state == 'done':
                 rec.running_status = 'completed'
             elif rec.state == 'cancelled':
@@ -134,35 +170,74 @@ class ProjectManage(models.Model):
             else:
                 rec.running_status = 'not_started'
 
-            # 4. Condition: ahead, on_plan, behind, overdue
-            if rec.date_end and today > rec.date_end and rec.state != 'done':
+            # 5. Project Condition: Ahead, On plan, Behind, Overdue
+            # Evaluates Closing Date vs Today, Actual Progress vs Planned Progress, and Task Bottlenecks
+            variance = rec.progress - rec.planned_progress
+            is_past_closing_date = bool(rec.date_end and today > rec.date_end and rec.state != 'done')
+
+            if rec.state == 'done':
+                rec.condition = 'ahead' if (rec.date_end and today < rec.date_end) else 'on_plan'
+            elif is_past_closing_date:
                 rec.condition = 'overdue'
-            elif rec.progress >= rec.planned_progress + 5:
+            elif variance >= 5.0 and overdue_tasks == 0:
                 rec.condition = 'ahead'
-            elif rec.progress >= rec.planned_progress - 5:
+            elif variance >= -5.0 and overdue_tasks == 0:
                 rec.condition = 'on_plan'
             else:
                 rec.condition = 'behind'
 
-            # 5. Default Health & Risk level
-            if not rec.health:
-                if rec.condition in ('ahead', 'on_plan'):
-                    rec.health = 'good'
-                elif rec.condition == 'behind':
-                    if (rec.planned_progress - rec.progress) > 20:
-                        rec.health = 'poor'
-                    else:
-                        rec.health = 'fair'
-                else:
+            # 6. Project Health: Good, Fair, Poor
+            # Evaluated dynamically from Timeline, Closing Date, Stage, and Scope/Task Quality
+            if rec.state == 'done':
+                rec.health = 'good'
+            elif rec.condition == 'overdue':
+                days_late = (today - rec.date_end).days if rec.date_end else 0
+                if days_late > 7 or rec.progress < 70.0 or rejected_tasks > 0:
                     rec.health = 'poor'
-
-            if not rec.risk_level:
-                if rec.health == 'poor' or rec.condition == 'overdue':
-                    rec.risk_level = 'high'
-                elif rec.health == 'fair' or rec.condition == 'behind':
-                    rec.risk_level = 'medium'
                 else:
-                    rec.risk_level = 'low'
+                    rec.health = 'fair'
+            elif rec.condition == 'behind':
+                lag = rec.planned_progress - rec.progress
+                if lag > 20.0 or rejected_tasks >= 2 or overdue_tasks >= 3 or (days_remaining is not None and days_remaining <= 7 and rec.progress < 50.0):
+                    rec.health = 'poor'
+                else:
+                    rec.health = 'fair'
+            elif rec.condition == 'on_plan':
+                if rejected_tasks >= 2 or overdue_tasks >= 2:
+                    rec.health = 'fair'
+                else:
+                    rec.health = 'good'
+            else:
+                # Ahead of schedule
+                if rejected_tasks >= 2:
+                    rec.health = 'fair'
+                else:
+                    rec.health = 'good'
+
+            # 7. Project Risk Level: Low, Medium, High
+            # Evaluated dynamically from Deadline Proximity, Lag Variance, and Task Issues
+            if rec.state == 'done':
+                rec.risk_level = 'low'
+            elif (
+                (rec.condition == 'overdue' and rec.progress < 80.0) or
+                (rec.date_end and today > rec.date_end and (today - rec.date_end).days > 7) or
+                (days_remaining is not None and 0 <= days_remaining <= 7 and rec.progress < 60.0) or
+                (rec.planned_progress - rec.progress > 20.0) or
+                rejected_tasks >= 3 or
+                overdue_tasks >= 3 or
+                rec.health == 'poor'
+            ):
+                rec.risk_level = 'high'
+            elif (
+                rec.condition in ('behind', 'overdue') or
+                (days_remaining is not None and 0 <= days_remaining <= 14 and rec.progress < rec.planned_progress) or
+                rejected_tasks in (1, 2) or
+                overdue_tasks in (1, 2) or
+                rec.health == 'fair'
+            ):
+                rec.risk_level = 'medium'
+            else:
+                rec.risk_level = 'low'
 
     # ---- Scopes & Tasks Relationships ----
     scope_ids = fields.One2many(
@@ -182,6 +257,25 @@ class ProjectManage(models.Model):
         string='Documentation Tasks Count', compute='_compute_counts')
     imp_count = fields.Integer(
         string='Implementation Tasks Count', compute='_compute_counts')
+
+    review_ids = fields.One2many(
+        'project.manage.review', 'project_id', string='Customer Reviews')
+    review_count = fields.Integer(
+        string='Review Count', compute='_compute_reviews', store=True)
+    average_rating = fields.Float(
+        string='Average Rating', compute='_compute_reviews', store=True)
+    last_client_update_date = fields.Datetime(
+        string='Last Client Update Sent', readonly=True)
+
+    @api.depends('review_ids.rating_value', 'review_ids.state')
+    def _compute_reviews(self):
+        for rec in self:
+            rec.review_count = len(rec.review_ids)
+            if rec.review_ids:
+                total_val = sum(r.rating_value for r in rec.review_ids)
+                rec.average_rating = round(total_val / len(rec.review_ids), 1)
+            else:
+                rec.average_rating = 0.0
 
     def _compute_counts(self):
         for rec in self:
@@ -220,6 +314,78 @@ class ProjectManage(models.Model):
             'view_mode': 'kanban,list,form',
             'domain': [('project_id', '=', self.id), ('category', '=', 'Implementation')],
             'context': {'default_project_id': self.id, 'default_category': 'Implementation'},
+        }
+
+    def action_view_reviews(self):
+        self.ensure_one()
+        return {
+            'name': _('Customer Reviews - %s', self.name),
+            'type': 'ir.actions.act_window',
+            'res_model': 'project.manage.review',
+            'view_mode': 'list,kanban,form,pivot,graph',
+            'domain': [('project_id', '=', self.id)],
+            'context': {
+                'default_project_id': self.id,
+                'default_partner_id': self.partner_id.id,
+                'default_reviewer_name': self.partner_id.name,
+                'default_reviewer_email': self.partner_id.email,
+            },
+        }
+
+    def action_create_review(self):
+        self.ensure_one()
+        return {
+            'name': _('New Customer Review - %s', self.name),
+            'type': 'ir.actions.act_window',
+            'res_model': 'project.manage.review',
+            'view_mode': 'form',
+            'target': 'current',
+            'context': {
+                'default_project_id': self.id,
+                'default_partner_id': self.partner_id.id,
+                'default_reviewer_name': self.partner_id.name,
+                'default_reviewer_email': self.partner_id.email,
+                'default_review_type': 'completion' if (self.state == 'done' or self.progress >= 100) else 'milestone',
+            },
+        }
+
+    def action_open_client_update_wizard(self):
+        """Open the wizard to send formatted progress/completion report to the client."""
+        self.ensure_one()
+        if not self.partner_id:
+            raise UserError(_("Please assign a client before sending project updates."))
+        if not self.partner_id.email and not (self.client_coordinator_id and self.client_coordinator_id.email):
+            raise UserError(_("Neither the client '%s' nor coordinator has an email address configured.") % self.partner_id.name)
+
+        recipients = self.partner_id
+        if self.client_coordinator_id:
+            recipients |= self.client_coordinator_id
+
+        is_completed = bool(self.state == 'done' or self.progress >= 100)
+        subject = f"Project Completion Report: {self.name} - 100% Successfully Delivered" if is_completed else f"Project Status & Progress Update: {self.name} ({int(self.progress)}% Completed)"
+        custom_note = (
+            f"Dear {self.partner_id.name},\n\nWe are pleased to inform you that all deliverables for '{self.name}' have been completed successfully. Please review the final completion summary below."
+            if is_completed else
+            f"Dear {self.partner_id.name},\n\nPlease find below the latest status, deliverables completion, and progress update for '{self.name}'."
+        )
+
+        wizard = self.env['project.manage.client.update.wizard'].create({
+            'project_id': self.id,
+            'partner_id': self.partner_id.id,
+            'client_coordinator_id': self.client_coordinator_id.id if self.client_coordinator_id else False,
+            'recipient_partner_ids': [(6, 0, recipients.ids)],
+            'is_completed': is_completed,
+            'subject': subject,
+            'custom_message': custom_note,
+        })
+
+        return {
+            'name': _('Send Project Update to Client'),
+            'type': 'ir.actions.act_window',
+            'res_model': 'project.manage.client.update.wizard',
+            'res_id': wizard.id,
+            'view_mode': 'form',
+            'target': 'new',
         }
 
     def action_open_import_wizard(self):
@@ -331,12 +497,116 @@ class ProjectManage(models.Model):
     @api.model
     def get_dashboard_data(self, team_id=None, view_as_role=None, **kwargs):
         today = fields.Date.today()
+        user = self.env.user
+
+        # ---- User Role Identification & Privileges ----
+        is_actual_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            (hasattr(user, '_is_admin') and user._is_admin())
+        )
+        is_actual_ceo = is_actual_admin or user.has_group('project_manage.group_project_manage_ceo')
+        is_actual_vp = is_actual_ceo or user.has_group('project_manage.group_project_manage_vp')
+        is_actual_manager = is_actual_vp or user.has_group('project_manage.group_project_manage_manager')
+        is_actual_tl = is_actual_manager or user.has_group('project_manage.group_project_manage_team_lead')
+
+        # Allow Administrators / Executives to preview specific role views
+        if (is_actual_admin or is_actual_ceo) and view_as_role:
+            target_role = str(view_as_role).strip().lower()
+        elif is_actual_admin:
+            target_role = 'admin'
+        elif is_actual_ceo:
+            target_role = 'ceo'
+        elif user.has_group('project_manage.group_project_manage_vp'):
+            target_role = 'vp'
+        elif user.has_group('project_manage.group_project_manage_manager'):
+            target_role = 'manager'
+        elif user.has_group('project_manage.group_project_manage_team_lead'):
+            target_role = 'team_lead'
+        else:
+            target_role = 'consultant'
+
+        # Only Project Manager, CEO, VP, and Admin can see all teams' data and create projects
+        can_see_all_teams = target_role in ('admin', 'ceo', 'vp', 'manager')
+        can_create_project = target_role in ('admin', 'ceo', 'vp', 'manager')
+
+        if target_role == 'ceo':
+            role_code = 'ceo'
+            role_name = 'Chief Executive Officer'
+            role_badge = '💼 CEO'
+            role_badge_class = 'pm-role-ceo'
+        elif target_role == 'admin':
+            role_code = 'admin'
+            role_name = 'Administrator'
+            role_badge = '👑 Administrator'
+            role_badge_class = 'pm-role-admin'
+        elif target_role == 'vp':
+            role_code = 'vp'
+            role_name = 'Vice President (VP)'
+            role_badge = '⭐ Vice President'
+            role_badge_class = 'pm-role-vp'
+        elif target_role == 'manager':
+            role_code = 'manager'
+            role_name = 'Project Manager'
+            role_badge = '📋 Project Manager'
+            role_badge_class = 'pm-role-manager'
+        elif target_role == 'team_lead':
+            role_code = 'team_lead'
+            role_name = 'Team Lead'
+            role_badge = '👥 Team Lead'
+            role_badge_class = 'pm-role-lead'
+        else:
+            role_code = 'consultant'
+            role_name = 'Consultant'
+            role_badge = '💻 Consultant'
+            role_badge_class = 'pm-role-consultant'
+
+        emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+
+        # Team Scope: Executives & Managers see all teams; Team Leads see only their team
+        if can_see_all_teams:
+            all_teams = self.env['project.manage.team'].search([])
+            user_teams = all_teams
+        else:
+            user_teams = self.env['project.manage.team'].search([
+                '|',
+                ('team_lead_id', '=', user.id),
+                ('member_ids', 'in', [user.id])
+            ])
+            if not user_teams and emp:
+                assigned_projects = self.search([
+                    '|',
+                    ('team_lead_id', '=', emp.id),
+                    ('consultant_ids', 'in', [emp.id])
+                ])
+                user_teams = assigned_projects.mapped('team_id')
+            all_teams = user_teams
+
+        if user_teams:
+            user_team_name = user_teams[0].name
+        elif emp:
+            user_team_name = f"Team {emp.name}"
+        else:
+            user_team_name = f"Team {user.name}"
+
+        # Project Search Domain
         domain = []
-        if team_id:
-            domain.append(('team_id', '=', int(team_id)))
+        if can_see_all_teams:
+            if team_id:
+                domain.append(('team_id', '=', int(team_id)))
+        else:
+            if all_teams:
+                if team_id and int(team_id) in all_teams.ids:
+                    domain.append(('team_id', '=', int(team_id)))
+                else:
+                    domain.append(('team_id', 'in', all_teams.ids))
+            elif emp:
+                domain.append(('team_lead_id', '=', emp.id))
+            else:
+                domain.append(('team_lead_id.user_id', '=', user.id))
 
         projects = self.search(domain)
-        all_teams = self.env['project.manage.team'].search([])
 
         total_projects = len(projects)
         running_projects = projects.filtered(lambda p: p.running_status == 'running')
@@ -409,10 +679,12 @@ class ProjectManage(models.Model):
                     'name': tm.name,
                     'lead_name': tm.team_lead_id.name if tm.team_lead_id else '',
                 })
-                if team_id and tm.id != int(team_id):
+                if can_see_all_teams and team_id and tm.id != int(team_id):
                     continue
 
                 tm_projects = tm.project_ids
+                if not can_see_all_teams:
+                    tm_projects = tm_projects.filtered(lambda p: p in projects)
                 tm_tot = len(tm_projects)
                 tm_healthy = len(tm_projects.filtered(lambda p: p.health == 'good'))
                 tm_progress = round(sum(tm_projects.mapped('progress')) / tm_tot) if tm_tot else 0
@@ -551,70 +823,28 @@ class ProjectManage(models.Model):
                 'imp_count': p.imp_count,
                 'total_tasks': len(p.scope_ids),
                 'done_tasks': len(p.scope_ids.filtered(lambda s: s.state == 'done')),
+                'review_count': p.review_count,
+                'average_rating': p.average_rating,
             })
 
-        all_consultants = self.env['hr.employee'].sudo().search_count([])
-
-        # ---- User Role Identification for Multi-Group Dashboard & Privileges ----
-        user = self.env.user
-        is_actual_admin = (
-            user.has_group('project_manage.group_project_manage_administrator') or
-            user.has_group('base.group_system') or
-            user.has_group('base.group_erp_manager') or
-            (hasattr(user, '_is_admin') and user._is_admin())
-        )
-        is_actual_ceo = is_actual_admin or user.has_group('project_manage.group_project_manage_ceo')
-
-        # Allow Administrators / Executives to switch role view (e.g., view as CEO)
-        if (is_actual_admin or is_actual_ceo) and view_as_role:
-            target_role = str(view_as_role).strip().lower()
-        elif is_actual_admin:
-            target_role = 'admin'
-        elif is_actual_ceo:
-            target_role = 'ceo'
-        elif user.has_group('project_manage.group_project_manage_vp'):
-            target_role = 'vp'
-        elif user.has_group('project_manage.group_project_manage_manager'):
-            target_role = 'manager'
-        elif user.has_group('project_manage.group_project_manage_team_lead'):
-            target_role = 'team_lead'
+        # Consultant count: Executive sees total consultants; Team Lead sees team consultants
+        if can_see_all_teams:
+            all_consultants = self.env['hr.employee'].sudo().search_count([])
         else:
-            target_role = 'consultant'
-
-        if target_role == 'ceo':
-            role_code = 'ceo'
-            role_name = 'Chief Executive Officer'
-            role_badge = '💼 CEO'
-            role_badge_class = 'pm-role-ceo'
-        elif target_role == 'admin':
-            role_code = 'admin'
-            role_name = 'Administrator'
-            role_badge = '👑 Administrator'
-            role_badge_class = 'pm-role-admin'
-        elif target_role == 'vp':
-            role_code = 'vp'
-            role_name = 'Vice President (VP)'
-            role_badge = '⭐ Vice President'
-            role_badge_class = 'pm-role-vp'
-        elif target_role == 'manager':
-            role_code = 'manager'
-            role_name = 'Project Manager'
-            role_badge = '📋 Project Manager'
-            role_badge_class = 'pm-role-manager'
-        elif target_role == 'team_lead':
-            role_code = 'team_lead'
-            role_name = 'Team Lead'
-            role_badge = '👥 Team Lead'
-            role_badge_class = 'pm-role-lead'
-        else:
-            role_code = 'consultant'
-            role_name = 'Consultant'
-            role_badge = '💻 Consultant'
-            role_badge_class = 'pm-role-consultant'
+            team_members = all_teams.mapped('member_ids')
+            team_member_emps = self.env['hr.employee'].sudo().search([('user_id', 'in', team_members.ids)])
+            proj_consultants = projects.mapped('consultant_ids')
+            all_consultants = len(team_member_emps | proj_consultants)
 
         Scope = self.env['project.manage.scope']
         # Active pending scopes in database across approval stages
-        all_pending_scopes = Scope.search([('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))])
+        if can_see_all_teams:
+            all_pending_scopes = Scope.search([('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))])
+        else:
+            all_pending_scopes = Scope.search([
+                ('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')),
+                ('project_id', 'in', projects.ids)
+            ])
         all_pending_count = len(all_pending_scopes)
 
         # Pending items targeted to current user based on their approval tier:
@@ -623,9 +853,15 @@ class ProjectManage(models.Model):
         elif role_code == 'vp':
             my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state in ('pending_tl', 'pending_pm', 'pending_vp'))
         elif role_code == 'manager':
-            my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state in ('pending_tl', 'pending_pm') and (not s.project_id.manager_id or s.project_id.manager_id.user_id == user))
+            my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state in ('pending_tl', 'pending_pm'))
         elif role_code == 'team_lead':
-            my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state == 'pending_tl' and (s.project_id.team_lead_id.user_id == user or s.project_id.team_id.team_lead_id == user))
+            my_pending_scopes = all_pending_scopes.filtered(
+                lambda s: s.approval_state == 'pending_tl' and (
+                    (s.project_id and s.project_id in projects) or
+                    (s.project_id.team_lead_id.user_id == user) or
+                    (s.project_id.team_id in all_teams)
+                )
+            )
         else:
             my_pending_scopes = Scope.browse()
 
@@ -673,7 +909,13 @@ class ProjectManage(models.Model):
             })
 
         # ---- Consultant Top Performers Leaderboard (Actual Database Calculations) ----
-        all_emp_scopes = Scope.sudo().search([('responsible_id', '!=', False)])
+        if can_see_all_teams:
+            all_emp_scopes = Scope.sudo().search([('responsible_id', '!=', False)])
+        else:
+            all_emp_scopes = Scope.sudo().search([
+                ('responsible_id', '!=', False),
+                ('project_id', 'in', projects.ids)
+            ])
         emp_stats = {}
         for sc in all_emp_scopes:
             emp = sc.sudo().responsible_id
@@ -723,8 +965,11 @@ class ProjectManage(models.Model):
 
         # Fallback to database employees if scopes are not yet assigned to responsible_id
         if not top_performers:
-            all_emps = self.env['hr.employee'].sudo().search([], limit=10)
-            for emp in all_emps:
+            if can_see_all_teams:
+                fallback_emps = self.env['hr.employee'].sudo().search([], limit=10)
+            else:
+                fallback_emps = (team_member_emps | proj_consultants)[:10] if not can_see_all_teams else []
+            for emp in fallback_emps:
                 top_performers.append({
                     'id': emp.id,
                     'name': emp.sudo().name or 'Consultant',
@@ -742,6 +987,41 @@ class ProjectManage(models.Model):
         top_performers.sort(key=lambda x: (x['score'], x['completed_tasks']), reverse=True)
         for idx, tp in enumerate(top_performers, 1):
             tp['rank'] = idx
+
+        # ---- Build Rich Calendar Events (Tasks Only) ----
+        # NOTE: The calendar is strictly a Task Schedule / Deadline Calendar. Projects are excluded per user requirement.
+        calendar_events = []
+        for p in projects:
+            for s in p.scope_ids:
+                task_date = s.end_date
+                if task_date:
+                    is_task_late = bool(s.end_date and today > s.end_date and s.state != 'done')
+                    days_rem_task = (task_date - today).days
+                    calendar_events.append({
+                        'id': f"task_{s.id}",
+                        'record_id': s.id,
+                        'project_id': p.id,
+                        'project_name': p.name,
+                        'team_id': p.team_id.id if p.team_id else False,
+                        'team_name': p.team_id.name if p.team_id else '',
+                        'model': 'project.manage.scope',
+                        'type': 'task',
+                        'title': s.name,
+                        'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no else '') or s.item_id or '',
+                        'category': s.category or 'Documentation',
+                        'item_type': s.item_type or '',
+                        'responsible_name': s.responsible_id.sudo().name if s.responsible_id else (s.responsible or 'Unassigned'),
+                        'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else '',
+                        'end_date': task_date.strftime('%Y-%m-%d'),
+                        'date': task_date.strftime('%Y-%m-%d'),
+                        'date_str': task_date.strftime('%d %b %Y'),
+                        'status': s.state or 'todo',
+                        'status_label': dict(s._fields['state'].selection).get(s.state, 'To Do'),
+                        'approval_state': s.approval_state or 'draft',
+                        'approval_label': dict(s._fields['approval_state'].selection).get(s.approval_state, 'Draft'),
+                        'is_overdue': is_task_late,
+                        'days_remaining': days_rem_task,
+                    })
 
         return {
             'company_name': self.env.company.name,
@@ -761,9 +1041,12 @@ class ProjectManage(models.Model):
                 'is_consultant': role_code == 'consultant' and not is_actual_admin,
                 'is_executive': is_actual_admin or is_actual_ceo or role_code in ('admin', 'ceo', 'vp'),
                 'can_approve': True if (is_actual_admin or is_actual_ceo) else role_code in ('vp', 'manager', 'team_lead'),
+                'can_create_project': can_create_project,
+                'can_see_all_teams': can_see_all_teams,
                 'can_switch_roles': is_actual_admin or is_actual_ceo,
                 'active_view_mode': role_code,
             },
+            'user_team_name': user_team_name,
             'approvals_summary': {
                 'pending_my_approval_count': len(pending_items),
                 'all_pending_count': all_pending_count,
@@ -812,9 +1095,18 @@ class ProjectManage(models.Model):
             'teams': teams_data,
             'all_teams_filter': filter_teams,
             'projects': projects_list,
+            'calendar_events': calendar_events,
         }
 
     # ---- Dashboard Quick Actions ----
+    @api.model
+    def action_dashboard_start_scope(self, scope_id):
+        scope = self.env['project.manage.scope'].browse(scope_id)
+        if scope.exists():
+            scope.action_start()
+            return True
+        return False
+
     @api.model
     def action_dashboard_approve_scope(self, scope_id, note=None):
         scope = self.env['project.manage.scope'].browse(scope_id)
@@ -848,10 +1140,21 @@ class ProjectManage(models.Model):
         project = self.browse(project_id)
         if not project.exists():
             return {'project': {}, 'scopes': [], 'unique_scopes': [], 'stats': {}}
+        try:
+            project.check_access('read')
+        except Exception:
+            return {'project': {}, 'scopes': [], 'unique_scopes': [], 'stats': {}}
 
         today = fields.Date.context_today(self)
+        user = self.env.user
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
+
         scopes_data = []
-        scopes = self.env['project.manage.scope'].search(
+        scopes = self.env['project.manage.scope'].sudo().search(
             [('project_id', '=', project.id)],
             order='scope_no asc, category asc, item_no asc, id asc'
         )
@@ -923,6 +1226,7 @@ class ProjectManage(models.Model):
                 'id': s.id,
                 'item_id': s.item_id or f"ITEM-{s.id}",
                 'scope_no': s.scope_no or 0,
+                'scope': s.scope or '',
                 'scope_name': scope_name,
                 'name': s.name or s.item_id or 'Untitled Task',
                 'category': cat_str,
@@ -936,14 +1240,17 @@ class ProjectManage(models.Model):
                 'status_color': status_color,
                 'status_label': status_label,
                 'approval_state': s.approval_state or 'draft',
-                'approval_authority': s.approval_authority or 'TL',
+                'responsible_id': s.responsible_id.id if s.responsible_id else False,
                 'responsible_name': s.responsible_id.name if s.responsible_id else (s.responsible or 'Unassigned'),
-                'accountable_name': s.accountable_id.name if s.accountable_id else (s.accountable or 'Unassigned'),
+                'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else '',
                 'start_date_str': s.start_date.strftime('%d %b %Y') if s.start_date else '',
+                'end_date': s.end_date.strftime('%Y-%m-%d') if s.end_date else '',
                 'end_date_str': s.end_date.strftime('%d %b %Y') if s.end_date else 'No deadline',
                 'is_overdue': bool(is_overdue),
-                'can_submit': s.state in ('todo', 'in_progress'),
-                'can_approve': s.state == 'under_review' or (s.approval_state and s.approval_state.startswith('pending')),
+                'rejection_reason': s.rejection_reason or '',
+                'can_start': s.state == 'todo' and (is_admin or s.responsible_id.user_id == user or user in project.consultant_ids.mapped('user_id')),
+                'can_submit': s.state in ('todo', 'in_progress') and (is_admin or s.responsible_id.user_id == user or user in project.consultant_ids.mapped('user_id')),
+                'can_approve': bool(s.can_user_approve),
             })
 
         total_count = len(scopes_data)
@@ -953,6 +1260,20 @@ class ProjectManage(models.Model):
         prog_items = [s for s in scopes_data if s['status_color'] == 'blue']
         pend_items = [s for s in scopes_data if s['status_color'] == 'yellow']
         over_items = [s for s in scopes_data if s['status_color'] == 'red']
+
+        # Available employees & consultants for dropdown selection
+        proj_emps = project.consultant_ids
+        if project.team_lead_id:
+            proj_emps |= project.team_lead_id
+        if project.manager_id:
+            proj_emps |= project.manager_id
+        if project.team_id and project.team_id.member_ids:
+            team_emps = self.env['hr.employee'].sudo().search([('user_id', 'in', project.team_id.member_ids.ids)])
+            proj_emps |= team_emps
+
+        all_active_emps = self.env['hr.employee'].sudo().search([('active', '=', True)], order='name asc')
+        combo_emps = proj_emps | all_active_emps
+        available_employees = [{'id': e.id, 'name': e.name} for e in combo_emps]
 
         return {
             'project': {
@@ -969,9 +1290,13 @@ class ProjectManage(models.Model):
                 'risk_level': project.risk_level or 'low',
                 'risk_level_label': dict(project._fields['risk_level'].selection).get(project.risk_level, 'Low'),
                 'due_date_str': project.date_end.strftime('%d %b %Y') if project.date_end else 'No due date',
+                'review_count': project.review_count,
+                'average_rating': project.average_rating,
             },
             'scopes': scopes_data,
             'unique_scopes': unique_scopes,
+            'available_employees': available_employees,
+            'available_scopes': list(scope_map.keys()),
             'stats': {
                 'total_items': total_count,
                 'total_scopes': len(unique_scopes),
@@ -986,3 +1311,141 @@ class ProjectManage(models.Model):
                 'completion_pct': round((len(done_items) / total_count * 100)) if total_count else 0,
             }
         }
+
+    @api.model
+    def save_scope_inline(self, scope_id, vals):
+        """Update a scope record inline from the dashboard and return refreshed scopes data."""
+        scope = self.env['project.manage.scope'].browse(scope_id)
+        if not scope.exists():
+            return {'error': _("Scope item not found")}
+
+        write_vals = {}
+        if 'scope' in vals:
+            write_vals['scope'] = vals['scope']
+        if 'category' in vals and vals['category'] in ('Documentation', 'Implementation'):
+            write_vals['category'] = vals['category']
+        if 'name' in vals and vals['name']:
+            write_vals['name'] = vals['name']
+        if 'item_type' in vals:
+            write_vals['item_type'] = vals['item_type']
+        if 'responsible_id' in vals:
+            raw_emp = vals['responsible_id']
+            emp_id = int(raw_emp) if raw_emp and str(raw_emp).isdigit() else False
+            write_vals['responsible_id'] = emp_id
+            if emp_id:
+                emp = self.env['hr.employee'].sudo().browse(emp_id)
+                write_vals['responsible'] = emp.name if emp.exists() else ''
+            else:
+                write_vals['responsible'] = ''
+        if 'start_date' in vals:
+            write_vals['start_date'] = vals['start_date'] or False
+        if 'end_date' in vals:
+            write_vals['end_date'] = vals['end_date'] or False
+        if 'state' in vals and vals['state'] in ('todo', 'in_progress', 'under_review', 'done', 'cancelled'):
+            new_st = vals['state']
+            write_vals['state'] = new_st
+            if new_st == 'done':
+                write_vals['approval_state'] = 'approved'
+            elif new_st == 'in_progress' and scope.approval_state == 'draft':
+                write_vals['approval_state'] = 'in_progress'
+            elif new_st == 'todo':
+                write_vals['approval_state'] = 'draft'
+
+        scope.write(write_vals)
+        if scope.project_id:
+            scope.project_id._compute_metrics()
+
+        return self.get_project_scopes_dashboard(scope.project_id.id)
+
+    @api.model
+    def create_scope_from_dashboard(self, project_id, vals):
+        """Create a new scope record directly from the dashboard wizard and return refreshed data."""
+        project = self.browse(project_id)
+        if not project.exists():
+            return {'error': _("Project not found")}
+
+        scope_str = (vals.get('scope') or '').strip()
+        scope_no = 0
+        if scope_str:
+            existing = self.env['project.manage.scope'].search(
+                [('project_id', '=', project.id), ('scope', '=ilike', scope_str)], limit=1)
+            if existing:
+                scope_no = existing.scope_no
+
+        raw_emp = vals.get('responsible_id')
+        emp_id = int(raw_emp) if raw_emp and str(raw_emp).isdigit() else False
+        emp_name = ''
+        if emp_id:
+            emp = self.env['hr.employee'].sudo().browse(emp_id)
+            emp_name = emp.name if emp.exists() else ''
+
+        state_val = vals.get('state') or 'todo'
+        appr_state = 'approved' if state_val == 'done' else ('in_progress' if state_val == 'in_progress' else 'draft')
+
+        create_vals = {
+            'project_id': project.id,
+            'scope': scope_str or 'General Scope',
+            'scope_no': scope_no,
+            'category': vals.get('category') or 'Documentation',
+            'name': vals.get('name') or 'Untitled Task',
+            'item_type': vals.get('item_type') or '',
+            'responsible_id': emp_id,
+            'responsible': emp_name,
+            'start_date': vals.get('start_date') or False,
+            'end_date': vals.get('end_date') or False,
+            'state': state_val,
+            'approval_state': appr_state,
+        }
+        self.env['project.manage.scope'].create(create_vals)
+        project._compute_metrics()
+        return self.get_project_scopes_dashboard(project.id)
+
+    @api.model
+    def bulk_fill_scopes(self, project_id, scope_ids, vals):
+        """Bulk update multiple scopes by IDs or by scope name from the dashboard bulk fill wizard."""
+        project = self.browse(project_id)
+        if not project.exists():
+            return {'error': _("Project not found")}
+
+        domain = [('project_id', '=', project.id)]
+        if scope_ids and isinstance(scope_ids, list):
+            domain.append(('id', 'in', scope_ids))
+        elif vals.get('scope_name_filter'):
+            domain.append(('scope', '=', vals['scope_name_filter']))
+
+        scopes = self.env['project.manage.scope'].search(domain)
+        write_vals = {}
+        if vals.get('responsible_id'):
+            raw_emp = vals['responsible_id']
+            emp_id = int(raw_emp) if raw_emp and str(raw_emp).isdigit() else False
+            emp = self.env['hr.employee'].sudo().browse(emp_id)
+            write_vals['responsible_id'] = emp_id
+            write_vals['responsible'] = emp.name if emp.exists() else ''
+        elif vals.get('clear_responsible'):
+            write_vals['responsible_id'] = False
+            write_vals['responsible'] = ''
+
+        if vals.get('start_date'):
+            write_vals['start_date'] = vals['start_date']
+
+        if vals.get('end_date'):
+            write_vals['end_date'] = vals['end_date']
+
+        if vals.get('category') and vals['category'] in ('Documentation', 'Implementation'):
+            write_vals['category'] = vals['category']
+
+        if vals.get('state') and vals['state'] in ('todo', 'in_progress', 'under_review', 'done', 'cancelled'):
+            new_st = vals['state']
+            write_vals['state'] = new_st
+            if new_st == 'done':
+                write_vals['approval_state'] = 'approved'
+            elif new_st == 'in_progress':
+                write_vals['approval_state'] = 'in_progress'
+            elif new_st == 'todo':
+                write_vals['approval_state'] = 'draft'
+
+        if write_vals:
+            scopes.write(write_vals)
+            project._compute_metrics()
+
+        return self.get_project_scopes_dashboard(project.id)

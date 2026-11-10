@@ -1,6 +1,6 @@
 {
     'name': 'Project Management (Custom)',
-    'version': '19.0.1.0.35',
+    'version': '19.0.1.0.52',
     'summary': 'Manage projects with multi-tier approvals, role dashboards, team tracking, and performance leaderboard',
     'author': 'Custom',
     'category': 'Project',
@@ -14,6 +14,7 @@
         'views/project_team_views.xml',
         'views/project_scope_views.xml',
         'views/import_wizard_views.xml',
+        'views/project_review_views.xml',
         'views/project_manage_views.xml',
         'views/menu.xml',
     ],

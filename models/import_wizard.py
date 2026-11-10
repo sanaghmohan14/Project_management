@@ -146,8 +146,6 @@ class ProjectScopeImportWizard(models.TransientModel):
                 item_name = val('item_name') or val('document_name') or val('implementation_activity')
                 item_type = val('item_type') or val('document_type') or val('activity_type')
                 evidence = val('evidence___proof') or val('evidence') or val('proof')
-                auth = val('final_approval_authority') or val('approval_authority')
-                acc_str = val('accountable')
                 resp_str = val('responsible')
                 start_d = self._parse_date(val('start_date') or val('start'))
                 end_d = self._parse_date(val('end_date') or val('end'))
@@ -186,8 +184,6 @@ class ProjectScopeImportWizard(models.TransientModel):
                     'name': cand_name,
                     'item_type': item_type,
                     'evidence_proof': evidence,
-                    'approval_authority': auth if auth in ('TL', 'PM', 'VP', 'CEO') else False,
-                    'accountable': acc_str,
                     'responsible': resp_str,
                     'start_date': start_d,
                     'end_date': end_d,
@@ -265,7 +261,6 @@ class ProjectScopeImportWizard(models.TransientModel):
                             'scope_no': scope_no,
                             'scope': scope_name,
                             'project_id': self.project_id.id,
-                            'approval_authority': doc_auth if doc_auth in ('TL', 'PM', 'VP', 'CEO') else False,
                         })
                         tasks_count += 1
 
@@ -291,7 +286,6 @@ class ProjectScopeImportWizard(models.TransientModel):
                                 'scope_no': scope_no,
                                 'scope': scope_name,
                                 'project_id': self.project_id.id,
-                                'approval_authority': act_auth if act_auth in ('TL', 'PM', 'VP', 'CEO') else False,
                             })
                             tasks_count += 1
 

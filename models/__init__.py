@@ -3,3 +3,4 @@ from . import project_manage
 from . import project_scope
 from . import import_wizard
 from . import res_users
+from . import project_review
