@@ -8,7 +8,7 @@ access_pm_admin,project.manage administrator,model_project_manage,group_project_
 
 access_pm_team_consultant,project.manage.team consultant,model_project_manage_team,group_project_manage_consultant,1,0,0,0
 access_pm_team_tl,project.manage.team team lead,model_project_manage_team,group_project_manage_team_lead,1,0,0,0
-access_pm_team_manager,project.manage.team manager,model_project_manage_team,group_project_manage_manager,1,0,0,0
+access_pm_team_manager,project.manage.team manager,model_project_manage_team,group_project_manage_manager,1,1,1,1
 access_pm_team_vp,project.manage.team vp,model_project_manage_team,group_project_manage_vp,1,1,1,0
 access_pm_team_ceo,project.manage.team ceo,model_project_manage_team,group_project_manage_ceo,1,1,1,1
 access_pm_team_admin,project.manage.team administrator,model_project_manage_team,group_project_manage_administrator,1,1,1,1

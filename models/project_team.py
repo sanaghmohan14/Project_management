@@ -44,6 +44,32 @@ class ProjectManageTeam(models.Model):
         for rec in self:
             rec.member_count = len(rec.member_ids)
 
+    @api.model
+    def check_access(self, operation, raise_exception=True):
+        if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system'):
+            return True
+        if self.env.user.has_group('project_manage.group_project_manage_administrator') or \
+           self.env.user.has_group('project_manage.group_project_manage_ceo') or \
+           self.env.user.has_group('project_manage.group_project_manage_vp') or \
+           self.env.user.has_group('project_manage.group_project_manage_manager'):
+            return True
+        if operation == 'read' and self.env.user.has_group('base.group_user'):
+            return True
+        return super().check_access(operation, raise_exception=raise_exception)
+
+    @api.model
+    def check_access_rights(self, operation, raise_exception=True):
+        if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system'):
+            return True
+        if self.env.user.has_group('project_manage.group_project_manage_administrator') or \
+           self.env.user.has_group('project_manage.group_project_manage_ceo') or \
+           self.env.user.has_group('project_manage.group_project_manage_vp') or \
+           self.env.user.has_group('project_manage.group_project_manage_manager'):
+            return True
+        if operation == 'read' and self.env.user.has_group('base.group_user'):
+            return True
+        return super().check_access_rights(operation, raise_exception=raise_exception)
+
     def action_view_projects(self):
         self.ensure_one()
         return {

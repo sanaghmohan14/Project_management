@@ -66,7 +66,9 @@
 }
 
 /* Dark Mode Overrides */
-.pm-dashboard-wrapper.pm-theme-dark {
+.pm-dashboard-wrapper.pm-theme-dark,
+[data-color-scheme="dark"] .pm-dashboard-wrapper,
+body.o_dark_theme .pm-dashboard-wrapper {
     --pm-bg: #0b0f19;
     --pm-card-bg: #111827;
     --pm-text-heading: #f9fafb;
@@ -1515,7 +1517,8 @@
     color: var(--pm-text-body);
 }
 
-/* ---------------- CONSULTANT / PERSONAL WORKSPACE ---------------- */
+/* ---------------- UNIVERSAL TASKS HUB & CONSULTANT WORKSPACE ---------------- */
+.pm-tasks-hub-section,
 .pm-consultant-section {
     background: var(--pm-card-bg);
     border: 1px solid var(--pm-border);
@@ -1523,6 +1526,152 @@
     padding: 18px 20px;
     margin-bottom: 24px;
     box-shadow: var(--pm-shadow);
+}
+
+.pm-tasks-icon-box {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: rgba(99, 102, 241, 0.12);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+}
+
+.pm-stat-clickable {
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    border: 1.5px solid transparent;
+}
+
+.pm-stat-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.pm-c-stat-active {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25) !important;
+}
+
+.pm-stat-hint {
+    display: block;
+    font-size: 0.68rem;
+    color: var(--pm-text-muted);
+    margin-top: 2px;
+}
+
+.pm-tasks-filter-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    background: var(--pm-bg);
+    border: 1px solid var(--pm-border-light);
+    border-radius: 10px;
+}
+
+.pm-tasks-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.pm-task-tab-btn {
+    border: none;
+    background: transparent;
+    color: var(--pm-text-muted);
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.pm-task-tab-btn:hover {
+    background: var(--pm-card-bg);
+    color: var(--pm-text-heading);
+}
+
+.pm-task-tab-btn.active {
+    background: var(--pm-card-bg);
+    color: var(--pm-text-heading);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    font-weight: 700;
+}
+
+.pm-tasks-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.pm-select-filter {
+    width: auto;
+    min-width: 140px;
+    font-size: 0.8rem;
+    background-color: var(--pm-card-bg);
+    color: var(--pm-text-body);
+    border-color: var(--pm-border);
+}
+
+.pm-task-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.pm-task-search-box .pm-search-icon {
+    position: absolute;
+    left: 10px;
+    color: var(--pm-text-muted);
+    font-size: 0.78rem;
+    pointer-events: none;
+}
+
+.pm-task-search-input {
+    padding-left: 28px !important;
+    width: 200px;
+    font-size: 0.8rem;
+    background-color: var(--pm-card-bg);
+    color: var(--pm-text-body);
+    border-color: var(--pm-border);
+}
+
+.pm-avatar-mini {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #6366f1;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.pm-row-overdue {
+    background-color: rgba(239, 68, 68, 0.05) !important;
+}
+
+.pm-text-truncate-project {
+    display: inline-block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 .pm-section-head-row {
@@ -2207,27 +2356,27 @@
     display: inline-flex;
     align-items: center;
     font-size: 0.72rem;
-    font-weight: 600;
-    padding: 2px 8px;
+    font-weight: 700;
+    padding: 3px 10px;
     border-radius: 12px;
     white-space: nowrap;
 
     &.pm-cat-doc {
-        background: rgba(2, 132, 199, 0.12);
-        color: #0284c7;
-        border: 1px solid rgba(2, 132, 199, 0.25);
+        background: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #7dd3fc;
     }
 
     &.pm-cat-imp {
-        background: rgba(124, 58, 237, 0.12);
-        color: #7c3aed;
-        border: 1px solid rgba(124, 58, 237, 0.25);
+        background: #f3e8ff;
+        color: #7e22ce;
+        border: 1px solid #d8b4fe;
     }
 
     &.pm-cat-scope {
-        background: rgba(13, 148, 136, 0.12);
-        color: #0d9488;
-        border: 1px solid rgba(13, 148, 136, 0.25);
+        background: #ccfbf1;
+        color: #0f766e;
+        border: 1px solid #5eead4;
     }
 }
 
@@ -3561,7 +3710,9 @@ tr.pm-scope-item-row:hover .pm-row-hover-actions {
 /* ======================================================== */
 /* DARK MODE OVERRIDES: MODALS, FONTS, TABLES, BUTTONS      */
 /* ======================================================== */
-.pm-dashboard-wrapper.pm-theme-dark {
+.pm-dashboard-wrapper.pm-theme-dark,
+[data-color-scheme="dark"] .pm-dashboard-wrapper,
+body.o_dark_theme .pm-dashboard-wrapper {
     // Universal font overrides for dark mode
     h1, h2, h3, h4, h5, h6 {
         color: #f8fafc !important;
@@ -3868,5 +4019,68 @@ tr.pm-scope-item-row:hover .pm-row-hover-actions {
         background-color: #1a2436 !important;
         border-color: #2e3d54 !important;
         color: #f1f5f9 !important;
+    }
+
+    // Category Pills in Dark Mode (High-contrast vivid colors)
+    .pm-cat-pill {
+        font-weight: 700 !important;
+
+        &.pm-cat-doc {
+            background: rgba(14, 165, 233, 0.22) !important;
+            color: #38bdf8 !important;
+            border: 1px solid #0284c7 !important;
+        }
+
+        &.pm-cat-imp {
+            background: rgba(168, 85, 247, 0.22) !important;
+            color: #c084fc !important;
+            border: 1px solid #9333ea !important;
+        }
+
+        &.pm-cat-scope {
+            background: rgba(20, 184, 166, 0.22) !important;
+            color: #2dd4bf !important;
+            border: 1px solid #0d9488 !important;
+        }
+    }
+
+    .badge.bg-secondary-subtle,
+    .bg-secondary-subtle {
+        background-color: #1e293b !important;
+        color: #93c5fd !important;
+        border: 1px solid #334155 !important;
+    }
+}
+
+// Global Dark Mode badge visibility rules (matches Odoo 19 dark mode)
+[data-color-scheme="dark"],
+body.o_dark_theme {
+    .pm-cat-pill {
+        font-weight: 700 !important;
+
+        &.pm-cat-doc {
+            background: rgba(14, 165, 233, 0.22) !important;
+            color: #38bdf8 !important;
+            border: 1px solid #0284c7 !important;
+        }
+
+        &.pm-cat-imp {
+            background: rgba(168, 85, 247, 0.22) !important;
+            color: #c084fc !important;
+            border: 1px solid #9333ea !important;
+        }
+
+        &.pm-cat-scope {
+            background: rgba(20, 184, 166, 0.22) !important;
+            color: #2dd4bf !important;
+            border: 1px solid #0d9488 !important;
+        }
+    }
+
+    .badge.bg-secondary-subtle,
+    .bg-secondary-subtle {
+        background-color: #1e293b !important;
+        color: #93c5fd !important;
+        border: 1px solid #334155 !important;
     }
 }

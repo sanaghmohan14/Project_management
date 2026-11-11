@@ -13,9 +13,14 @@ export class ProjectManageDashboard extends Component {
         this.notification = useService("notification");
         this.rootRef = useRef("dashboardRoot");
 
-        // Load saved theme or default to light mode
+        // Load saved theme or auto-detect from Odoo's native dark mode / system preference
         const savedTheme = localStorage.getItem("pm_dashboard_theme");
-        const initialDark = savedTheme ? savedTheme === "dark" : false;
+        const isOdooDark = typeof document !== 'undefined' && (
+            document.body.classList.contains("o_dark_theme") ||
+            document.documentElement.getAttribute("data-color-scheme") === "dark" ||
+            (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches)
+        );
+        const initialDark = savedTheme !== null ? (savedTheme === "dark") : Boolean(isOdooDark);
 
         this.state = useState({
             loading: true,
@@ -53,6 +58,11 @@ export class ProjectManageDashboard extends Component {
                 category: '',
             },
             savingScope: false,
+            taskTab: 'pending', // 'pending', 'completed', 'overdue', 'waiting_approval', 'all'
+            taskCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
+            taskConsultantFilter: 'all', // 'all' or consultant id
+            taskProjectFilter: 'all', // 'all' or project id
+            taskSearchQuery: "",
             data: {
                 company_name: "Benac Business Solutions",
                 current_date_str: "Loading...",
@@ -79,6 +89,20 @@ export class ProjectManageDashboard extends Component {
                     pending_my_approval_count: 0,
                     all_pending_count: 0,
                     pending_items: [],
+                },
+                tasks_hub: {
+                    role_code: "consultant",
+                    title: "Tasks Hub",
+                    subtitle: "Track pending deliverables and completed tasks",
+                    role_label: "Tasks",
+                    total_count: 0,
+                    pending_count: 0,
+                    completed_count: 0,
+                    overdue_count: 0,
+                    waiting_approval_count: 0,
+                    available_consultants: [],
+                    available_projects: [],
+                    tasks: [],
                 },
                 consultant_workspace: {
                     my_total_tasks: 0,
@@ -274,6 +298,95 @@ export class ProjectManageDashboard extends Component {
                 (s.name && s.name.toLowerCase().includes(q)) ||
                 (s.scope_name && s.scope_name.toLowerCase().includes(q)) ||
                 (s.responsible_name && s.responsible_name.toLowerCase().includes(q))
+            );
+        }
+
+        return list;
+    }
+
+    // ==================== UNIVERSAL TASKS HUB METHODS & GETTER ====================
+    setTaskTab(tab) {
+        this.state.taskTab = tab;
+    }
+
+    setTaskCategoryFilter(cat) {
+        this.state.taskCategoryFilter = cat;
+    }
+
+    setTaskConsultantFilter(ev) {
+        this.state.taskConsultantFilter = ev.target.value;
+    }
+
+    setTaskProjectFilter(ev) {
+        this.state.taskProjectFilter = ev.target.value;
+    }
+
+    onTaskSearchChange(ev) {
+        this.state.taskSearchQuery = ev.target.value.toLowerCase().trim();
+    }
+
+    clearTaskFilters() {
+        this.state.taskTab = 'pending';
+        this.state.taskCategoryFilter = 'all';
+        this.state.taskConsultantFilter = 'all';
+        this.state.taskProjectFilter = 'all';
+        this.state.taskSearchQuery = '';
+    }
+
+    scrollToTasksHub() {
+        if (typeof document !== 'undefined') {
+            const el = document.getElementById("pm-tasks-hub");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+            }
+        }
+        this.viewMyTasks();
+    }
+
+    get filteredTasks() {
+        const hub = this.state.data.tasks_hub;
+        if (!hub || !hub.tasks) {
+            return [];
+        }
+        let list = hub.tasks;
+
+        // 1. Tab Filter
+        if (this.state.taskTab === 'pending') {
+            list = list.filter(t => t.is_pending);
+        } else if (this.state.taskTab === 'completed') {
+            list = list.filter(t => t.is_completed);
+        } else if (this.state.taskTab === 'overdue') {
+            list = list.filter(t => t.is_overdue && t.is_pending);
+        } else if (this.state.taskTab === 'waiting_approval') {
+            list = list.filter(t => ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'].includes(t.approval_state));
+        }
+
+        // 2. Category Filter
+        if (this.state.taskCategoryFilter === 'documentation') {
+            list = list.filter(t => (t.category || '').toLowerCase().includes('doc'));
+        } else if (this.state.taskCategoryFilter === 'implementation') {
+            list = list.filter(t => (t.category || '').toLowerCase().includes('imp'));
+        }
+
+        // 3. Consultant Filter
+        if (this.state.taskConsultantFilter && this.state.taskConsultantFilter !== 'all') {
+            list = list.filter(t => String(t.responsible_id) === String(this.state.taskConsultantFilter));
+        }
+
+        // 4. Project Filter
+        if (this.state.taskProjectFilter && this.state.taskProjectFilter !== 'all') {
+            list = list.filter(t => String(t.project_id) === String(this.state.taskProjectFilter));
+        }
+
+        // 5. Search Query
+        if (this.state.taskSearchQuery) {
+            const q = this.state.taskSearchQuery;
+            list = list.filter(t =>
+                (t.name && t.name.toLowerCase().includes(q)) ||
+                (t.code && t.code.toLowerCase().includes(q)) ||
+                (t.project_name && t.project_name.toLowerCase().includes(q)) ||
+                (t.responsible_name && t.responsible_name.toLowerCase().includes(q))
             );
         }
 

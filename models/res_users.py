@@ -170,9 +170,22 @@ class ResUsers(models.Model):
                 domain_tl = "['|', '|', '|', ('team_lead_id.user_id', '=', user.id), ('team_id.team_lead_id', '=', user.id), ('team_id.member_ids', 'in', [user.id]), ('consultant_ids.user_id', '=', user.id)]"
                 self.env.cr.execute("UPDATE ir_rule SET domain_force = %s WHERE id = %s;", (domain_tl, rule_proj_tl.id))
 
-            # Ensure project.manage.team rules exist in DB
+            # Ensure project.manage.team rules and model access exist in DB
             team_model = self.env['ir.model'].search([('model', '=', 'project.manage.team')], limit=1)
             if team_model:
+                # Guarantee Project Manager can create, write, read and unlink project teams
+                if mgr_grp:
+                    self.env.cr.execute("""
+                        INSERT INTO ir_model_access (name, model_id, group_id, perm_read, perm_write, perm_create, perm_unlink, active)
+                        SELECT 'access_pm_team_mgr_auto', %s, %s, true, true, true, true, true
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM ir_model_access WHERE model_id = %s AND group_id = %s
+                        );
+                        UPDATE ir_model_access
+                        SET perm_create = true, perm_write = true, perm_read = true, perm_unlink = true
+                        WHERE model_id = %s AND group_id = %s;
+                    """, (team_model.id, mgr_grp.id, team_model.id, mgr_grp.id, team_model.id, mgr_grp.id))
+
                 # 7a. Team Exec/Manager Rule
                 self.env.cr.execute("""
                     INSERT INTO ir_rule (name, model_id, domain_force, active)

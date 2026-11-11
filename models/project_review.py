@@ -332,7 +332,7 @@ class ProjectManageClientUpdateWizard(models.TransientModel):
     )
     include_scope_breakdown = fields.Boolean(string='Include Scopes Breakdown', default=True)
     include_review_invitation = fields.Boolean(string='Include Customer Review Invitation', default=True)
-    body_html = fields.Html(string='Email Preview', compute='_compute_body_html', store=True, readonly=False)
+    body_html = fields.Html(string='Email Preview', compute='_compute_body_html', store=True, readonly=False, sanitize=False)
 
     @api.depends('project_id')
     def _compute_is_completed(self):
@@ -572,25 +572,24 @@ class ProjectManageClientUpdateWizard(models.TransientModel):
             smtp_success = False
             _logger.warning("SMTP server timed out or failed to immediately deliver client update email: %s. The email has been queued in Odoo.", e)
 
-        # Log into project chatter as an internal note (without emailing partners a second time)
+        # Log into project chatter as an internal note (silent, no duplicate or escaped emails to partners/followers)
         update_type_str = _("Project Completion Report") if self.is_completed else _("Project Progress Update (%d%%)") % int(proj.progress)
+        cc_info = f"<br/><b>CC:</b> {', '.join(cc_emails)}" if cc_emails else ""
         chatter_body = Markup(
-            "<p><b>%s</b> sent to client <b>%s</b> (%s).</p>"
-            "<p><b>Subject:</b> %s</p>"
-            "<details><summary style='cursor: pointer; color: #2563eb; font-weight: 600;'>View Sent Email Report</summary>"
-            "<div style='margin-top: 10px; border: 1px solid #e2e8f0; padding: 12px; border-radius: 8px;'>%s</div>"
-            "</details>"
+            "<p>📤 <b>%s</b> sent to client <b>%s</b> (%s).</p>"
+            "<p><b>Subject:</b> %s%s</p>"
         ) % (
             update_type_str,
             ', '.join(recipients.mapped('name')),
             ', '.join(valid_emails),
             self.subject,
-            Markup(self.body_html)
+            Markup(cc_info),
         )
-        proj.message_post(
+        proj.with_context(mail_notify_no_email=True, mail_post_autofollow=False).message_post(
             body=chatter_body,
             message_type='notification',
-            subtype_xmlid='mail.mt_note'
+            subtype_xmlid='mail.mt_note',
+            partner_ids=[],
         )
 
         proj.write({'last_client_update_date': fields.Datetime.now()})

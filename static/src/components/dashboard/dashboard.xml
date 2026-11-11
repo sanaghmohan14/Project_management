@@ -34,8 +34,8 @@
                     </div>
                 </div>
 
-                <!-- Team Quick Filter Pills -->
-                <div class="pm-header-center">
+                <!-- Team Quick Filter Pills (Executives & Managers) -->
+                <div class="pm-header-center" t-if="!state.data.user_info.is_consultant">
                     <button class="pm-team-filter-pill"
                             t-att-class="state.selectedTeamId === null ? 'active' : ''"
                             t-on-click="() => this.onSelectTeam(null)">
@@ -65,11 +65,14 @@
                         </t>
                     </button>
 
-                    <!-- My Tasks Shortcut Button -->
-                    <button class="pm-nav-pill-btn pm-tasks-pill-btn" t-on-click="viewMyTasks" title="View My Assigned Tasks">
+                    <!-- Tasks Shortcut Button -->
+                    <button class="pm-nav-pill-btn pm-tasks-pill-btn" t-on-click="scrollToTasksHub" title="View Tasks Hub">
                         <i class="fa fa-tasks me-1 text-info"></i>
-                        <span>My Tasks</span>
-                        <t t-if="state.data.consultant_workspace.my_total_tasks > 0">
+                        <span><t t-esc="state.data.tasks_hub ? state.data.tasks_hub.role_label : 'Tasks'"/></span>
+                        <t t-if="state.data.tasks_hub and state.data.tasks_hub.pending_count > 0">
+                            <span class="pm-counter-pill bg-warning text-dark"><t t-esc="state.data.tasks_hub.pending_count"/></span>
+                        </t>
+                        <t t-elif="state.data.consultant_workspace and state.data.consultant_workspace.my_total_tasks > 0">
                             <span class="pm-counter-pill bg-primary"><t t-esc="state.data.consultant_workspace.my_total_tasks"/></span>
                         </t>
                     </button>
@@ -102,163 +105,11 @@
 
             <div class="pm-dashboard-content">
 
-                <!-- ==================== URGENT: APPROVALS PENDING ACTION ==================== -->
-                <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
-                    <section class="pm-approval-section">
-                        <div class="pm-approval-header">
-                            <div class="d-flex align-items-center gap-2">
-                                <span class="pm-pulse-badge">
-                                    <i class="fa fa-bell"></i>
-                                </span>
-                                <div>
-                                    <h3 class="pm-section-title text-warning-emphasis mb-0">
-                                        Tasks Waiting For Your Approval (<t t-esc="state.data.approvals_summary.pending_my_approval_count"/>)
-                                    </h3>
-                                    <p class="pm-section-sub mb-0">You are the designated approver in the project management hierarchy.</p>
-                                </div>
-                            </div>
-                            <button class="pm-link-btn" t-on-click="viewAllApprovals">
-                                Open Approvals Center <i class="fa fa-arrow-right ms-1"></i>
-                            </button>
-                        </div>
-
-                        <div class="pm-approval-grid">
-                            <t t-foreach="state.data.approvals_summary.pending_items" t-as="item" t-key="item.id">
-                                <div class="pm-approval-card">
-                                    <div class="pm-approval-card-top">
-                                        <div class="pm-approval-code-box">
-                                            <span class="pm-task-code" t-esc="item.code"/>
-                                            <span class="pm-approval-badge" t-att-class="'pm-badge-' + item.approval_state" t-esc="item.approval_stage_label"/>
-                                        </div>
-                                        <span class="pm-approval-date" t-esc="item.submitted_date"/>
-                                    </div>
-                                    <h4 class="pm-approval-task-name" t-esc="item.name" t-on-click="() => this.openScope(item.id)"/>
-                                    <div class="pm-approval-meta">
-                                        <div class="pm-meta-row">
-                                            <i class="fa fa-folder-o text-muted me-1"></i>
-                                            <span class="text-truncate" t-esc="item.project_name"/>
-                                        </div>
-                                        <div class="pm-meta-row">
-                                            <i class="fa fa-user-o text-muted me-1"></i>
-                                            <span>Assigned: <strong t-esc="item.responsible_name"/></span>
-                                        </div>
-                                    </div>
-                                    <div class="pm-approval-card-actions">
-                                        <button class="pm-btn pm-btn-approve" t-on-click="() => this.approveTask(item.id)">
-                                            <i class="fa fa-check me-1"></i> Approve
-                                        </button>
-                                        <button class="pm-btn pm-btn-reject" t-on-click="() => this.openRejectWizard(item.id)">
-                                            <i class="fa fa-times me-1"></i> Reject / Re-Work
-                                        </button>
-                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(item.id)" title="View Details">
-                                            <i class="fa fa-external-link"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            </t>
-                        </div>
-                    </section>
-                </t>
-
-                <!-- ==================== CONSULTANT / PERSONAL WORKSPACE ==================== -->
-                <t t-if="state.data.user_info.is_consultant">
-                    <section class="pm-consultant-section">
-                        <div class="pm-section-head-row">
-                            <div>
-                                <h3 class="pm-section-title">My Tasks &amp; Execution Hub</h3>
-                                <p class="pm-section-sub">Track assigned deliverables, submission status, and feedback</p>
-                            </div>
-                            <button class="pm-link-btn" t-on-click="viewMyTasks">
-                                View Full Tasks List <i class="fa fa-arrow-right ms-1"></i>
-                            </button>
-                        </div>
-
-                        <!-- 4 Status Counter Cards -->
-                        <div class="pm-consultant-counters">
-                            <div class="pm-c-stat bg-blue-subtle">
-                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_todo_count"/>
-                                <div class="pm-c-lbl">To Do</div>
-                            </div>
-                            <div class="pm-c-stat bg-amber-subtle">
-                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_inprogress_count"/>
-                                <div class="pm-c-lbl">In Progress</div>
-                            </div>
-                            <div class="pm-c-stat bg-indigo-subtle">
-                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_waiting_approval_count"/>
-                                <div class="pm-c-lbl">Waiting Approval</div>
-                            </div>
-                            <div class="pm-c-stat bg-emerald-subtle">
-                                <div class="pm-c-val" t-esc="state.data.consultant_workspace.my_done_count"/>
-                                <div class="pm-c-lbl">Completed</div>
-                            </div>
-                        </div>
-
-                        <!-- My Tasks Quick Table -->
-                        <div class="pm-mytasks-table-wrap">
-                            <table class="pm-mytasks-table">
-                                <thead>
-                                    <tr>
-                                        <th>Code</th>
-                                        <th>Task Name</th>
-                                        <th>Project</th>
-                                        <th>Category</th>
-                                        <th>Due Date</th>
-                                        <th>Stage</th>
-                                        <th>Approval State</th>
-                                        <th>Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <t t-if="!state.data.consultant_workspace.my_tasks or state.data.consultant_workspace.my_tasks.length === 0">
-                                        <tr>
-                                            <td colspan="8" class="text-center py-4 text-muted">
-                                                <i class="fa fa-check-circle-o fa-2x mb-2 text-success d-block"></i>
-                                                <div>No tasks currently assigned to you.</div>
-                                            </td>
-                                        </tr>
-                                    </t>
-                                    <t t-else="">
-                                        <t t-foreach="state.data.consultant_workspace.my_tasks" t-as="tsk" t-key="tsk.id">
-                                            <tr>
-                                                <td><span class="pm-task-code" t-esc="tsk.code"/></td>
-                                                <td>
-                                                    <strong class="pm-clickable" t-on-click="() => this.openScope(tsk.id)" t-esc="tsk.name"/>
-                                                    <t t-if="tsk.rejection_reason and tsk.approval_state === 'rejected'">
-                                                        <div class="pm-rejection-alert">
-                                                            <i class="fa fa-exclamation-triangle me-1"></i> Re-Work: <t t-esc="tsk.rejection_reason"/>
-                                                        </div>
-                                                    </t>
-                                                </td>
-                                                <td t-esc="tsk.project_name"/>
-                                                <td><span class="badge bg-secondary-subtle text-secondary" t-esc="tsk.category"/></td>
-                                                <td>
-                                                    <span t-att-class="tsk.is_late ? 'text-danger fw-bold' : ''" t-esc="tsk.end_date"/>
-                                                </td>
-                                                <td><span class="pm-badge" t-att-class="'pm-badge-' + tsk.state" t-esc="tsk.state_label"/></td>
-                                                <td><span class="pm-badge" t-att-class="'pm-badge-' + tsk.approval_state" t-esc="tsk.approval_stage_label"/></td>
-                                                <td>
-                                                    <t t-if="tsk.can_submit">
-                                                        <button class="pm-btn pm-btn-submit" t-on-click="() => this.submitTask(tsk.id)">
-                                                            <i class="fa fa-paper-plane me-1"></i> Complete &amp; Submit
-                                                        </button>
-                                                    </t>
-                                                    <t t-else="">
-                                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(tsk.id)">
-                                                            View
-                                                        </button>
-                                                    </t>
-                                                </td>
-                                            </tr>
-                                        </t>
-                                    </t>
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-                </t>
-
-                <!-- ==================== 1. TOP ROW: 5 METRIC CARDS ==================== -->
-                <section class="pm-kpi-row">
+                <!-- ==================== EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
+                <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
+                <t t-if="!state.data.user_info.is_consultant">
+                    <!-- ==================== 1. TOP ROW: 5 METRIC CARDS ==================== -->
+                    <section class="pm-kpi-row">
                     <!-- Total Projects -->
                     <div class="pm-kpi-card" t-on-click="viewAllProjects">
                         <div class="pm-kpi-header">
@@ -682,9 +533,12 @@
                         </div>
                     </div>
                 </section>
+                </t>
 
                 <!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
-                <section class="pm-table-section">
+                <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
+                <t t-if="!state.data.user_info.is_consultant">
+                    <section class="pm-table-section">
                     <div class="pm-table-header">
                         <div class="pm-table-title-box">
                             <h2 class="pm-table-title">Projects</h2>
@@ -1122,6 +976,331 @@
                                                 </td>
                                             </tr>
                                         </t>
+                                    </t>
+                                </t>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                </t>
+
+                <!-- ==================== URGENT: APPROVALS PENDING ACTION ==================== -->
+                <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
+                    <section class="pm-approval-section">
+                        <div class="pm-approval-header">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="pm-pulse-badge">
+                                    <i class="fa fa-bell"></i>
+                                </span>
+                                <div>
+                                    <h3 class="pm-section-title text-warning-emphasis mb-0">
+                                        Tasks Waiting For Your Approval (<t t-esc="state.data.approvals_summary.pending_my_approval_count"/>)
+                                    </h3>
+                                    <p class="pm-section-sub mb-0">You are the designated approver in the project management hierarchy.</p>
+                                </div>
+                            </div>
+                            <button class="pm-link-btn" t-on-click="viewAllApprovals">
+                                Open Approvals Center <i class="fa fa-arrow-right ms-1"></i>
+                            </button>
+                        </div>
+
+                        <div class="pm-approval-grid">
+                            <t t-foreach="state.data.approvals_summary.pending_items" t-as="item" t-key="item.id">
+                                <div class="pm-approval-card">
+                                    <div class="pm-approval-card-top">
+                                        <div class="pm-approval-code-box">
+                                            <span class="pm-task-code" t-esc="item.code"/>
+                                            <span class="pm-approval-badge" t-att-class="'pm-badge-' + item.approval_state" t-esc="item.approval_stage_label"/>
+                                        </div>
+                                        <span class="pm-approval-date" t-esc="item.submitted_date"/>
+                                    </div>
+                                    <h4 class="pm-approval-task-name" t-esc="item.name" t-on-click="() => this.openScope(item.id)"/>
+                                    <div class="pm-approval-meta">
+                                        <div class="pm-meta-row">
+                                            <i class="fa fa-folder-o text-muted me-1"></i>
+                                            <span class="text-truncate" t-esc="item.project_name"/>
+                                        </div>
+                                        <div class="pm-meta-row">
+                                            <i class="fa fa-user-o text-muted me-1"></i>
+                                            <span>Assigned: <strong t-esc="item.responsible_name"/></span>
+                                        </div>
+                                    </div>
+                                    <div class="pm-approval-card-actions">
+                                        <button class="pm-btn pm-btn-approve" t-on-click="() => this.approveTask(item.id)">
+                                            <i class="fa fa-check me-1"></i> Approve
+                                        </button>
+                                        <button class="pm-btn pm-btn-reject" t-on-click="() => this.openRejectWizard(item.id)">
+                                            <i class="fa fa-times me-1"></i> Reject / Re-Work
+                                        </button>
+                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(item.id)" title="View Details">
+                                            <i class="fa fa-external-link"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </t>
+                        </div>
+                    </section>
+                </t>
+
+                <!-- ==================== TASKS HUB: PENDING & COMPLETED DELIVERABLES ==================== -->
+                <!-- Available for ALL users (Consultants, Team Leads, Project Managers, VPs, CEOs, Admins) -->
+                <section class="pm-tasks-hub-section" id="pm-tasks-hub">
+                    <div class="pm-section-head-row">
+                        <div class="pm-tasks-header-info">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="pm-tasks-icon-box">
+                                    <i class="fa fa-tasks text-primary"></i>
+                                </span>
+                                <div>
+                                    <h3 class="pm-section-title">
+                                        <t t-esc="state.data.tasks_hub ? state.data.tasks_hub.title : 'Tasks Hub'"/>
+                                    </h3>
+                                    <p class="pm-section-sub">
+                                        <t t-esc="state.data.tasks_hub ? state.data.tasks_hub.subtitle : 'Track pending deliverables with issued dates and completed tasks'"/>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Actions -->
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <button class="pm-link-btn" t-on-click="viewMyTasks" title="Open full tasks table in Odoo view">
+                                Full Tasks View <i class="fa fa-external-link ms-1"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 4 Summary Counter Cards -->
+                    <div class="pm-consultant-counters pm-tasks-counters">
+                        <!-- 1. Pending Tasks (Default Active Tab) -->
+                        <div class="pm-c-stat pm-stat-clickable bg-amber-subtle"
+                             t-att-class="state.taskTab === 'pending' ? 'pm-c-stat-active' : ''"
+                             t-on-click="() => this.setTaskTab('pending')"
+                             title="Show pending tasks with issued dates that are not yet completed">
+                            <div class="pm-c-val text-amber-emphasis" t-esc="state.data.tasks_hub ? state.data.tasks_hub.pending_count : 0"/>
+                            <div class="pm-c-lbl">Pending Tasks</div>
+                            <span class="pm-stat-hint">Assigned &amp; Dates Issued</span>
+                        </div>
+
+                        <!-- 2. Overdue Tasks -->
+                        <div class="pm-c-stat pm-stat-clickable bg-rose-subtle"
+                             t-att-class="state.taskTab === 'overdue' ? 'pm-c-stat-active' : ''"
+                             t-on-click="() => this.setTaskTab('overdue')"
+                             title="Show overdue pending tasks">
+                            <div class="pm-c-val text-danger" t-esc="state.data.tasks_hub ? state.data.tasks_hub.overdue_count : 0"/>
+                            <div class="pm-c-lbl">Overdue Tasks</div>
+                            <span class="pm-stat-hint">Past Due Date</span>
+                        </div>
+
+                        <!-- 3. Waiting Approval -->
+                        <div class="pm-c-stat pm-stat-clickable bg-indigo-subtle"
+                             t-att-class="state.taskTab === 'waiting_approval' ? 'pm-c-stat-active' : ''"
+                             t-on-click="() => this.setTaskTab('waiting_approval')"
+                             title="Show tasks currently awaiting approval in the hierarchy">
+                            <div class="pm-c-val text-indigo" t-esc="state.data.tasks_hub ? state.data.tasks_hub.waiting_approval_count : 0"/>
+                            <div class="pm-c-lbl">In Approval Flow</div>
+                            <span class="pm-stat-hint">Submitted For Sign-Off</span>
+                        </div>
+
+                        <!-- 4. Completed Tasks -->
+                        <div class="pm-c-stat pm-stat-clickable bg-emerald-subtle"
+                             t-att-class="state.taskTab === 'completed' ? 'pm-c-stat-active' : ''"
+                             t-on-click="() => this.setTaskTab('completed')"
+                             title="Show completed deliverables">
+                            <div class="pm-c-val text-success" t-esc="state.data.tasks_hub ? state.data.tasks_hub.completed_count : 0"/>
+                            <div class="pm-c-lbl">Completed Tasks</div>
+                            <span class="pm-stat-hint">Done &amp; Approved</span>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Filtering Bar -->
+                    <div class="pm-tasks-filter-bar">
+                        <!-- Primary Tabs: Pending vs Completed vs All -->
+                        <div class="pm-tasks-tabs">
+                            <button type="button" class="pm-task-tab-btn"
+                                    t-att-class="state.taskTab === 'pending' ? 'active' : ''"
+                                    t-on-click="() => this.setTaskTab('pending')">
+                                <i class="fa fa-clock-o me-1"></i>
+                                Pending Tasks
+                                <span class="badge rounded-pill bg-warning text-dark ms-1" t-esc="state.data.tasks_hub ? state.data.tasks_hub.pending_count : 0"/>
+                            </button>
+                            <button type="button" class="pm-task-tab-btn"
+                                    t-att-class="state.taskTab === 'completed' ? 'active' : ''"
+                                    t-on-click="() => this.setTaskTab('completed')">
+                                <i class="fa fa-check-circle me-1 text-success"></i>
+                                Completed Tasks
+                                <span class="badge rounded-pill bg-success ms-1" t-esc="state.data.tasks_hub ? state.data.tasks_hub.completed_count : 0"/>
+                            </button>
+                            <button type="button" class="pm-task-tab-btn"
+                                    t-att-class="state.taskTab === 'all' ? 'active' : ''"
+                                    t-on-click="() => this.setTaskTab('all')">
+                                <i class="fa fa-list me-1"></i>
+                                All Tasks
+                                <span class="badge rounded-pill bg-secondary ms-1" t-esc="state.data.tasks_hub ? state.data.tasks_hub.total_count : 0"/>
+                            </button>
+                        </div>
+
+                        <!-- Secondary Filters: Category, Consultant, Project, Search -->
+                        <div class="pm-tasks-controls">
+                            <!-- Category Filter -->
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button type="button" class="btn btn-outline-secondary pm-btn-filter"
+                                        t-att-class="state.taskCategoryFilter === 'all' ? 'active' : ''"
+                                        t-on-click="() => this.setTaskCategoryFilter('all')">
+                                    All Types
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary pm-btn-filter"
+                                        t-att-class="state.taskCategoryFilter === 'documentation' ? 'active' : ''"
+                                        t-on-click="() => this.setTaskCategoryFilter('documentation')">
+                                    <i class="fa fa-file-text-o me-1"></i> Docs
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary pm-btn-filter"
+                                        t-att-class="state.taskCategoryFilter === 'implementation' ? 'active' : ''"
+                                        t-on-click="() => this.setTaskCategoryFilter('implementation')">
+                                    <i class="fa fa-cogs me-1"></i> Impl
+                                </button>
+                            </div>
+
+                            <!-- Consultant Filter (For Team Leads, Managers, Executives) -->
+                            <t t-if="!state.data.user_info.is_consultant and state.data.tasks_hub and state.data.tasks_hub.available_consultants and state.data.tasks_hub.available_consultants.length > 0">
+                                <select class="form-select form-select-sm pm-select-filter"
+                                        t-on-change="setTaskConsultantFilter"
+                                        t-att-value="state.taskConsultantFilter">
+                                    <option value="all">👤 All Consultants</option>
+                                    <t t-foreach="state.data.tasks_hub.available_consultants" t-as="cons" t-key="cons.id">
+                                        <option t-att-value="cons.id"><t t-esc="cons.name"/></option>
+                                    </t>
+                                </select>
+                            </t>
+
+                            <!-- Project Filter (For Team Leads, Managers, Executives) -->
+                            <t t-if="!state.data.user_info.is_consultant and state.data.tasks_hub and state.data.tasks_hub.available_projects and state.data.tasks_hub.available_projects.length > 1">
+                                <select class="form-select form-select-sm pm-select-filter"
+                                        t-on-change="setTaskProjectFilter"
+                                        t-att-value="state.taskProjectFilter">
+                                    <option value="all">📁 All Projects</option>
+                                    <t t-foreach="state.data.tasks_hub.available_projects" t-as="prj" t-key="prj.id">
+                                        <option t-att-value="prj.id"><t t-esc="prj.name"/></option>
+                                    </t>
+                                </select>
+                            </t>
+
+                            <!-- Live Search Input -->
+                            <div class="pm-task-search-box">
+                                <i class="fa fa-search pm-search-icon"></i>
+                                <input type="text" class="form-control form-control-sm pm-task-search-input"
+                                       placeholder="Search tasks, codes, projects..."
+                                       t-on-input="onTaskSearchChange"
+                                       t-att-value="state.taskSearchQuery"/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tasks Table -->
+                    <div class="pm-mytasks-table-wrap">
+                        <table class="pm-mytasks-table">
+                            <thead>
+                                <tr>
+                                    <th>Code</th>
+                                    <th>Task Deliverable</th>
+                                    <th>Project</th>
+                                    <t t-if="!state.data.user_info.is_consultant">
+                                        <th>Assigned Employee</th>
+                                    </t>
+                                    <th>Category</th>
+                                    <th>Date Issued</th>
+                                    <th>Due Date</th>
+                                    <th>Status</th>
+                                    <th>Approval</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <t t-if="!this.filteredTasks or this.filteredTasks.length === 0">
+                                    <tr>
+                                        <td t-att-colspan="state.data.user_info.is_consultant ? 9 : 10" class="text-center py-5 text-muted">
+                                            <i class="fa fa-check-circle-o fa-2x mb-2 text-success d-block opacity-75"></i>
+                                            <div class="fw-bold fs-6">No tasks found matching your criteria.</div>
+                                            <p class="small text-muted mb-2">
+                                                <t t-if="state.taskTab === 'pending'">
+                                                    No pending tasks with issued dates currently need completion.
+                                                </t>
+                                                <t t-elif="state.taskTab === 'completed'">
+                                                    No completed tasks recorded yet.
+                                                </t>
+                                                <t t-else="">
+                                                    Try adjusting your search or filters.
+                                                </t>
+                                            </p>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" t-on-click="clearTaskFilters">
+                                                Reset Filters
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </t>
+                                <t t-else="">
+                                    <t t-foreach="this.filteredTasks" t-as="tsk" t-key="tsk.id">
+                                        <tr t-att-class="tsk.is_overdue ? 'pm-row-overdue' : ''">
+                                            <td>
+                                                <span class="pm-task-code" t-esc="tsk.code"/>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    <strong class="pm-clickable" t-on-click="() => this.openScope(tsk.id)" t-esc="tsk.name"/>
+                                                    <t t-if="tsk.rejection_reason and tsk.approval_state === 'rejected'">
+                                                        <div class="pm-rejection-alert">
+                                                            <i class="fa fa-exclamation-triangle me-1"></i> Re-Work: <t t-esc="tsk.rejection_reason"/>
+                                                        </div>
+                                                    </t>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="pm-text-truncate-project" t-esc="tsk.project_name" t-att-title="tsk.project_name"/>
+                                            </td>
+                                            <t t-if="!state.data.user_info.is_consultant">
+                                                <td>
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <span class="pm-avatar-mini">
+                                                            <t t-esc="tsk.responsible_name ? tsk.responsible_name[0] : '?'"/>
+                                                        </span>
+                                                        <span class="fw-semibold text-truncate" style="max-width: 130px;" t-esc="tsk.responsible_name"/>
+                                                    </div>
+                                                </td>
+                                            </t>
+                                            <td>
+                                                <span class="pm-cat-pill" t-att-class="tsk.category === 'Implementation' ? 'pm-cat-imp' : 'pm-cat-doc'">
+                                                    <i class="fa me-1" t-att-class="tsk.category === 'Implementation' ? 'fa-cogs' : 'fa-file-text-o'"></i>
+                                                    <t t-esc="tsk.category"/>
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="text-muted small" t-esc="tsk.start_date_str"/>
+                                            </td>
+                                            <td>
+                                                <span t-att-class="tsk.is_overdue ? 'text-danger fw-bold' : ''" t-esc="tsk.end_date_str"/>
+                                                <t t-if="tsk.is_overdue">
+                                                    <span class="badge bg-danger ms-1 small">LATE</span>
+                                                </t>
+                                            </td>
+                                            <td>
+                                                <span class="pm-badge" t-att-class="'pm-badge-' + tsk.state" t-esc="tsk.state_label"/>
+                                            </td>
+                                            <td>
+                                                <span class="pm-badge" t-att-class="'pm-badge-' + tsk.approval_state" t-esc="tsk.approval_stage_label"/>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-1">
+                                                    <t t-if="tsk.can_submit">
+                                                        <button class="pm-btn pm-btn-submit" t-on-click="() => this.submitTask(tsk.id)" title="Submit task for approval">
+                                                            <i class="fa fa-paper-plane me-1"></i> Submit
+                                                        </button>
+                                                    </t>
+                                                    <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(tsk.id)" title="View Details">
+                                                        View
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
                                     </t>
                                 </t>
                             </tbody>

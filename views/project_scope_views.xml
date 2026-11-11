@@ -1,38 +1,124 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
-    <!-- Scope List View -->
-    <record id="view_project_manage_scope_list" model="ir.ui.view">
-        <field name="name">project.manage.scope.list</field>
+    <!-- Documentation Tasks Dedicated List View (Exact layout matching Benchmark Sheet) -->
+    <record id="view_project_manage_scope_doc_list" model="ir.ui.view">
+        <field name="name">project.manage.scope.doc.list</field>
         <field name="model">project.manage.scope</field>
         <field name="arch" type="xml">
-            <list string="Scopes &amp; Tasks" editable="bottom" multi_edit="1">
-                <field name="scope" string="Scope"/>
-                <field name="name" string="Task / Item Name"/>
-                <field name="category" string="Category"/>
-                <field name="item_type" string="Type"/>
-                <field name="responsible_id" string="Responsible"/>
+            <list string="Documentation Tasks" editable="bottom" multi_edit="1">
+                <field name="can_edit_scope_fields" column_invisible="True"/>
+                <field name="scope_no" string="Scope No" readonly="not can_edit_scope_fields"/>
+                <field name="scope" string="Scope (Functional Area)" readonly="not can_edit_scope_fields"/>
+                <field name="item_no" string="Doc No" readonly="not can_edit_scope_fields"/>
+                <field name="name" string="Document Name" readonly="not can_edit_scope_fields"/>
+                <field name="item_type" string="Document Type" readonly="not can_edit_scope_fields"/>
+                <field name="approval_authority" string="Final Approval Authority" widget="badge" readonly="not can_edit_scope_fields"/>
+                <field name="accountable_id" string="Accountable" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="responsible_id" string="Responsible" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="start_date" string="Start Date" readonly="not can_edit_scope_fields"/>
+                <field name="end_date" string="End Date" readonly="not can_edit_scope_fields"/>
                 <field name="approval_state" string="Approval Stage" widget="badge"
                        decoration-info="approval_state == 'pending_tl'"
                        decoration-primary="approval_state == 'pending_pm'"
                        decoration-warning="approval_state == 'pending_vp'"
                        decoration-danger="approval_state == 'pending_ceo'"
                        decoration-success="approval_state == 'approved'"/>
-                <field name="state" string="Status" widget="selection"
+                <field name="state" string="Status" widget="selection" readonly="not can_edit_scope_fields"
                        decoration-info="state == 'todo'"
                        decoration-warning="state == 'in_progress'"
                        decoration-primary="state == 'under_review'"
                        decoration-success="state == 'done'"
                        decoration-danger="state == 'cancelled'"/>
-                <field name="start_date" string="Start Date"/>
-                <field name="end_date" string="End Date"/>
                 <field name="can_user_approve" column_invisible="True"/>
                 <button name="action_approve_level" string="Approve" type="object" icon="fa-check text-success"
                         invisible="not can_user_approve" class="btn-success btn-sm"/>
                 <button name="action_open_reject_wizard" string="Reject" type="object" icon="fa-times text-danger"
                         invisible="not can_user_approve" class="btn-danger btn-sm"/>
-                <field name="responsible" string="Responsible (Text)" optional="hide"/>
-                <field name="evidence_proof" string="Proof" optional="hide"/>
-                <field name="project_id" string="Project" optional="hide"/>
+                <field name="project_id" string="Project" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="item_id" string="Item ID" optional="hide" readonly="not can_edit_scope_fields"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Implementation Tasks Dedicated List View (Exact layout matching Benchmark Sheet) -->
+    <record id="view_project_manage_scope_imp_list" model="ir.ui.view">
+        <field name="name">project.manage.scope.imp.list</field>
+        <field name="model">project.manage.scope</field>
+        <field name="arch" type="xml">
+            <list string="Implementation Tasks" editable="bottom" multi_edit="1">
+                <field name="can_edit_scope_fields" column_invisible="True"/>
+                <field name="item_no" string="Activity No" readonly="not can_edit_scope_fields"/>
+                <field name="name" string="Implementation Activity" readonly="not can_edit_scope_fields"/>
+                <field name="item_type" string="Activity Type" readonly="not can_edit_scope_fields"/>
+                <field name="evidence_proof" string="Evidence / Proof" readonly="not can_edit_scope_fields"/>
+                <field name="approval_authority" string="Final Approval Authority" widget="badge" readonly="not can_edit_scope_fields"/>
+                <field name="accountable_id" string="Accountable" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="responsible_id" string="Responsible" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="start_date" string="Start Date" readonly="not can_edit_scope_fields"/>
+                <field name="end_date" string="End Date" readonly="not can_edit_scope_fields"/>
+                <field name="approval_state" string="Approval Stage" widget="badge"
+                       decoration-info="approval_state == 'pending_tl'"
+                       decoration-primary="approval_state == 'pending_pm'"
+                       decoration-warning="approval_state == 'pending_vp'"
+                       decoration-danger="approval_state == 'pending_ceo'"
+                       decoration-success="approval_state == 'approved'"/>
+                <field name="state" string="Status" widget="selection" readonly="not can_edit_scope_fields"
+                       decoration-info="state == 'todo'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-primary="state == 'under_review'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'cancelled'"/>
+                <field name="can_user_approve" column_invisible="True"/>
+                <button name="action_approve_level" string="Approve" type="object" icon="fa-check text-success"
+                        invisible="not can_user_approve" class="btn-success btn-sm"/>
+                <button name="action_open_reject_wizard" string="Reject" type="object" icon="fa-times text-danger"
+                        invisible="not can_user_approve" class="btn-danger btn-sm"/>
+                <field name="scope_no" string="Scope No" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="scope" string="Scope (Functional Area)" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="project_id" string="Project" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="item_id" string="Item ID" optional="hide" readonly="not can_edit_scope_fields"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- General Scope List View -->
+    <record id="view_project_manage_scope_list" model="ir.ui.view">
+        <field name="name">project.manage.scope.list</field>
+        <field name="model">project.manage.scope</field>
+        <field name="arch" type="xml">
+            <list string="Scopes &amp; Tasks" editable="bottom" multi_edit="1">
+                <field name="can_edit_scope_fields" column_invisible="True"/>
+                <field name="scope_no" string="Scope No" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="scope" string="Scope (Functional Area)" readonly="not can_edit_scope_fields"/>
+                <field name="category" string="Category" readonly="not can_edit_scope_fields"/>
+                <field name="item_no" string="Item / Doc / Act No" readonly="not can_edit_scope_fields"/>
+                <field name="name" string="Task / Item Name" readonly="not can_edit_scope_fields"/>
+                <field name="item_type" string="Type" readonly="not can_edit_scope_fields"/>
+                <field name="evidence_proof" string="Evidence / Proof" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="approval_authority" string="Final Approval Authority" widget="badge" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="accountable_id" string="Accountable" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="responsible_id" string="Responsible" widget="many2one_avatar_user" readonly="not can_edit_scope_fields"/>
+                <field name="start_date" string="Start Date" readonly="not can_edit_scope_fields"/>
+                <field name="end_date" string="End Date" readonly="not can_edit_scope_fields"/>
+                <field name="approval_state" string="Approval Stage" widget="badge"
+                       decoration-info="approval_state == 'pending_tl'"
+                       decoration-primary="approval_state == 'pending_pm'"
+                       decoration-warning="approval_state == 'pending_vp'"
+                       decoration-danger="approval_state == 'pending_ceo'"
+                       decoration-success="approval_state == 'approved'"/>
+                <field name="state" string="Status" widget="selection" readonly="not can_edit_scope_fields"
+                       decoration-info="state == 'todo'"
+                       decoration-warning="state == 'in_progress'"
+                       decoration-primary="state == 'under_review'"
+                       decoration-success="state == 'done'"
+                       decoration-danger="state == 'cancelled'"/>
+                <field name="can_user_approve" column_invisible="True"/>
+                <button name="action_approve_level" string="Approve" type="object" icon="fa-check text-success"
+                        invisible="not can_user_approve" class="btn-success btn-sm"/>
+                <button name="action_open_reject_wizard" string="Reject" type="object" icon="fa-times text-danger"
+                        invisible="not can_user_approve" class="btn-danger btn-sm"/>
+                <field name="project_id" string="Project" optional="show" readonly="not can_edit_scope_fields"/>
+                <field name="item_id" string="Item ID" optional="hide" readonly="not can_edit_scope_fields"/>
             </list>
         </field>
     </record>
@@ -68,27 +154,33 @@
                             <field name="document_count" widget="statinfo" string="Documents"/>
                         </button>
                     </div>
+                    <field name="can_edit_scope_fields" invisible="1"/>
                     <div class="oe_title">
-                        <label for="name" string="Item Name"/>
+                        <label for="name" string="Document Name" invisible="category != 'Documentation'"/>
+                        <label for="name" string="Implementation Activity" invisible="category == 'Documentation'"/>
                         <h1>
-                            <field name="name" placeholder="Item Name / Activity description..."/>
+                            <field name="name" placeholder="Document Name or Implementation Activity..." readonly="not can_edit_scope_fields"/>
                         </h1>
                     </div>
                     <group>
                         <group string="Scope Details">
-                            <field name="item_id"/>
-                            <field name="scope_no"/>
-                            <field name="scope"/>
-                            <field name="category"/>
-                            <field name="item_no"/>
-                            <field name="item_type"/>
+                            <field name="item_id" readonly="not can_edit_scope_fields"/>
+                            <field name="scope_no" readonly="not can_edit_scope_fields"/>
+                            <field name="scope" string="Scope (Functional Area)" readonly="not can_edit_scope_fields"/>
+                            <field name="category" readonly="not can_edit_scope_fields"/>
+                            <field name="item_no" string="Doc No" invisible="category != 'Documentation'" readonly="not can_edit_scope_fields"/>
+                            <field name="item_no" string="Activity No" invisible="category == 'Documentation'" readonly="not can_edit_scope_fields"/>
+                            <field name="item_type" string="Document Type" invisible="category != 'Documentation'" readonly="not can_edit_scope_fields"/>
+                            <field name="item_type" string="Activity Type" invisible="category == 'Documentation'" readonly="not can_edit_scope_fields"/>
+                            <field name="evidence_proof" string="Evidence / Proof" invisible="category != 'Implementation'" readonly="not can_edit_scope_fields"/>
                         </group>
-                        <group string="Project &amp; Schedule">
-                            <field name="project_id"/>
-                            <field name="evidence_proof" invisible="category != 'Implementation'"/>
-                            <field name="responsible_id"/>
-                            <field name="start_date"/>
-                            <field name="end_date"/>
+                        <group string="Governance, Accountability &amp; Schedule">
+                            <field name="project_id" readonly="not can_edit_scope_fields"/>
+                            <field name="approval_authority" string="Final Approval Authority" readonly="not can_edit_scope_fields"/>
+                            <field name="accountable_id" string="Accountable" readonly="not can_edit_scope_fields"/>
+                            <field name="responsible_id" string="Responsible" readonly="not can_edit_scope_fields"/>
+                            <field name="start_date" string="Start Date" readonly="not can_edit_scope_fields"/>
+                            <field name="end_date" string="End Date" readonly="not can_edit_scope_fields"/>
                         </group>
                     </group>
                     <notebook>
@@ -116,7 +208,7 @@
                         </page>
                         <page string="Approval History &amp; Audit Trail" name="approval_history">
                             <field name="approval_log_ids" readonly="1">
-                                <list decoration-success="action == 'approve'" decoration-danger="action == 'reject'" decoration-warning="action == 'submit'">
+                                <list decoration-success="action == 'approve'" decoration-danger="action == 'reject'" decoration-warning="action == 'submit'" decoration-info="action == 'start'">
                                     <field name="date" string="Date &amp; Time"/>
                                     <field name="user_id" string="Action By"/>
                                     <field name="role_name" string="Approver Role"/>
@@ -140,15 +232,16 @@
         <field name="model">project.manage.scope</field>
         <field name="arch" type="xml">
             <search string="Search Scopes &amp; Tasks">
-                <field name="name" string=" Name"/>
+                <field name="name" string="Task / Document Name"/>
                 <field name="id"/>
-                <field name="scope" string="Scope"/>
+                <field name="scope" string="Scope (Functional Area)"/>
                 <field name="scope_no"/>
                 <field name="category"/>
                 <field name="item_type"/>
                 <field name="project_id"/>
+                <field name="accountable_id"/>
                 <field name="responsible_id"/>
-                <field name="responsible"/>
+                <field name="approval_authority"/>
                 <separator/>
                 <filter name="f_doc" string="Documentation" domain="[('category', '=', 'Documentation')]"/>
                 <filter name="f_imp" string="Implementation" domain="[('category', '=', 'Implementation')]"/>
@@ -171,7 +264,9 @@
                 <group>
                     <filter name="g_scope" string="Scope" context="{'group_by': 'scope'}"/>
                     <filter name="g_category" string="Category" context="{'group_by': 'category'}"/>
+                    <filter name="g_accountable" string="Accountable" context="{'group_by': 'accountable_id'}"/>
                     <filter name="g_responsible" string="Responsible" context="{'group_by': 'responsible_id'}"/>
+                    <filter name="g_approver_auth" string="Final Approval Authority" context="{'group_by': 'approval_authority'}"/>
                     <filter name="g_project" string="Project" context="{'group_by': 'project_id'}"/>
                     <filter name="g_type" string="Item Type" context="{'group_by': 'item_type'}"/>
                     <filter name="g_state" string="Status" context="{'group_by': 'state'}"/>
@@ -190,7 +285,7 @@
                 <field name="category"/>
                 <field name="scope"/>
                 <field name="item_type"/>
-                <field name="responsible"/>
+                <field name="responsible_id"/>
                 <field name="end_date"/>
                 <field name="color"/>
                 <field name="document_count"/>
@@ -223,9 +318,9 @@
                                     </span>
                                 </div>
                                 <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top small text-muted">
-                                    <div class="d-flex align-items-center text-truncate me-2" invisible="not responsible">
+                                    <div class="d-flex align-items-center text-truncate me-2" invisible="not responsible_id">
                                         <i class="fa fa-user-circle me-1" title="Responsible" role="img" aria-label="Responsible"/>
-                                        <field name="responsible"/>
+                                        <field name="responsible_id"/>
                                     </div>
                                     <div class="d-flex align-items-center text-nowrap ms-auto" invisible="not end_date">
                                         <i class="fa fa-calendar me-1" title="Due Date" role="img" aria-label="Due Date"/>
@@ -245,6 +340,7 @@
         <field name="name">Scopes</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,form</field>
+        <field name="view_id" ref="view_project_manage_scope_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
@@ -253,12 +349,14 @@
         </field>
     </record>
 
+    <!-- Documentation Tasks Action -->
     <record id="action_project_manage_documentation" model="ir.actions.act_window">
         <field name="name">Documentation Tasks</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Documentation')]</field>
-        <field name="context">{'default_category': 'Documentation'}</field>
+        <field name="context">{'default_category': 'Documentation', 'search_default_f_doc': 1}</field>
+        <field name="view_id" ref="view_project_manage_scope_doc_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
@@ -267,18 +365,62 @@
         </field>
     </record>
 
+    <record id="action_project_manage_documentation_view_list" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_project_manage_scope_doc_list"/>
+        <field name="act_window_id" ref="action_project_manage_documentation"/>
+    </record>
+
+    <record id="action_project_manage_documentation_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="view_project_manage_scope_kanban"/>
+        <field name="act_window_id" ref="action_project_manage_documentation"/>
+    </record>
+
+    <record id="action_project_manage_documentation_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="3"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_project_manage_scope_form"/>
+        <field name="act_window_id" ref="action_project_manage_documentation"/>
+    </record>
+
+    <!-- Implementation Tasks Action -->
     <record id="action_project_manage_implementation" model="ir.actions.act_window">
         <field name="name">Implementation Tasks</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Implementation')]</field>
-        <field name="context">{'default_category': 'Implementation'}</field>
+        <field name="context">{'default_category': 'Implementation', 'search_default_f_imp': 1}</field>
+        <field name="view_id" ref="view_project_manage_scope_imp_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Manage all implementation activities and execution proof across scopes.
             </p>
         </field>
+    </record>
+
+    <record id="action_project_manage_implementation_view_list" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_project_manage_scope_imp_list"/>
+        <field name="act_window_id" ref="action_project_manage_implementation"/>
+    </record>
+
+    <record id="action_project_manage_implementation_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="view_project_manage_scope_kanban"/>
+        <field name="act_window_id" ref="action_project_manage_implementation"/>
+    </record>
+
+    <record id="action_project_manage_implementation_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="3"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_project_manage_scope_form"/>
+        <field name="act_window_id" ref="action_project_manage_implementation"/>
     </record>
 
     <!-- Configuration > Documentation (All Documents Master View) -->
@@ -288,6 +430,7 @@
         <field name="view_mode">list,kanban,form</field>
         <field name="domain">[('category', '=', 'Documentation')]</field>
         <field name="context">{'default_category': 'Documentation'}</field>
+        <field name="view_id" ref="view_project_manage_scope_doc_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">

@@ -89,13 +89,24 @@
                         <page string="Scopes &amp; Tasks" name="scopes">
                             <field name="scope_ids">
                                 <list editable="bottom">
+                                    <field name="scope_no" string="Scope No" optional="show"/>
                                     <field name="scope" string="Scope"/>
+                                    <field name="item_no" string="Item No" optional="show"/>
                                     <field name="name" string="Task / Item Name"/>
                                     <field name="category" string="Category"/>
                                     <field name="item_type" string="Type"/>
-                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="evidence_proof" string="Proof" optional="show"/>
+                                    <field name="approval_authority" string="Final Approver" widget="badge" optional="show"/>
+                                    <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
+                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date" optional="show"/>
+                                    <field name="approval_state" string="Approval Stage" widget="badge" optional="show"
+                                           decoration-info="approval_state == 'pending_tl'"
+                                           decoration-primary="approval_state == 'pending_pm'"
+                                           decoration-warning="approval_state == 'pending_vp'"
+                                           decoration-danger="approval_state == 'pending_ceo'"
+                                           decoration-success="approval_state == 'approved'"/>
                                     <field name="state" string="Status" widget="selection"
                                            decoration-info="state == 'todo'"
                                            decoration-warning="state == 'in_progress'"
@@ -107,12 +118,22 @@
                         <page string="Documentation Tasks" name="doc_tasks">
                             <field name="doc_scope_ids">
                                 <list editable="bottom">
-                                    <field name="scope" string="Scope"/>
+                                    <field name="scope_no" string="Scope No"/>
+                                    <field name="scope" string="Scope (Functional Area)"/>
+                                    <field name="item_no" string="Doc No"/>
                                     <field name="name" string="Document Name"/>
                                     <field name="item_type" string="Document Type"/>
-                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="approval_authority" string="Final Approval Authority" widget="badge"/>
+                                    <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
+                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
+                                    <field name="approval_state" string="Approval Stage" widget="badge" optional="show"
+                                           decoration-info="approval_state == 'pending_tl'"
+                                           decoration-primary="approval_state == 'pending_pm'"
+                                           decoration-warning="approval_state == 'pending_vp'"
+                                           decoration-danger="approval_state == 'pending_ceo'"
+                                           decoration-success="approval_state == 'approved'"/>
                                     <field name="state" string="Status" widget="selection"
                                            decoration-info="state == 'todo'"
                                            decoration-warning="state == 'in_progress'"
@@ -124,18 +145,28 @@
                         <page string="Implementation Tasks" name="imp_tasks">
                             <field name="imp_scope_ids">
                                 <list editable="bottom">
-                                    <field name="scope" string="Scope"/>
-                                    <field name="name" string="Activity Name"/>
+                                    <field name="item_no" string="Activity No"/>
+                                    <field name="name" string="Implementation Activity"/>
                                     <field name="item_type" string="Activity Type"/>
                                     <field name="evidence_proof" string="Evidence / Proof"/>
-                                    <field name="responsible_id" string="Responsible"/>
+                                    <field name="approval_authority" string="Final Approval Authority" widget="badge"/>
+                                    <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
+                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
+                                    <field name="approval_state" string="Approval Stage" widget="badge" optional="show"
+                                           decoration-info="approval_state == 'pending_tl'"
+                                           decoration-primary="approval_state == 'pending_pm'"
+                                           decoration-warning="approval_state == 'pending_vp'"
+                                           decoration-danger="approval_state == 'pending_ceo'"
+                                           decoration-success="approval_state == 'approved'"/>
                                     <field name="state" string="Status" widget="selection"
                                            decoration-info="state == 'todo'"
                                            decoration-warning="state == 'in_progress'"
                                            decoration-primary="state == 'under_review'"
                                            decoration-success="state == 'done'"/>
+                                    <field name="scope_no" string="Scope No" optional="hide"/>
+                                    <field name="scope" string="Scope" optional="show"/>
                                 </list>
                             </field>
                         </page>
