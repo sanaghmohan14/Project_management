@@ -6,6 +6,7 @@
         <field name="model">project.manage.task</field>
         <field name="arch" type="xml">
             <list string="Documentation Tasks">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="scope_no" string="Scope No."/>
                 <field name="scope_id"/>
                 <field name="item_no" string="Doc No."/>
@@ -33,6 +34,7 @@
         <field name="model">project.manage.task</field>
         <field name="arch" type="xml">
             <list string="Implementation Tasks">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="scope_no" string="Scope No."/>
                 <field name="scope_id"/>
                 <field name="item_no" string="Act No."/>
@@ -78,7 +80,10 @@
                     <div class="oe_title">
                         <label for="name" string="Task / Item Name"/>
                         <h1>
-                            <field name="name" placeholder="Task description..."/>
+                            <div class="d-flex align-items-center">
+                                <field name="priority" widget="priority" class="me-3"/>
+                                <field name="name" placeholder="Task description..."/>
+                            </div>
                         </h1>
                     </div>
                     <group>
@@ -124,11 +129,14 @@
         <field name="arch" type="xml">
             <search string="Search Tasks">
                 <field name="name"/>
+                <field name="priority"/>
                 <field name="item_id"/>
                 <field name="scope_id"/>
                 <field name="project_id"/>
                 <field name="item_type"/>
                 <field name="responsible_id"/>
+                <separator/>
+                <filter name="f_starred" string="Starred / High Priority" domain="[('priority', 'in', ('2', '3'))]"/>
                 <separator/>
                 <filter name="f_doc" string="Documentation" domain="[('category', '=', 'documentation')]"/>
                 <filter name="f_imp" string="Implementation" domain="[('category', '=', 'implementation')]"/>
@@ -139,6 +147,7 @@
                 <filter name="f_done" string="Done" domain="[('state', '=', 'done')]"/>
                 <separator/>
                 <group>
+                    <filter name="g_priority" string="Priority" context="{'group_by': 'priority'}"/>
                     <filter name="g_scope" string="Scope" context="{'group_by': 'scope_id'}"/>
                     <filter name="g_project" string="Project" context="{'group_by': 'project_id'}"/>
                     <filter name="g_type" string="Item Type" context="{'group_by': 'item_type'}"/>

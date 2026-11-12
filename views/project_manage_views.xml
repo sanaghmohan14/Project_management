@@ -89,6 +89,7 @@
                         <page string="Scopes &amp; Tasks" name="scopes">
                             <field name="scope_ids">
                                 <list editable="bottom">
+                                    <field name="priority" widget="priority" optional="show" nolabel="1"/>
                                     <field name="scope_no" string="Scope No" optional="show"/>
                                     <field name="scope" string="Scope"/>
                                     <field name="item_no" string="Item No" optional="show"/>
@@ -118,6 +119,7 @@
                         <page string="Documentation Tasks" name="doc_tasks">
                             <field name="doc_scope_ids">
                                 <list editable="bottom">
+                                    <field name="priority" widget="priority" optional="show" nolabel="1"/>
                                     <field name="scope_no" string="Scope No"/>
                                     <field name="scope" string="Scope (Functional Area)"/>
                                     <field name="item_no" string="Doc No"/>
@@ -145,6 +147,7 @@
                         <page string="Implementation Tasks" name="imp_tasks">
                             <field name="imp_scope_ids">
                                 <list editable="bottom">
+                                    <field name="priority" widget="priority" optional="show" nolabel="1"/>
                                     <field name="item_no" string="Activity No"/>
                                     <field name="name" string="Implementation Activity"/>
                                     <field name="item_type" string="Activity Type"/>
@@ -262,10 +265,13 @@
         <field name="arch" type="xml">
             <search string="Projects">
                 <field name="name"/>
+                <field name="priority"/>
                 <field name="team_id"/>
                 <field name="partner_id"/>
                 <field name="manager_id"/>
                 <field name="tag_ids"/>
+                <separator/>
+                <filter name="f_starred" string="Starred / High Priority" domain="[('priority', 'in', ('2', '3'))]"/>
                 <separator/>
                 <filter name="f_todo" string="To Do" domain="[('state','=','todo')]"/>
                 <filter name="f_progress" string="In Progress" domain="[('state','=','in_progress')]"/>
@@ -273,6 +279,7 @@
                 <filter name="f_cancel" string="Cancelled" domain="[('state','=','cancelled')]"/>
                 <separator/>
                 <group>
+                    <filter name="g_priority" string="Priority" context="{'group_by':'priority'}"/>
                     <filter name="g_team" string="Project Team" context="{'group_by':'team_id'}"/>
                     <filter name="g_state" string="Stage" context="{'group_by':'state'}"/>
                     <filter name="g_client" string="Client" context="{'group_by':'partner_id'}"/>

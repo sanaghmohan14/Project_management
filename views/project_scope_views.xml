@@ -6,6 +6,7 @@
         <field name="model">project.manage.scope</field>
         <field name="arch" type="xml">
             <list string="Documentation Tasks" editable="bottom" multi_edit="1">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="can_edit_scope_fields" column_invisible="True"/>
                 <field name="scope_no" string="Scope No" readonly="not can_edit_scope_fields"/>
                 <field name="scope" string="Scope (Functional Area)" readonly="not can_edit_scope_fields"/>
@@ -46,6 +47,7 @@
         <field name="model">project.manage.scope</field>
         <field name="arch" type="xml">
             <list string="Implementation Tasks" editable="bottom" multi_edit="1">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="can_edit_scope_fields" column_invisible="True"/>
                 <field name="item_no" string="Activity No" readonly="not can_edit_scope_fields"/>
                 <field name="name" string="Implementation Activity" readonly="not can_edit_scope_fields"/>
@@ -87,6 +89,7 @@
         <field name="model">project.manage.scope</field>
         <field name="arch" type="xml">
             <list string="Scopes &amp; Tasks" editable="bottom" multi_edit="1">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="can_edit_scope_fields" column_invisible="True"/>
                 <field name="scope_no" string="Scope No" optional="show" readonly="not can_edit_scope_fields"/>
                 <field name="scope" string="Scope (Functional Area)" readonly="not can_edit_scope_fields"/>
@@ -130,10 +133,11 @@
         <field name="arch" type="xml">
             <form string="Scope / Task Item">
                 <header>
+                    <field name="can_current_user_complete" invisible="1"/>
                     <button name="action_start" string="Start Task" type="object" class="btn-primary"
-                            invisible="state != 'todo'"/>
+                            invisible="state != 'todo' or not can_current_user_complete"/>
                     <button name="action_submit_for_approval" string="Submit for Approval" type="object" class="btn-warning"
-                            invisible="approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo') or state == 'done'"/>
+                            invisible="not can_current_user_complete or approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo') or state == 'done'"/>
                     <button name="action_approve_level" string="Approve" type="object" class="btn-success"
                             invisible="not can_user_approve"/>
                     <button name="action_open_reject_wizard" string="Reject / Request Re-Work" type="object" class="btn-danger"
@@ -159,7 +163,10 @@
                         <label for="name" string="Document Name" invisible="category != 'Documentation'"/>
                         <label for="name" string="Implementation Activity" invisible="category == 'Documentation'"/>
                         <h1>
-                            <field name="name" placeholder="Document Name or Implementation Activity..." readonly="not can_edit_scope_fields"/>
+                            <div class="d-flex align-items-center">
+                                <field name="priority" widget="priority" class="me-3"/>
+                                <field name="name" placeholder="Document Name or Implementation Activity..." readonly="not can_edit_scope_fields"/>
+                            </div>
                         </h1>
                     </div>
                     <group>
@@ -234,6 +241,7 @@
             <search string="Search Scopes &amp; Tasks">
                 <field name="name" string="Task / Document Name"/>
                 <field name="id"/>
+                <field name="priority"/>
                 <field name="scope" string="Scope (Functional Area)"/>
                 <field name="scope_no"/>
                 <field name="category"/>
@@ -242,6 +250,8 @@
                 <field name="accountable_id"/>
                 <field name="responsible_id"/>
                 <field name="approval_authority"/>
+                <separator/>
+                <filter name="f_starred" string="Starred / High Priority" domain="[('priority', 'in', ('2', '3'))]"/>
                 <separator/>
                 <filter name="f_doc" string="Documentation" domain="[('category', '=', 'Documentation')]"/>
                 <filter name="f_imp" string="Implementation" domain="[('category', '=', 'Implementation')]"/>
@@ -261,11 +271,18 @@
                 <filter name="f_review" string="Under Review" domain="[('state', '=', 'under_review')]"/>
                 <filter name="f_done" string="Done" domain="[('state', '=', 'done')]"/>
                 <separator/>
+                <filter name="f_today" string="Today" domain="[('start_date', '&lt;=', context_today().strftime('%Y-%m-%d')), ('end_date', '&gt;=', context_today().strftime('%Y-%m-%d'))]"/>
+                <filter name="f_this_week" string="This Week" domain="[('end_date', '&gt;=', (context_today() - datetime.timedelta(days=context_today().weekday())).strftime('%Y-%m-%d')), ('start_date', '&lt;=', (context_today() + datetime.timedelta(days=6 - context_today().weekday())).strftime('%Y-%m-%d'))]"/>
+                <filter name="f_this_month" string="This Month" domain="[('end_date', '&gt;=', context_today().strftime('%Y-%m-01'))]"/>
+                <separator/>
                 <group>
+                    <filter name="g_priority" string="Priority" context="{'group_by': 'priority'}"/>
                     <filter name="g_scope" string="Scope" context="{'group_by': 'scope'}"/>
                     <filter name="g_category" string="Category" context="{'group_by': 'category'}"/>
                     <filter name="g_accountable" string="Accountable" context="{'group_by': 'accountable_id'}"/>
                     <filter name="g_responsible" string="Responsible" context="{'group_by': 'responsible_id'}"/>
+                    <filter name="g_start_date" string="Start Date" context="{'group_by': 'start_date'}"/>
+                    <filter name="g_end_date" string="Deadline (End Date)" context="{'group_by': 'end_date'}"/>
                     <filter name="g_approver_auth" string="Final Approval Authority" context="{'group_by': 'approval_authority'}"/>
                     <filter name="g_project" string="Project" context="{'group_by': 'project_id'}"/>
                     <filter name="g_type" string="Item Type" context="{'group_by': 'item_type'}"/>
@@ -282,6 +299,7 @@
         <field name="arch" type="xml">
             <kanban default_group_by="state" quick_create="false" sample="1">
                 <field name="state"/>
+                <field name="priority"/>
                 <field name="category"/>
                 <field name="scope"/>
                 <field name="item_type"/>
@@ -294,11 +312,12 @@
                         <main>
                             <div class="d-flex flex-column gap-1">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <span class="badge text-bg-light border text-truncate fw-normal" style="max-width: 65%;">
+                                    <span class="badge text-bg-light border text-truncate fw-normal" style="max-width: 60%;">
                                         <i class="fa fa-folder-open-o me-1" title="Scope" role="img" aria-label="Scope"/>
                                         <field name="scope"/>
                                     </span>
                                     <div class="d-flex gap-1 align-items-center">
+                                        <field name="priority" widget="priority"/>
                                         <span invisible="document_count == 0" class="badge text-bg-light border text-secondary" title="Uploaded Documents">
                                             <i class="fa fa-paperclip me-1" title="Files" role="img" aria-label="Files"/>
                                             <field name="document_count"/>
@@ -335,11 +354,37 @@
         </field>
     </record>
 
+    <!-- Scope & Task Calendar View -->
+    <record id="view_project_manage_scope_calendar" model="ir.ui.view">
+        <field name="name">project.manage.scope.calendar</field>
+        <field name="model">project.manage.scope</field>
+        <field name="arch" type="xml">
+            <calendar string="Tasks Calendar"
+                      date_start="start_date"
+                      date_stop="end_date"
+                      mode="month"
+                      color="responsible_id"
+                      event_limit="5"
+                      hide_time="true"
+                      event_open_popup="true"
+                      quick_create="0"
+                      scales="day,week,month,year">
+                <field name="name" string="Task"/>
+                <field name="project_id"/>
+                <field name="responsible_id" widget="many2one_avatar" avatar_field="image_128" filters="1"/>
+                <field name="priority" widget="priority"/>
+                <field name="state" widget="badge"/>
+                <field name="approval_state" widget="badge"/>
+                <field name="category"/>
+            </calendar>
+        </field>
+    </record>
+
     <!-- Main Window Actions -->
     <record id="action_project_manage_scope" model="ir.actions.act_window">
         <field name="name">Scopes</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="view_mode">list,kanban,calendar,form</field>
         <field name="view_id" ref="view_project_manage_scope_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
@@ -349,11 +394,56 @@
         </field>
     </record>
 
+    <!-- Dedicated Tasks Calendar Action -->
+    <record id="action_project_manage_scope_calendar" model="ir.actions.act_window">
+        <field name="name">Tasks Calendar</field>
+        <field name="res_model">project.manage.scope</field>
+        <field name="view_mode">calendar,list,kanban,form</field>
+        <field name="view_id" ref="view_project_manage_scope_calendar"/>
+        <field name="search_view_id" ref="view_project_manage_scope_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                No tasks scheduled on the calendar!
+            </p>
+            <p>
+                Schedule and track all tasks across all users in Month, Week, and Day views.
+            </p>
+        </field>
+    </record>
+
+    <record id="action_project_manage_scope_calendar_view_cal" model="ir.actions.act_window.view">
+        <field name="sequence" eval="1"/>
+        <field name="view_mode">calendar</field>
+        <field name="view_id" ref="view_project_manage_scope_calendar"/>
+        <field name="act_window_id" ref="action_project_manage_scope_calendar"/>
+    </record>
+
+    <record id="action_project_manage_scope_calendar_view_list" model="ir.actions.act_window.view">
+        <field name="sequence" eval="2"/>
+        <field name="view_mode">list</field>
+        <field name="view_id" ref="view_project_manage_scope_list"/>
+        <field name="act_window_id" ref="action_project_manage_scope_calendar"/>
+    </record>
+
+    <record id="action_project_manage_scope_calendar_view_kanban" model="ir.actions.act_window.view">
+        <field name="sequence" eval="3"/>
+        <field name="view_mode">kanban</field>
+        <field name="view_id" ref="view_project_manage_scope_kanban"/>
+        <field name="act_window_id" ref="action_project_manage_scope_calendar"/>
+    </record>
+
+    <record id="action_project_manage_scope_calendar_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="4"/>
+        <field name="view_mode">form</field>
+        <field name="view_id" ref="view_project_manage_scope_form"/>
+        <field name="act_window_id" ref="action_project_manage_scope_calendar"/>
+    </record>
+
     <!-- Documentation Tasks Action -->
     <record id="action_project_manage_documentation" model="ir.actions.act_window">
         <field name="name">Documentation Tasks</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="view_mode">list,kanban,calendar,form</field>
         <field name="domain">[('category', '=', 'Documentation')]</field>
         <field name="context">{'default_category': 'Documentation', 'search_default_f_doc': 1}</field>
         <field name="view_id" ref="view_project_manage_scope_doc_list"/>
@@ -379,8 +469,15 @@
         <field name="act_window_id" ref="action_project_manage_documentation"/>
     </record>
 
-    <record id="action_project_manage_documentation_view_form" model="ir.actions.act_window.view">
+    <record id="action_project_manage_documentation_view_calendar" model="ir.actions.act_window.view">
         <field name="sequence" eval="3"/>
+        <field name="view_mode">calendar</field>
+        <field name="view_id" ref="view_project_manage_scope_calendar"/>
+        <field name="act_window_id" ref="action_project_manage_documentation"/>
+    </record>
+
+    <record id="action_project_manage_documentation_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="4"/>
         <field name="view_mode">form</field>
         <field name="view_id" ref="view_project_manage_scope_form"/>
         <field name="act_window_id" ref="action_project_manage_documentation"/>
@@ -390,7 +487,7 @@
     <record id="action_project_manage_implementation" model="ir.actions.act_window">
         <field name="name">Implementation Tasks</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="view_mode">list,kanban,calendar,form</field>
         <field name="domain">[('category', '=', 'Implementation')]</field>
         <field name="context">{'default_category': 'Implementation', 'search_default_f_imp': 1}</field>
         <field name="view_id" ref="view_project_manage_scope_imp_list"/>
@@ -416,8 +513,15 @@
         <field name="act_window_id" ref="action_project_manage_implementation"/>
     </record>
 
-    <record id="action_project_manage_implementation_view_form" model="ir.actions.act_window.view">
+    <record id="action_project_manage_implementation_view_calendar" model="ir.actions.act_window.view">
         <field name="sequence" eval="3"/>
+        <field name="view_mode">calendar</field>
+        <field name="view_id" ref="view_project_manage_scope_calendar"/>
+        <field name="act_window_id" ref="action_project_manage_implementation"/>
+    </record>
+
+    <record id="action_project_manage_implementation_view_form" model="ir.actions.act_window.view">
+        <field name="sequence" eval="4"/>
         <field name="view_mode">form</field>
         <field name="view_id" ref="view_project_manage_scope_form"/>
         <field name="act_window_id" ref="action_project_manage_implementation"/>

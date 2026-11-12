@@ -825,6 +825,7 @@ export class ProjectManageDashboard extends Component {
                 category: item.category || 'Documentation',
                 name: item.name || '',
                 item_type: item.item_type || '',
+                priority: item.priority ? String(item.priority) : '0',
                 responsible_id: item.responsible_id ? String(item.responsible_id) : '',
                 start_date: item.start_date || '',
                 end_date: item.end_date || '',
@@ -838,6 +839,7 @@ export class ProjectManageDashboard extends Component {
                 category: this.state.activeCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation',
                 name: '',
                 item_type: '',
+                priority: '0',
                 responsible_id: '',
                 start_date: '',
                 end_date: '',
@@ -845,6 +847,35 @@ export class ProjectManageDashboard extends Component {
             };
         }
         this.state.scopeWizardOpen = true;
+    }
+
+    isStarActive(priority, star) {
+        return (Number(priority) || 0) >= star;
+    }
+
+    setWizardPriority(star) {
+        const cur = parseInt(this.state.wizardData.priority || '0');
+        if (cur === star) {
+            this.state.wizardData.priority = '0';
+        } else {
+            this.state.wizardData.priority = String(star);
+        }
+    }
+
+    async toggleScopePriority(item, star, ev) {
+        if (ev) ev.stopPropagation();
+        const cur = parseInt(item.priority || '0');
+        const nextVal = (cur === star) ? '0' : String(star);
+        item.priority = nextVal;
+        try {
+            await this.orm.call("project.manage", "save_scope_inline", [item.id, { priority: nextVal }]);
+            if (this.notification) {
+                const labels = { '0': 'Normal', '1': 'Low (1 Star)', '2': 'High (2 Stars)', '3': 'Very High (3 Stars)' };
+                this.notification.add(`Priority set to ${labels[nextVal]}`, { type: "info" });
+            }
+        } catch (err) {
+            console.error("Failed to update priority inline:", err);
+        }
     }
 
     closeScopeWizard() {
@@ -868,6 +899,7 @@ export class ProjectManageDashboard extends Component {
                 category: this.state.wizardData.category,
                 name: this.state.wizardData.name,
                 item_type: this.state.wizardData.item_type,
+                priority: this.state.wizardData.priority || '0',
                 responsible_id: this.state.wizardData.responsible_id,
                 start_date: this.state.wizardData.start_date,
                 end_date: this.state.wizardData.end_date,

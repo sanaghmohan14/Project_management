@@ -4052,6 +4052,59 @@ body.o_dark_theme .pm-dashboard-wrapper {
     }
 }
 
+/* Priority 3-Star Badges & Selectors */
+.pm-priority-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.95rem;
+    white-space: nowrap;
+
+    .fa-star {
+        color: #f59e0b !important;
+    }
+
+    .fa-star-o {
+        color: #94a3b8;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+        transition: transform 0.12s ease;
+        &:hover {
+            transform: scale(1.25);
+            color: #d97706 !important;
+        }
+    }
+}
+
+.pm-priority-stars-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+
+    .fa {
+        font-size: 1.45rem;
+        cursor: pointer;
+        transition: transform 0.15s ease, color 0.15s ease;
+
+        &:hover {
+            transform: scale(1.25);
+            color: #d97706 !important;
+        }
+    }
+
+    .fa-star {
+        color: #f59e0b !important;
+    }
+
+    .fa-star-o {
+        color: #94a3b8;
+    }
+}
+
+
 // Global Dark Mode badge visibility rules (matches Odoo 19 dark mode)
 [data-color-scheme="dark"],
 body.o_dark_theme {
@@ -4084,3 +4137,56 @@ body.o_dark_theme {
         border: 1px solid #334155 !important;
     }
 }
+
+/* Priority 3-Star Badges & Selectors */
+.pm-priority-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.95rem;
+    white-space: nowrap;
+
+    .fa-star {
+        color: #f59e0b !important;
+    }
+
+    .fa-star-o {
+        color: #94a3b8;
+    }
+
+    .cursor-pointer {
+        cursor: pointer;
+        transition: transform 0.12s ease;
+        &:hover {
+            transform: scale(1.25);
+            color: #d97706 !important;
+        }
+    }
+}
+
+.pm-priority-stars-selector {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    user-select: none;
+
+    .fa {
+        font-size: 1.45rem;
+        cursor: pointer;
+        transition: transform 0.15s ease, color 0.15s ease;
+
+        &:hover {
+            transform: scale(1.25);
+            color: #d97706 !important;
+        }
+    }
+
+    .fa-star {
+        color: #f59e0b !important;
+    }
+
+    .fa-star-o {
+        color: #94a3b8;
+    }
+}
+

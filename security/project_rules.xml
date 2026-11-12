@@ -53,11 +53,11 @@
         <field name="groups" eval="[(4, ref('group_project_manage_team_lead'))]"/>
     </record>
 
-    <!-- Consultant: Access only their assigned team -->
+    <!-- Consultant: Read-only access to teams -->
     <record id="rule_project_manage_team_consultant" model="ir.rule">
         <field name="name">Consultant Assigned Team Access</field>
         <field name="model_id" ref="model_project_manage_team"/>
-        <field name="domain_force">[('member_ids', 'in', [user.id])]</field>
+        <field name="domain_force">[(1, '=', 1)]</field>
         <field name="groups" eval="[(4, ref('group_project_manage_consultant'))]"/>
     </record>
 
@@ -77,9 +77,10 @@
     <record id="rule_project_scope_mgr_tl" model="ir.rule">
         <field name="name">Team Lead Scopes Access</field>
         <field name="model_id" ref="model_project_manage_scope"/>
-        <field name="domain_force">['|', ('project_id', '=', False), '|', '|',
+        <field name="domain_force">['|', ('project_id', '=', False), '|', '|', '|',
             ('project_id.team_lead_id.user_id', '=', user.id),
             ('project_id.team_id.team_lead_id', '=', user.id),
+            ('project_id.manager_id.user_id', '=', user.id),
             ('responsible_id.user_id', '=', user.id)]</field>
         <field name="groups" eval="[(4, ref('group_project_manage_team_lead'))]"/>
     </record>
@@ -95,11 +96,16 @@
         <field name="groups" eval="[(4, ref('group_project_manage_consultant'))]"/>
     </record>
 
-    <!-- Consultant: Scopes / Tasks strictly assigned to them -->
+    <!-- Consultant: Scopes / Tasks assigned to them or in projects they lead/manage/participate in -->
     <record id="rule_project_scope_consultant" model="ir.rule">
         <field name="name">Consultant Assigned Tasks</field>
         <field name="model_id" ref="model_project_manage_scope"/>
-        <field name="domain_force">[('responsible_id.user_id', '=', user.id)]</field>
+        <field name="domain_force">['|', '|', '|', '|',
+            ('responsible_id.user_id', '=', user.id),
+            ('project_id.team_lead_id.user_id', '=', user.id),
+            ('project_id.team_id.team_lead_id', '=', user.id),
+            ('project_id.manager_id.user_id', '=', user.id),
+            ('project_id.consultant_ids.user_id', '=', user.id)]</field>
         <field name="groups" eval="[(4, ref('group_project_manage_consultant'))]"/>
     </record>
 

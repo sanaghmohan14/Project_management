@@ -6,7 +6,14 @@ class ProjectManageTask(models.Model):
     _name = 'project.manage.task'
     _description = 'Scope Task (Documentation / Implementation)'
     _inherit = ['mail.thread', 'mail.activity.mixin']
-    _order = 'scope_no asc, category asc, item_no asc, id asc'
+    _order = 'priority desc, scope_no asc, category asc, item_no asc, id asc'
+
+    priority = fields.Selection([
+        ('0', 'Normal'),
+        ('1', 'Low'),
+        ('2', 'High'),
+        ('3', 'Very High'),
+    ], string='Priority', default='0', tracking=True)
 
     name = fields.Char(string='Item / Task Name', required=True, tracking=True)
     item_id = fields.Char(string='Item ID', index=True)

@@ -27,9 +27,10 @@
     <record id="view_project_manage_scope_approval_list" model="ir.ui.view">
         <field name="name">project.manage.scope.approval.list</field>
         <field name="model">project.manage.scope</field>
-        <field name="priority">20</field>
+        <field name="priority">1</field>
         <field name="arch" type="xml">
             <list string="Task Approval Requests" decoration-danger="approval_state == 'rejected'" decoration-warning="approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')" decoration-success="approval_state == 'approved'" create="0">
+                <field name="priority" widget="priority" optional="show" nolabel="1"/>
                 <field name="code" string="Code" optional="show"/>
                 <field name="scope" string="Scope" optional="show"/>
                 <field name="name" string="Task / Item"/>
@@ -38,6 +39,7 @@
                 <field name="responsible_id" string="Assigned To"/>
                 <field name="submitted_by_id" string="Submitted By" optional="show"/>
                 <field name="submitted_date" string="Submitted On" optional="show"/>
+                <field name="approval_authority" string="Final Authority" optional="show" widget="badge"/>
                 <field name="approval_state" string="Approval Status" widget="badge"
                        decoration-info="approval_state == 'pending_tl'"
                        decoration-primary="approval_state == 'pending_pm'"
@@ -57,14 +59,21 @@
     <record id="view_project_manage_scope_approval_search" model="ir.ui.view">
         <field name="name">project.manage.scope.approval.search</field>
         <field name="model">project.manage.scope</field>
+        <field name="priority">1</field>
         <field name="arch" type="xml">
             <search string="Search Approval Requests">
                 <field name="name" string="Task" filter_domain="['|', ('name', 'ilike', self), ('code', 'ilike', self)]"/>
+                <field name="priority"/>
                 <field name="project_id" string="Project"/>
                 <field name="responsible_id" string="Assigned To"/>
                 <field name="submitted_by_id" string="Submitted By"/>
 
+                <filter string="Starred / High Priority" name="filter_starred" domain="[('priority', 'in', ('2', '3'))]"/>
+                <separator/>
                 <filter string="Waiting My Approval" name="filter_waiting_my_approval" domain="[('can_user_approve', '=', True)]"/>
+                <filter string="Submitted by Me" name="filter_submitted_by_me" domain="[('submitted_by_id', '=', uid)]"/>
+                <filter string="My Assigned Tasks" name="filter_my_tasks" domain="[('is_my_task', '=', True)]"/>
+                <filter string="All Pending Approvals" name="filter_all_pending" domain="[('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))]"/>
                 <separator/>
                 <filter string="Pending Team Lead" name="filter_pending_tl" domain="[('approval_state', '=', 'pending_tl')]"/>
                 <filter string="Pending Project Manager" name="filter_pending_pm" domain="[('approval_state', '=', 'pending_pm')]"/>
@@ -75,6 +84,7 @@
                 <filter string="Rejected / Re-Work" name="filter_rejected" domain="[('approval_state', '=', 'rejected')]"/>
 
                 <group>
+                    <filter string="Priority" name="group_by_priority" context="{'group_by': 'priority'}"/>
                     <filter string="Project" name="group_by_project" context="{'group_by': 'project_id'}"/>
                     <filter string="Approval Stage" name="group_by_stage" context="{'group_by': 'approval_state'}"/>
                     <filter string="Assigned Responsible" name="group_by_responsible" context="{'group_by': 'responsible_id'}"/>
@@ -88,7 +98,8 @@
     <record id="action_project_manage_approvals" model="ir.actions.act_window">
         <field name="name">Approval Requests</field>
         <field name="res_model">project.manage.scope</field>
-        <field name="view_mode">list,kanban,form</field>
+        <field name="view_mode">list,kanban,calendar,form</field>
+        <field name="view_id" ref="view_project_manage_scope_approval_list"/>
         <field name="domain">[('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))]</field>
         <field name="context">{'search_default_filter_waiting_my_approval': 1}</field>
         <field name="search_view_id" ref="view_project_manage_scope_approval_search"/>

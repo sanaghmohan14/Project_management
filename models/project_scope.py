@@ -1,5 +1,7 @@
 import base64
 from odoo import api, fields, models, _
+from odoo.exceptions import UserError
+from odoo.fields import Domain
 from .scope_master_data import get_default_approval_authority
 
 
@@ -8,7 +10,14 @@ class ProjectManageScope(models.Model):
     _name = 'project.manage.scope'
     _description = 'Scope & Task Item'
     _inherit = ['mail.thread', 'mail.activity.mixin']
-    _order = 'scope_no asc, category asc, item_no asc, id asc'
+    _order = 'priority desc, scope_no asc, category asc, item_no asc, id asc'
+
+    priority = fields.Selection([
+        ('0', 'Normal'),
+        ('1', 'Low'),
+        ('2', 'High'),
+        ('3', 'Very High'),
+    ], string='Priority', default='0', index=True, tracking=True)
 
     # ---- 12 Exact fields matching the Excel / CSV Import File ----
     item_id = fields.Char(string='Item ID', index=True, tracking=True)
@@ -44,8 +53,18 @@ class ProjectManageScope(models.Model):
                 self.approval_authority = auth
     accountable_id = fields.Many2one('hr.employee', string='Accountable', index=True, tracking=True)
     responsible_id = fields.Many2one('hr.employee', string='Responsible', tracking=True)
-    start_date = fields.Date(string='Start Date', tracking=True)
-    end_date = fields.Date(string='End Date', tracking=True)
+    start_date = fields.Date(string='Start Date', tracking=True, default=fields.Date.context_today)
+    end_date = fields.Date(string='End Date', tracking=True, default=fields.Date.context_today)
+
+    @api.onchange('start_date')
+    def _onchange_start_date(self):
+        if self.start_date and (not self.end_date or self.end_date < self.start_date):
+            self.end_date = self.start_date
+
+    @api.onchange('end_date')
+    def _onchange_end_date(self):
+        if self.end_date and (not self.start_date or self.start_date > self.end_date):
+            self.start_date = self.end_date
 
     # Computed compatibility strings for legacy Python references
     accountable = fields.Char(string='Accountable', compute='_compute_accountable_str', store=False)
@@ -98,6 +117,8 @@ class ProjectManageScope(models.Model):
         string='Is Assigned to Current User', compute='_compute_is_my_task', search='_search_is_my_task')
     can_edit_scope_fields = fields.Boolean(
         string='Can Edit Scope Fields', compute='_compute_can_edit_scope_fields')
+    can_current_user_complete = fields.Boolean(
+        string='Can Complete Task', compute='_compute_can_current_user_complete')
 
     submitted_by_id = fields.Many2one('res.users', string='Submitted By', tracking=True)
     submitted_date = fields.Datetime(string='Submitted On')
@@ -120,32 +141,69 @@ class ProjectManageScope(models.Model):
 
     def _compute_can_user_approve(self):
         user = self.env.user
-        is_admin = (
-            user.has_group('project_manage.group_project_manage_administrator') or
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
+        emp_ids = set(current_emps.ids)
+
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
             user.has_group('base.group_system') or
-            user.id in (1, 2)
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator')
         )
-        is_ceo = user.has_group('project_manage.group_project_manage_ceo')
-        is_vp = user.has_group('project_manage.group_project_manage_vp')
-        is_pm = user.has_group('project_manage.group_project_manage_manager')
-        is_tl = user.has_group('project_manage.group_project_manage_team_lead')
+        is_ceo = bool(is_admin or user.has_group('project_manage.group_project_manage_ceo'))
+        is_vp = bool(is_ceo or user.has_group('project_manage.group_project_manage_vp'))
+        is_pm = bool(is_vp or user.has_group('project_manage.group_project_manage_manager'))
+        is_tl = bool(is_pm or user.has_group('project_manage.group_project_manage_team_lead'))
 
         for rec in self:
             st = rec.approval_state
-            if not st or st in ('draft', 'in_progress', 'approved'):
+            if not st or st in ('draft', 'in_progress', 'todo', 'approved', 'rejected'):
                 rec.can_user_approve = False
-            elif is_admin:
+                continue
+
+            if is_admin or is_ceo:
                 rec.can_user_approve = True
-            elif st == 'pending_tl':
-                is_proj_tl = (rec.project_id.team_lead_id.user_id == user) or (rec.project_id.team_id.team_lead_id == user)
-                rec.can_user_approve = bool(is_tl or is_proj_tl or is_pm or is_vp or is_ceo)
-            elif st == 'pending_pm':
-                is_proj_pm = (rec.project_id.manager_id.user_id == user)
-                rec.can_user_approve = bool(is_pm or is_proj_pm or is_vp or is_ceo)
+                continue
+
+            if is_vp:
+                rec.can_user_approve = True
+                continue
+
+            proj = rec.project_id
+            is_proj_pm = bool(
+                proj and (
+                    proj.manager_id.user_id == user or
+                    proj.manager_id.id in emp_ids
+                )
+            )
+            is_proj_tl = bool(
+                proj and (
+                    proj.team_lead_id.user_id == user or
+                    proj.team_lead_id.id in emp_ids or
+                    proj.team_id.team_lead_id == user
+                )
+            )
+            has_no_tl = bool(proj and not proj.team_lead_id and not proj.team_id.team_lead_id)
+            has_no_pm = bool(proj and not proj.manager_id)
+
+            if st == 'pending_ceo':
+                rec.can_user_approve = is_ceo
             elif st == 'pending_vp':
-                rec.can_user_approve = bool(is_vp or is_ceo)
-            elif st == 'pending_ceo':
-                rec.can_user_approve = bool(is_ceo)
+                rec.can_user_approve = is_vp
+            elif st == 'pending_pm':
+                # Came specifically for Project Manager of this project
+                rec.can_user_approve = bool(is_proj_pm or (is_pm and has_no_pm))
+            elif st == 'pending_tl':
+                # Came specifically for Team Lead of this project
+                rec.can_user_approve = bool(
+                    is_proj_tl or
+                    (is_proj_pm and has_no_tl) or
+                    (is_tl and has_no_tl and has_no_pm)
+                )
             else:
                 rec.can_user_approve = False
 
@@ -172,49 +230,125 @@ class ProjectManageScope(models.Model):
         for rec in self:
             rec.can_edit_scope_fields = can_edit
 
+    def _compute_can_current_user_complete(self):
+        user = self.env.user
+        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
+        for rec in self:
+            if rec.state == 'done' or rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
+                rec.can_current_user_complete = False
+                continue
+
+            if not rec.responsible_id:
+                rec.can_current_user_complete = False
+                continue
+
+            is_assigned = bool(
+                (rec.responsible_id.user_id == user) or
+                (current_emp and rec.responsible_id == current_emp)
+            )
+            rec.can_current_user_complete = bool(is_assigned or is_admin)
+
     def _search_can_user_approve(self, operator, value):
         user = self.env.user
-        is_admin = (
-            user.has_group('project_manage.group_project_manage_administrator') or
-            user.has_group('base.group_system') or
-            user.id in (1, 2)
-        )
-        is_ceo = user.has_group('project_manage.group_project_manage_ceo')
-        is_vp = user.has_group('project_manage.group_project_manage_vp')
-        is_pm = user.has_group('project_manage.group_project_manage_manager')
-        is_tl = user.has_group('project_manage.group_project_manage_team_lead')
-
-        allowed_states = []
-        if is_admin or is_ceo:
-            allowed_states = ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo']
-        elif is_vp:
-            allowed_states = ['pending_tl', 'pending_pm', 'pending_vp']
-        elif is_pm:
-            allowed_states = ['pending_tl', 'pending_pm']
-        elif is_tl:
-            allowed_states = ['pending_tl']
-
         positive = (operator == '=' and bool(value)) or (operator in ('!=', '<>') and not bool(value))
+
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
+        emp_ids = current_emps.ids
+
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
+        is_ceo = bool(is_admin or user.has_group('project_manage.group_project_manage_ceo'))
+        is_vp = bool(is_ceo or user.has_group('project_manage.group_project_manage_vp'))
+        is_pm = bool(is_vp or user.has_group('project_manage.group_project_manage_manager'))
+        is_tl = bool(is_pm or user.has_group('project_manage.group_project_manage_team_lead'))
+
+        if is_admin or is_ceo:
+            admin_domain = [('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))]
+            return admin_domain if positive else list(Domain(['!'] + admin_domain))
+
+        domains_list = []
+
+        # 1. VP stage
+        if is_vp:
+            domains_list.append([('approval_state', '=', 'pending_vp')])
+
+        # 2. PM stage ('pending_pm')
+        pm_match = [('project_id.manager_id.user_id', '=', user.id)]
+        if emp_ids:
+            pm_match.append(('project_id.manager_id', 'in', emp_ids))
+        if is_pm:
+            pm_match.append(('project_id.manager_id', '=', False))
+
+        pm_assigned_domain = list(Domain.OR([[cond] for cond in pm_match]))
+        pm_full_domain = list(Domain.AND([[('approval_state', '=', 'pending_pm')], pm_assigned_domain]))
+        if is_vp:
+            pm_full_domain = [('approval_state', '=', 'pending_pm')]
+        domains_list.append(pm_full_domain)
+
+        # 3. TL stage ('pending_tl')
+        tl_match = [
+            ('project_id.team_lead_id.user_id', '=', user.id),
+            ('project_id.team_id.team_lead_id', '=', user.id),
+        ]
+        if emp_ids:
+            tl_match.append(('project_id.team_lead_id', 'in', emp_ids))
+
+        no_tl_domain = list(Domain.AND([
+            [('project_id.team_lead_id', '=', False)],
+            [('project_id.team_id.team_lead_id', '=', False)],
+        ]))
+        pm_fallback_domain = list(Domain.AND([pm_assigned_domain, no_tl_domain]))
+
+        tl_options = [[m] for m in tl_match]
+        tl_options.append(pm_fallback_domain)
+        if is_tl:
+            tl_options.append(no_tl_domain)
+
+        tl_assigned_domain = list(Domain.OR(tl_options))
+        tl_full_domain = list(Domain.AND([[('approval_state', '=', 'pending_tl')], tl_assigned_domain]))
+        if is_vp:
+            tl_full_domain = [('approval_state', '=', 'pending_tl')]
+        domains_list.append(tl_full_domain)
+
+        full_domain = list(Domain.OR(domains_list)) if domains_list else [(0, '=', 1)]
+
         if positive:
-            if not allowed_states:
-                return [(0, '=', 1)]
-            return [('approval_state', 'in', allowed_states)]
-        else:
-            if not allowed_states:
-                return [(1, '=', 1)]
-            return ['|', ('approval_state', '=', False), ('approval_state', 'not in', allowed_states)]
+            return full_domain
+        return list(Domain(['!'] + full_domain))
 
     def _search_is_my_task(self, operator, value):
         user = self.env.user
         positive = (operator == '=' and bool(value)) or (operator in ('!=', '<>') and not bool(value))
-        domain = [
-            '|',
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
+        emp_ids = current_emps.ids
+        match_terms = [
             ('responsible_id.user_id', '=', user.id),
             ('project_id.consultant_ids.user_id', '=', user.id),
         ]
+        if emp_ids:
+            match_terms.append(('responsible_id', 'in', emp_ids))
+            match_terms.append(('project_id.consultant_ids', 'in', emp_ids))
+        domain = list(Domain.OR([[t] for t in match_terms]))
         if positive:
             return domain
-        return ['!', *domain]
+        return list(Domain(['!'] + domain))
 
     color = fields.Integer(string='Color Index')
     notes = fields.Text(string='Notes / Instructions')
@@ -304,6 +438,12 @@ class ProjectManageScope(models.Model):
                 if auth:
                     vals['approval_authority'] = auth
 
+            # Ensure both start_date and end_date for calendar view
+            if vals.get('start_date') and not vals.get('end_date'):
+                vals['end_date'] = vals['start_date']
+            elif vals.get('end_date') and not vals.get('start_date'):
+                vals['start_date'] = vals['end_date']
+
         return super().create(vals_list)
 
     def write(self, vals):
@@ -332,11 +472,45 @@ class ProjectManageScope(models.Model):
             for rf in restricted_fields:
                 vals.pop(rf, None)
 
+        if vals.get('state') == 'under_review' and not vals.get('approval_state'):
+            vals['approval_state'] = 'pending_tl'
+            if not vals.get('submitted_by_id'):
+                vals['submitted_by_id'] = self.env.user.id
+            if not vals.get('submitted_date'):
+                vals['submitted_date'] = fields.Datetime.now()
+        elif vals.get('state') == 'done' and not vals.get('approval_state'):
+            vals['approval_state'] = 'approved'
+        elif vals.get('state') == 'todo' and not vals.get('approval_state'):
+            vals['approval_state'] = 'draft'
+
+        if vals.get('start_date') and not vals.get('end_date') and not any(r.end_date for r in self):
+            vals['end_date'] = vals['start_date']
+        elif vals.get('end_date') and not vals.get('start_date') and not any(r.start_date for r in self):
+            vals['start_date'] = vals['end_date']
+
         return super().write(vals)
 
     # ---- Hierarchical Approval Actions ----
     def action_start(self):
+        user = self.env.user
+        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
         for rec in self:
+            if not is_admin:
+                if not rec.responsible_id:
+                    raise UserError(_("This task cannot be started because no responsible employee is assigned."))
+                is_assigned = (
+                    (rec.responsible_id.user_id == user) or
+                    (current_emp and rec.responsible_id == current_emp)
+                )
+                if not is_assigned:
+                    raise UserError(_("Only the task assigned employee (%s) has the right to start this task.", rec.responsible_id.name))
+
             rec.write({
                 'state': 'in_progress',
                 'approval_state': 'in_progress',
@@ -353,58 +527,37 @@ class ProjectManageScope(models.Model):
             })
 
     def action_submit_for_approval(self):
-        """Worker completes task, sending it up to the appropriate level based on user role and final authority."""
+        """Worker completes task, submitting it into the tier-by-tier approval workflow.
+        The hierarchy begins with Team Lead review (pending_tl).
+        """
         user = self.env.user
-        is_admin_ceo = user.has_group('project_manage.group_project_manage_administrator') or user.has_group('project_manage.group_project_manage_ceo') or user.has_group('base.group_system') or user.id in (1, 2)
-        is_vp = user.has_group('project_manage.group_project_manage_vp')
-        is_pm = user.has_group('project_manage.group_project_manage_manager') or any(rec.project_id.manager_id.user_id == user for rec in self)
-        is_tl = user.has_group('project_manage.group_project_manage_team_lead') or any(rec.project_id.team_lead_id.user_id == user or rec.project_id.team_id.team_lead_id == user for rec in self)
+        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
 
         for rec in self:
+            if not is_admin:
+                if not rec.responsible_id:
+                    raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
+                is_assigned = (
+                    (rec.responsible_id.user_id == user) or
+                    (current_emp and rec.responsible_id == current_emp)
+                )
+                if not is_assigned:
+                    raise UserError(_("Only the task assigned employee (%s) has the right to complete this task.", rec.responsible_id.name))
+
             if rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 continue
 
             final_auth = (rec.approval_authority or 'TL').upper()
 
-            # 1. Executive submitter -> directly approve
-            if is_admin_ceo:
-                rec.action_approve_level(note=_("Completed and approved directly by Executive."))
-                continue
-
-            # 2. VP submitter
-            elif is_vp:
-                if final_auth in ('TL', 'PM', 'VP'):
-                    rec.action_approve_level(note=_("Completed and approved directly by Vice President."))
-                    continue
-                else:
-                    next_stage = 'pending_ceo'
-                    next_role = 'CEO'
-
-            # 3. Project Manager submitter
-            elif is_pm or (rec.project_id.manager_id.user_id == user):
-                if final_auth in ('TL', 'PM'):
-                    rec.action_approve_level(note=_("Completed and approved directly by Project Manager."))
-                    continue
-                elif final_auth == 'VP':
-                    next_stage = 'pending_vp'
-                    next_role = 'Vice President (VP)'
-                else:
-                    next_stage = 'pending_vp'
-                    next_role = 'Vice President (VP)'
-
-            # 4. Team Lead submitter
-            elif is_tl or (rec.project_id.team_lead_id.user_id == user) or (rec.project_id.team_id.team_lead_id == user):
-                if final_auth == 'TL':
-                    rec.action_approve_level(note=_("Completed and approved directly by Team Lead."))
-                    continue
-                else:
-                    next_stage = 'pending_pm'
-                    next_role = 'Project Manager'
-
-            # 5. Consultant / Team member submitter -> always goes to Team Lead first
-            else:
-                next_stage = 'pending_tl'
-                next_role = 'Team Lead'
+            # Task always enters hierarchy at Tier 1: Team Lead review
+            next_stage = 'pending_tl'
+            next_role = 'Team Lead'
 
             rec.write({
                 'approval_state': next_stage,
@@ -418,42 +571,32 @@ class ProjectManageScope(models.Model):
                 'user_id': user.id,
                 'role_name': user.name,
                 'action': 'submit',
-                'from_state': 'in_progress',
+                'from_state': rec.state or 'in_progress',
                 'to_state': next_stage,
-                'note': _('Task marked complete and submitted for %s approval.', next_role),
+                'note': _('Task completed by %s and submitted for %s approval (Final Authority: %s).', user.name, next_role, final_auth),
             })
-            rec.message_post(body=_("Task completion submitted by %s. Waiting for %s approval.", user.name, next_role))
+            rec.message_post(body=_("Task completion submitted by %s. Waiting for %s approval (Final Authority: %s).", user.name, next_role, final_auth))
 
     def action_approve_level(self, note=None):
-        """Advances task to the next approval tier according to governance rules:
-        - TL final authority: TL approves -> Approved (Done) immediately (does not go to PM!)
-        - PM final authority: TL approves -> PM -> Approved (Done) immediately (does not go to VP!)
-        - VP final authority: TL approves -> PM -> VP -> Approved (Done) immediately (does not go to CEO!)
-        - CEO final authority: TL approves -> PM -> VP -> CEO -> Approved (Done)
+        """Advances task strictly through the approval hierarchy based on current stage and designated final approval authority:
+        - Hierarchy order: Consultant (completes) -> Team Lead (pending_tl) -> Project Manager (pending_pm) -> Vice President (pending_vp) -> CEO (pending_ceo)
+        - If final authority is TL:
+            pending_tl -> Approved (Done) immediately (does NOT go to PM).
+        - If final authority is PM:
+            pending_tl -> pending_pm -> Approved (Done) immediately (does NOT go to VP).
+        - If final authority is VP:
+            pending_tl -> pending_pm -> pending_vp -> Approved (Done) immediately (does NOT go to CEO).
+        - If final authority is CEO:
+            pending_tl -> pending_pm -> pending_vp -> pending_ceo -> Approved (Done).
         """
         user = self.env.user
-        is_ceo_admin = user.has_group('project_manage.group_project_manage_ceo') or user.has_group('project_manage.group_project_manage_administrator') or user.has_group('base.group_system') or user.id in (1, 2)
-        is_vp = user.has_group('project_manage.group_project_manage_vp')
-        is_pm = user.has_group('project_manage.group_project_manage_manager')
-
         for rec in self:
+            if not rec.can_user_approve:
+                raise UserError(_("You are not authorized to approve this task (%s) at stage %s.") % (rec.name, rec.approval_state))
             cur = rec.approval_state or 'draft'
             final_auth = (rec.approval_authority or 'TL').upper()
 
-            # Immediate full approval by executive or user matching/exceeding final_auth
-            if is_ceo_admin:
-                next_stage = 'approved'
-                role_label = 'CEO / Executive'
-                next_label = 'Done'
-            elif is_vp and final_auth in ('TL', 'PM', 'VP'):
-                next_stage = 'approved'
-                role_label = 'Vice President (VP)'
-                next_label = 'Done'
-            elif (is_pm or rec.project_id.manager_id.user_id == user) and final_auth in ('TL', 'PM'):
-                next_stage = 'approved'
-                role_label = 'Project Manager'
-                next_label = 'Done'
-            elif cur == 'pending_tl':
+            if cur == 'pending_tl':
                 role_label = 'Team Lead'
                 if final_auth == 'TL':
                     next_stage = 'approved'
@@ -461,6 +604,7 @@ class ProjectManageScope(models.Model):
                 else:
                     next_stage = 'pending_pm'
                     next_label = 'Project Manager'
+
             elif cur == 'pending_pm':
                 role_label = 'Project Manager'
                 if final_auth == 'PM':
@@ -469,6 +613,7 @@ class ProjectManageScope(models.Model):
                 else:
                     next_stage = 'pending_vp'
                     next_label = 'Vice President (VP)'
+
             elif cur == 'pending_vp':
                 role_label = 'Vice President (VP)'
                 if final_auth == 'VP':
@@ -477,10 +622,22 @@ class ProjectManageScope(models.Model):
                 else:
                     next_stage = 'pending_ceo'
                     next_label = 'CEO'
-            elif cur in ('pending_ceo', 'draft', 'in_progress', 'rejected', 'under_review'):
+
+            elif cur == 'pending_ceo':
+                role_label = 'CEO'
                 next_stage = 'approved'
-                role_label = 'Approver'
                 next_label = 'Done'
+
+            elif cur in ('draft', 'in_progress', 'todo', 'rejected', 'under_review'):
+                # Fallback if approve is triggered directly before submit
+                role_label = 'Team Lead'
+                if final_auth == 'TL':
+                    next_stage = 'approved'
+                    next_label = 'Done'
+                else:
+                    next_stage = 'pending_pm'
+                    next_label = 'Project Manager'
+
             else:
                 continue
 
@@ -502,13 +659,17 @@ class ProjectManageScope(models.Model):
                 'action': 'approve',
                 'from_state': cur,
                 'to_state': next_stage,
-                'note': note or (_('Approved by %s. Forwarded to %s.') % (role_label, next_label) if next_stage != 'approved' else _('Final approval granted by %s. Task officially completed.', user.name)),
+                'note': note or (
+                    _('Approved by %s (%s). Forwarded to %s for next review.') % (user.name, role_label, next_label)
+                    if next_stage != 'approved'
+                    else _('Final approval granted by %s (%s). Task officially completed.', user.name, role_label)
+                ),
             })
 
             if next_stage == 'approved':
                 rec.message_post(body=_("Task officially approved and marked Done by %s (Final Authority: %s).", user.name, final_auth))
             else:
-                rec.message_post(body=_("Approved by %s (%s). Forwarded to %s for next review.", user.name, role_label, next_label))
+                rec.message_post(body=_("Approved by %s (%s). Forwarded to %s for review (Final Authority: %s).", user.name, role_label, next_label, final_auth))
 
     def action_populate_approval_authority(self):
         """Mass action to populate/pre-fill final approval authority from master data."""

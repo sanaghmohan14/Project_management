@@ -78,13 +78,17 @@ class ResUsers(models.Model):
                     WHERE gid = %s AND hid = %s
                 """, (sys_grp.id, admin_grp.id))
 
-            # 3. Ensure Mitchell Admin (id=2) and root (id=1) belong to group_project_manage_administrator
+            # 3. Ensure Mitchell Admin (id=2), root (id=1), and any admin users belong to group_project_manage_administrator
             if admin_grp:
                 self.env.cr.execute("""
                     INSERT INTO res_groups_users_rel (gid, uid)
                     SELECT %s, u.id
                     FROM res_users u
-                    WHERE u.id IN (1, 2)
+                    WHERE (u.id IN (1, 2) OR u.id IN (
+                        SELECT r2.uid FROM res_groups_users_rel r2
+                        JOIN ir_model_data imd ON imd.res_id = r2.gid AND imd.model = 'res.groups'
+                        WHERE imd.module = 'base' AND imd.name IN ('group_system', 'group_erp_manager')
+                    ))
                       AND NOT EXISTS (
                           SELECT 1 FROM res_groups_users_rel r WHERE r.gid = %s AND r.uid = u.id
                       );
@@ -270,13 +274,38 @@ class ResUsers(models.Model):
                         WHERE model_id = %s AND group_id = %s;
                     """, (log_model.id, user_grp.id))
 
-            # 8. Sync consultant rule domain in DB so consultants strictly see assigned tasks
-            domain_consultant = "[('responsible_id.user_id', '=', user.id)]"
+            # 8. Sync consultant and team lead rule domains in DB so users see assigned tasks or projects they lead/manage
+            domain_consultant = "['|', '|', '|', '|', ('responsible_id.user_id', '=', user.id), ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('project_id.consultant_ids.user_id', '=', user.id)]"
             self.env.cr.execute("""
                 UPDATE ir_rule
                 SET domain_force = %s
                 WHERE name = 'Consultant Assigned Tasks';
             """, (domain_consultant,))
+
+            domain_tl_scope = "['|', ('project_id', '=', False), '|', '|', '|', ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('responsible_id.user_id', '=', user.id)]"
+            self.env.cr.execute("""
+                UPDATE ir_rule
+                SET domain_force = %s
+                WHERE name = 'Team Lead Scopes Access';
+            """, (domain_tl_scope,))
+
+            # 8b. Ensure any tasks with state 'under_review' are in pending_tl
+            self.env.cr.execute("""
+                UPDATE project_manage_scope
+                SET approval_state = 'pending_tl'
+                WHERE state = 'under_review'
+                  AND (approval_state IS NULL OR approval_state IN ('draft', 'pending'));
+            """)
+
+            # 8c. Ensure all tasks have start_date and end_date populated for calendar view
+            self.env.cr.execute("""
+                UPDATE project_manage_scope
+                SET start_date = COALESCE(end_date, create_date::date, CURRENT_DATE)
+                WHERE start_date IS NULL;
+                UPDATE project_manage_scope
+                SET end_date = COALESCE(start_date, create_date::date, CURRENT_DATE)
+                WHERE end_date IS NULL;
+            """)
 
             # 9. Recalculate dynamic metrics (Health, Risk Level, Condition) for existing projects
             all_projects = self.env['project.manage'].search([])

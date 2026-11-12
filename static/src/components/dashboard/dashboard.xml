@@ -894,13 +894,14 @@
                                                                 <table class="pm-scopes-table">
                                                                     <thead>
                                                                         <tr>
-                                                                            <th style="width: 17%;">Scope</th>
-                                                                            <th style="width: 12%;">Category</th>
-                                                                            <th style="width: 33%;">Task / Document Name</th>
-                                                                            <th style="width: 14%;">Responsible</th>
+                                                                            <th style="width: 16%;">Scope</th>
+                                                                            <th style="width: 11%;">Category</th>
+                                                                            <th style="width: 30%;">Task / Document Name</th>
+                                                                            <th style="width: 8%;">Priority</th>
+                                                                            <th style="width: 13%;">Responsible</th>
                                                                             <th style="width: 8%;">Start Date</th>
                                                                             <th style="width: 8%;">End Date</th>
-                                                                            <th style="width: 8%;">Status</th>
+                                                                            <th style="width: 6%;">Status</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -928,6 +929,17 @@
                                                                                     <div t-if="item.rejection_reason" class="text-danger small mt-1 text-truncate" t-att-title="item.rejection_reason">
                                                                                         <i class="fa fa-exclamation-circle me-1"></i><t t-esc="item.rejection_reason"/>
                                                                                     </div>
+                                                                                </td>
+
+                                                                                <!-- Priority 3 Stars -->
+                                                                                <td class="pm-td-priority text-nowrap" t-on-click.stop="">
+                                                                                    <span class="pm-priority-stars" t-att-title="item.priority === '3' ? 'Very High (3 Stars)' : (item.priority === '2' ? 'High (2 Stars)' : (item.priority === '1' ? 'Low (1 Star)' : 'Normal (0 Stars)'))">
+                                                                                        <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                                                            <i class="fa cursor-pointer"
+                                                                                               t-att-class="this.isStarActive(item.priority, star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                                                               t-on-click="(ev) => this.toggleScopePriority(item, star, ev)"></i>
+                                                                                        </t>
+                                                                                    </span>
                                                                                 </td>
 
                                                                                 <!-- Responsible -->
@@ -1203,6 +1215,7 @@
                                 <tr>
                                     <th>Code</th>
                                     <th>Task Deliverable</th>
+                                    <th>Priority</th>
                                     <th>Project</th>
                                     <t t-if="!state.data.user_info.is_consultant">
                                         <th>Assigned Employee</th>
@@ -1218,7 +1231,7 @@
                             <tbody>
                                 <t t-if="!this.filteredTasks or this.filteredTasks.length === 0">
                                     <tr>
-                                        <td t-att-colspan="state.data.user_info.is_consultant ? 9 : 10" class="text-center py-5 text-muted">
+                                        <td t-att-colspan="state.data.user_info.is_consultant ? 10 : 11" class="text-center py-5 text-muted">
                                             <i class="fa fa-check-circle-o fa-2x mb-2 text-success d-block opacity-75"></i>
                                             <div class="fw-bold fs-6">No tasks found matching your criteria.</div>
                                             <p class="small text-muted mb-2">
@@ -1253,6 +1266,15 @@
                                                         </div>
                                                     </t>
                                                 </div>
+                                            </td>
+                                            <td>
+                                                <span class="pm-priority-stars text-nowrap" t-att-title="tsk.priority === '3' ? 'Very High (3 Stars)' : (tsk.priority === '2' ? 'High (2 Stars)' : (tsk.priority === '1' ? 'Low (1 Star)' : 'Normal (0 Stars)'))">
+                                                    <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                        <i class="fa cursor-pointer"
+                                                           t-att-class="this.isStarActive(tsk.priority, star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                           t-on-click="(ev) => this.toggleScopePriority(tsk, star, ev)"></i>
+                                                    </t>
+                                                </span>
                                             </td>
                                             <td>
                                                 <span class="pm-text-truncate-project" t-esc="tsk.project_name" t-att-title="tsk.project_name"/>
@@ -1338,9 +1360,20 @@
                                                     <i class="fa fa-folder-open-o me-1 text-primary"></i>
                                                     <t t-esc="state.wizardData.scope"/>
                                                 </span>
-                                                <span class="pm-cat-pill" t-att-class="state.wizardData.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-imp'">
-                                                    <t t-esc="state.wizardData.category"/>
-                                                </span>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <!-- 3 Star Priority on Top -->
+                                                    <div class="pm-priority-stars-selector d-flex align-items-center" title="Click to set priority (1 to 3 stars)">
+                                                        <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                            <i class="fa cursor-pointer"
+                                                               t-att-class="this.isStarActive(state.wizardData.priority, star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                               t-on-click="() => this.setWizardPriority(star)"
+                                                               style="cursor: pointer; font-size: 1.25rem; margin-right: 2px;"></i>
+                                                        </t>
+                                                    </div>
+                                                    <span class="pm-cat-pill" t-att-class="state.wizardData.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-imp'">
+                                                        <t t-esc="state.wizardData.category"/>
+                                                    </span>
+                                                </div>
                                             </div>
                                             <h5 class="fw-bold pm-wizard-task-title mb-1" t-esc="state.wizardData.name"/>
                                             <div t-if="state.wizardData.item_type" class="pm-wizard-item-type small">
@@ -1447,7 +1480,7 @@
                                         </div>
 
                                         <!-- Status / State -->
-                                        <div class="mb-1">
+                                        <div class="mb-3">
                                             <label class="form-label fw-bold small text-uppercase text-muted">Status / State</label>
                                             <select class="form-select pm-form-control" t-model="state.wizardData.state">
                                                 <option value="todo">To Do</option>
@@ -1456,6 +1489,33 @@
                                                 <option value="done">Done</option>
                                                 <option value="cancelled">Cancelled</option>
                                             </select>
+                                        </div>
+
+                                        <!-- Priority Selection (3 Stars) -->
+                                        <div class="mb-1 pt-3 border-top">
+                                            <label class="form-label fw-bold small text-uppercase text-muted d-flex justify-content-between align-items-center mb-2">
+                                                <span><i class="fa fa-star text-warning me-1"></i> Priority Setting</span>
+                                                <span class="badge" t-att-class="state.wizardData.priority === '3' ? 'text-bg-danger' : (state.wizardData.priority === '2' ? 'text-bg-warning' : (state.wizardData.priority === '1' ? 'text-bg-info' : 'text-bg-secondary'))">
+                                                    <t t-if="state.wizardData.priority === '3'">★★★ Very High</t>
+                                                    <t t-elif="state.wizardData.priority === '2'">★★☆ High</t>
+                                                    <t t-elif="state.wizardData.priority === '1'">★☆☆ Low</t>
+                                                    <t t-else="">Normal (0 Stars)</t>
+                                                </span>
+                                            </label>
+                                            <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                                <div class="pm-priority-stars-selector d-flex align-items-center gap-2">
+                                                    <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                        <i class="fa cursor-pointer"
+                                                           t-att-class="this.isStarActive(state.wizardData.priority, star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                           t-on-click="() => this.setWizardPriority(star)"
+                                                           t-att-title="star === 1 ? '1 Star - Low' : (star === 2 ? '2 Stars - High' : '3 Stars - Very High')"
+                                                           style="cursor: pointer; font-size: 1.55rem;"></i>
+                                                    </t>
+                                                </div>
+                                                <div class="text-muted small">
+                                                    Click stars to set 1, 2, or 3 stars (or click active star to clear)
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
