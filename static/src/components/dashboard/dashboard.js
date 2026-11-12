@@ -163,6 +163,9 @@ export class ProjectManageDashboard extends Component {
             if (this.state.selectedTeamId) {
                 kwargs.team_id = this.state.selectedTeamId;
             }
+            if (this.state.selectedProjectId) {
+                kwargs.project_id = this.state.selectedProjectId;
+            }
             if (this.state.activeRoleView) {
                 kwargs.view_as_role = this.state.activeRoleView;
             }
@@ -199,6 +202,37 @@ export class ProjectManageDashboard extends Component {
         } else {
             this.state.selectedTeamId = teamId;
         }
+        this.state.selectedProjectId = null;
+        this.state.projectScopesData = null;
+        await this.loadData();
+    }
+
+    async onProjectSelectChange(ev) {
+        const val = ev.target.value;
+        const projId = val ? parseInt(val) : null;
+        this.state.selectedProjectId = projId;
+        this.state.activeCategoryFilter = 'all';
+        this.state.activeStatusFilter = 'all';
+        this.state.selectedScopeName = null;
+        this.state.searchQuery = "";
+        if (projId) {
+            await Promise.all([
+                this.loadData(),
+                this.loadProjectScopes(projId),
+            ]);
+        } else {
+            this.state.projectScopesData = null;
+            await this.loadData();
+        }
+    }
+
+    async clearProjectFilter() {
+        this.state.selectedProjectId = null;
+        this.state.projectScopesData = null;
+        this.state.activeCategoryFilter = 'all';
+        this.state.activeStatusFilter = 'all';
+        this.state.selectedScopeName = null;
+        this.state.searchQuery = "";
         await this.loadData();
     }
 
@@ -209,6 +243,7 @@ export class ProjectManageDashboard extends Component {
         if (this.state.selectedProjectId === projectId) {
             this.state.selectedProjectId = null;
             this.state.projectScopesData = null;
+            await this.loadData();
             return;
         }
         this.state.selectedProjectId = projectId;
@@ -216,7 +251,10 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
-        await this.loadProjectScopes(projectId);
+        await Promise.all([
+            this.loadData(),
+            this.loadProjectScopes(projectId),
+        ]);
     }
 
     async loadProjectScopes(projectId) {

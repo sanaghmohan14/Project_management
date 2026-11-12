@@ -99,6 +99,29 @@
                         <button class="pm-action-btn" t-on-click="createNewProject">
                             <i class="fa fa-plus me-1"></i> New Project
                         </button>
+
+                        <!-- Project Selector Dropdown (Executive / Manager / Lead) -->
+                        <div class="pm-project-filter-box">
+                            <div class="pm-project-select-wrapper" t-att-class="state.selectedProjectId ? 'has-active-project' : ''">
+                                <i class="fa fa-folder-open-o pm-project-select-icon"></i>
+                                <select class="pm-project-select"
+                                        t-on-change="onProjectSelectChange"
+                                        t-att-value="state.selectedProjectId || ''"
+                                        title="Filter Dashboard by Project">
+                                    <option value="">📁 All Projects (<t t-esc="state.data.all_projects_filter ? state.data.all_projects_filter.length : (state.data.projects ? state.data.projects.length : 0)"/>)</option>
+                                    <t t-foreach="state.data.all_projects_filter || []" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id" t-att-selected="state.selectedProjectId == p.id ? 'selected' : undefined">
+                                            <t t-esc="p.name"/> (<t t-esc="p.progress"/>% · <t t-esc="p.health"/>)
+                                        </option>
+                                    </t>
+                                </select>
+                                <t t-if="state.selectedProjectId">
+                                    <button type="button" class="pm-project-clear-btn" t-on-click="clearProjectFilter" title="Clear project filter (Show All Projects)">
+                                        <i class="fa fa-times"></i>
+                                    </button>
+                                </t>
+                            </div>
+                        </div>
                     </t>
                 </div>
             </header>
@@ -108,6 +131,26 @@
                 <!-- ==================== EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
                 <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
                 <t t-if="!state.data.user_info.is_consultant">
+                    <!-- Active Project Filter Banner -->
+                    <t t-if="state.selectedProjectId and state.data.selected_project_name">
+                        <div class="pm-active-filter-banner">
+                            <div class="pm-active-filter-content">
+                                <span class="pm-filter-badge">
+                                    <i class="fa fa-filter me-1"></i> Filtering by Project:
+                                </span>
+                                <strong class="pm-active-project-name ms-1">
+                                    <t t-esc="state.data.selected_project_name"/>
+                                </strong>
+                                <span class="pm-active-project-meta ms-2">
+                                    (Progress: <t t-esc="state.data.avg_progress"/>% · Health: <span t-att-class="'pm-status-' + (state.data.overall_health_label || '').toLowerCase()"><t t-esc="state.data.overall_health_label"/></span> · Risk: <span t-att-class="'pm-risk-' + (state.data.risk_status_label || '').toLowerCase().replace(' ', '-')"><t t-esc="state.data.risk_status_label"/></span>)
+                                </span>
+                            </div>
+                            <button type="button" class="pm-banner-clear-btn" t-on-click="clearProjectFilter">
+                                <i class="fa fa-times me-1"></i> Show All Projects
+                            </button>
+                        </div>
+                    </t>
+
                     <!-- ==================== 1. TOP ROW: 5 METRIC CARDS ==================== -->
                     <section class="pm-kpi-row">
                     <!-- Total Projects -->

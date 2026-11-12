@@ -257,6 +257,163 @@ body.o_dark_theme .pm-dashboard-wrapper {
     background: #1d4ed8;
 }
 
+/* Project Filter Dropdown in Dashboard Header */
+.pm-project-filter-box {
+    display: inline-flex;
+    align-items: center;
+}
+
+.pm-project-select-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    background: var(--pm-card-bg);
+    border: 1px solid var(--pm-border);
+    border-radius: 8px;
+    padding: 0 8px 0 10px;
+    height: 34px;
+    min-width: 200px;
+    max-width: 300px;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.pm-project-select-wrapper:hover {
+    border-color: #3b82f6;
+}
+
+.pm-project-select-wrapper.has-active-project {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.08);
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+
+.pm-theme-dark .pm-project-select-wrapper.has-active-project {
+    background: rgba(59, 130, 246, 0.18);
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.35);
+}
+
+.pm-project-select-icon {
+    font-size: 0.88rem;
+    color: #3b82f6;
+    margin-right: 8px;
+    flex-shrink: 0;
+}
+
+.pm-project-select {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--pm-text-heading);
+    cursor: pointer;
+    width: 100%;
+    padding-right: 4px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.pm-project-select option {
+    background: var(--pm-card-bg);
+    color: var(--pm-text-heading);
+    font-size: 0.85rem;
+    padding: 6px 10px;
+}
+
+.pm-project-clear-btn {
+    border: none;
+    background: transparent;
+    color: var(--pm-text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 2px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.15s ease;
+    margin-left: 4px;
+    flex-shrink: 0;
+}
+
+.pm-project-clear-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+}
+
+/* Active Project Filter Banner */
+.pm-active-filter-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.10), rgba(59, 130, 246, 0.05));
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+    animation: fadeIn 0.25s ease-out;
+}
+
+.pm-theme-dark .pm-active-filter-banner {
+    background: linear-gradient(135deg, rgba(30, 58, 138, 0.35), rgba(30, 41, 59, 0.5));
+    border-color: rgba(96, 165, 250, 0.3);
+}
+
+.pm-active-filter-content {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    color: var(--pm-text-body);
+}
+
+.pm-filter-badge {
+    color: #2563eb;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pm-theme-dark .pm-filter-badge {
+    color: #60a5fa;
+}
+
+.pm-active-project-name {
+    color: var(--pm-text-heading);
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.pm-active-project-meta {
+    font-size: 0.8rem;
+    color: var(--pm-text-muted);
+}
+
+.pm-banner-clear-btn {
+    background: var(--pm-card-bg);
+    border: 1px solid var(--pm-border);
+    color: var(--pm-text-body);
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.pm-banner-clear-btn:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: #ffffff;
+}
+
 /* ---------------- 1. TOP 5 METRIC CARDS ---------------- */
 .pm-kpi-row {
     display: grid;

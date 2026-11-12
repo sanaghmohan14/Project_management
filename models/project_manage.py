@@ -109,7 +109,7 @@ class ProjectManage(models.Model):
 
     @api.depends(
         'date_start', 'date_end', 'state',
-        'scope_ids.state', 'scope_ids.approval_state', 'scope_ids.end_date'
+        'scope_ids', 'scope_ids.state', 'scope_ids.approval_state', 'scope_ids.end_date'
     )
     def _compute_metrics(self):
         today = fields.Date.today()
@@ -133,21 +133,15 @@ class ProjectManage(models.Model):
                 lambda s: s.approval_state == 'rejected'
             ))
 
-            # 2. Project Progress (%) derived from Scope/Task Completion & Stage
+            # 2. Project Progress (%) derived strictly from Scope/Task Completion
+            # Increase progress based on completed scopes (documentation & implementation)
+            # E.g. If there are 100 tasks and 10 are completed, progress is 10%
             if rec.state == 'done':
                 rec.progress = 100.0
             elif total_tasks > 0:
-                # Weighted completion: Done (100%), In Review/Pending (75%), In Progress (40%)
-                effective_score = (done_tasks * 1.0) + (review_tasks * 0.75) + (in_prog_tasks * 0.40)
-                rec.progress = min(max(round((effective_score / total_tasks) * 100, 1), 0.0), 100.0)
+                rec.progress = min(max(round((done_tasks / total_tasks) * 100, 1), 0.0), 100.0)
             else:
-                if rec.state == 'in_progress':
-                    if not rec.progress or rec.progress == 0.0:
-                        rec.progress = 50.0
-                elif rec.state == 'cancelled':
-                    pass
-                else:
-                    rec.progress = 0.0
+                rec.progress = 0.0
 
             # 3. Planned Progress (%) based on Closing Date (date_end) & Timeline Duration
             days_remaining = None
@@ -499,8 +493,18 @@ class ProjectManage(models.Model):
     def action_reset_todo(self):
         self.write({'state': 'todo'})
 
+    def _register_hook(self):
+        super()._register_hook()
+        # Automatically ensure all projects calculate progress strictly from scope completion
+        try:
+            projects = self.search([])
+            if projects:
+                projects._compute_metrics()
+        except Exception:
+            pass
+
     @api.model
-    def get_dashboard_data(self, team_id=None, view_as_role=None, **kwargs):
+    def get_dashboard_data(self, team_id=None, project_id=None, view_as_role=None, **kwargs):
         today = fields.Date.today()
         user = self.env.user
 
@@ -805,7 +809,36 @@ class ProjectManage(models.Model):
             else:
                 domain.append(('team_lead_id.user_id', '=', user.id))
 
-        projects = self.search(domain)
+        all_base_projects = self.search(domain)
+
+        # Build real project filter options for the project dropdown
+        filter_projects = []
+        for p in all_base_projects:
+            filter_projects.append({
+                'id': p.id,
+                'name': p.name,
+                'team_id': p.team_id.id if p.team_id else False,
+                'team_name': p.team_id.name if p.team_id else '',
+                'health': p.health or 'good',
+                'risk_level': p.risk_level or 'low',
+                'condition': p.condition or 'on_plan',
+                'progress': int(round(p.progress or 0)),
+                'running_status': p.running_status or 'running',
+            })
+
+        # Apply project filter
+        selected_project_id = int(project_id) if project_id and str(project_id).isdigit() else None
+        selected_proj = None
+        if selected_project_id:
+            projects = all_base_projects.filtered(lambda p: p.id == selected_project_id)
+            if not projects:
+                single_p = self.browse(selected_project_id)
+                if single_p.exists():
+                    projects = single_p
+            if projects:
+                selected_proj = projects[0]
+        else:
+            projects = all_base_projects
 
         total_projects = len(projects)
         running_projects = projects.filtered(lambda p: p.running_status == 'running')
@@ -817,10 +850,6 @@ class ProjectManage(models.Model):
         health_fair = projects.filtered(lambda p: p.health == 'fair')
         health_poor = projects.filtered(lambda p: p.health == 'poor')
 
-        overall_health_score = round(
-            ((len(health_good) * 100) + (len(health_fair) * 60) + (len(health_poor) * 20)) / total_projects
-        ) if total_projects else 100
-
         risk_low = projects.filtered(lambda p: p.risk_level == 'low')
         risk_med = projects.filtered(lambda p: p.risk_level == 'medium')
         risk_high = projects.filtered(lambda p: p.risk_level == 'high')
@@ -829,24 +858,66 @@ class ProjectManage(models.Model):
         cond_on_plan = projects.filtered(lambda p: p.condition == 'on_plan')
         cond_behind = projects.filtered(lambda p: p.condition == 'behind')
         cond_overdue = projects.filtered(lambda p: p.condition == 'overdue')
+        cond_max_count = 1 if (selected_project_id and selected_proj) else max(len(cond_ahead), len(cond_on_plan), len(cond_behind), len(cond_overdue), 1)
 
-        on_time_count = len(cond_ahead) + len(cond_on_plan)
-        on_time_pct = round((on_time_count / total_projects) * 100) if total_projects else 100
-        avg_progress = round(sum(projects.mapped('progress')) / total_projects) if total_projects else 0
-
-        # Donut Chart SVG stroke metrics (Circumference C = 2 * PI * 38 = ~238.8)
         circ = 238.8
-        good_c = len(health_good)
-        fair_c = len(health_fair)
-        poor_c = len(health_poor)
-        if total_projects:
-            good_arc = round((good_c / total_projects) * circ, 1)
-            fair_arc = round((fair_c / total_projects) * circ, 1)
-            poor_arc = round((poor_c / total_projects) * circ, 1)
+        if selected_project_id and selected_proj:
+            p_health = selected_proj.health or 'good'
+            if p_health == 'good':
+                overall_health_score = 100
+                good_arc = circ
+                fair_arc = 0.0
+                poor_arc = 0.0
+            elif p_health == 'fair':
+                overall_health_score = 60
+                good_arc = 0.0
+                fair_arc = circ
+                poor_arc = 0.0
+            else:
+                overall_health_score = 20
+                good_arc = 0.0
+                fair_arc = 0.0
+                poor_arc = circ
+
+            p_risk = selected_proj.risk_level or 'low'
+            if p_risk == 'high':
+                risk_needle_angle = 50
+            elif p_risk == 'medium':
+                risk_needle_angle = 0
+            else:
+                risk_needle_angle = -50
+
+            on_time_pct = 100 if selected_proj.condition in ('ahead', 'on_plan') else 0
+            avg_progress = int(round(selected_proj.progress or 0))
         else:
-            good_arc = circ
-            fair_arc = 0.0
-            poor_arc = 0.0
+            overall_health_score = round(
+                ((len(health_good) * 100) + (len(health_fair) * 60) + (len(health_poor) * 20)) / total_projects
+            ) if total_projects else 100
+
+            good_c = len(health_good)
+            fair_c = len(health_fair)
+            poor_c = len(health_poor)
+            if total_projects:
+                good_arc = round((good_c / total_projects) * circ, 1)
+                fair_arc = round((fair_c / total_projects) * circ, 1)
+                poor_arc = round((poor_c / total_projects) * circ, 1)
+            else:
+                good_arc = circ
+                fair_arc = 0.0
+                poor_arc = 0.0
+
+            if len(risk_high) >= 2:
+                risk_needle_angle = 50
+            elif len(risk_high) == 1:
+                risk_needle_angle = 30
+            elif len(risk_med) > 0:
+                risk_needle_angle = 0
+            else:
+                risk_needle_angle = -50
+
+            on_time_count = len(cond_ahead) + len(cond_on_plan)
+            on_time_pct = round((on_time_count / total_projects) * 100) if total_projects else 100
+            avg_progress = round(sum(projects.mapped('progress')) / total_projects) if total_projects else 0
 
         donut_good_dash = f"{good_arc} {circ}"
         donut_good_offset = "0"
@@ -854,18 +925,6 @@ class ProjectManage(models.Model):
         donut_fair_offset = f"-{good_arc}"
         donut_poor_dash = f"{poor_arc} {circ}"
         donut_poor_offset = f"-{round(good_arc + fair_arc, 1)}"
-
-        # Speedometer Needle angle (-50deg to +50deg)
-        if len(risk_high) >= 2:
-            risk_needle_angle = 50
-        elif len(risk_high) == 1:
-            risk_needle_angle = 30
-        elif len(risk_med) > 0:
-            risk_needle_angle = 0
-        else:
-            risk_needle_angle = -50
-
-        cond_max_count = max(len(cond_ahead), len(cond_on_plan), len(cond_behind), len(cond_overdue), 1)
 
         # Build real teams data from database
         teams_data = []
@@ -1026,18 +1085,28 @@ class ProjectManage(models.Model):
                 'average_rating': p.average_rating,
             })
 
-        # Consultant count: Executive sees total consultants; Team Lead sees team consultants
-        if can_see_all_teams:
+        # Consultant count: If project selected, consultants on that project; else Executive/Team Lead count
+        team_members = all_teams.mapped('member_ids') if all_teams else self.env['res.users']
+        team_member_emps = self.env['hr.employee'].sudo().search([('user_id', 'in', team_members.ids)]) if team_members else self.env['hr.employee']
+        proj_consultants = projects.mapped('consultant_ids')
+
+        if selected_project_id and selected_proj:
+            assigned_emps = selected_proj.consultant_ids
+            task_emps = selected_proj.scope_ids.mapped('responsible_id')
+            all_consultants = len(assigned_emps | task_emps)
+        elif can_see_all_teams:
             all_consultants = self.env['hr.employee'].sudo().search_count([])
         else:
-            team_members = all_teams.mapped('member_ids')
-            team_member_emps = self.env['hr.employee'].sudo().search([('user_id', 'in', team_members.ids)])
-            proj_consultants = projects.mapped('consultant_ids')
             all_consultants = len(team_member_emps | proj_consultants)
 
         Scope = self.env['project.manage.scope']
         # Active pending scopes in database across approval stages
-        if can_see_all_teams:
+        if selected_project_id:
+            all_pending_scopes = Scope.search([
+                ('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')),
+                ('project_id', '=', selected_project_id)
+            ])
+        elif can_see_all_teams:
             all_pending_scopes = Scope.search([('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))])
         else:
             all_pending_scopes = Scope.search([
@@ -1090,31 +1159,36 @@ class ProjectManage(models.Model):
         # - Project Manager: all tasks under his projects (pending and completed)
         # - Executive (VP, CEO, Admin): all tasks across portfolio / selected team
         current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
-
         emp_ids = current_emp.ids if current_emp else []
-        if role_code == 'consultant':
+
+        tl_projects = self.search([
+            '|', '|', '|',
+            ('team_lead_id', 'in', emp_ids),
+            ('team_lead_id.user_id', '=', user.id),
+            ('team_id.team_lead_id', '=', user.id),
+            ('team_id', 'in', user_teams.ids if user_teams else [])
+        ]) if role_code == 'team_lead' else self.env['project.manage']
+        if role_code == 'team_lead' and not tl_projects and projects:
+            tl_projects = projects
+
+        pm_projects = self.search([
+            '|', ('manager_id', 'in', emp_ids),
+            ('manager_id.user_id', '=', user.id)
+        ]) if role_code == 'manager' else self.env['project.manage']
+        if role_code == 'manager' and not pm_projects and projects:
+            pm_projects = projects
+
+        if selected_project_id:
+            # When specific project selected, Tasks Hub strictly focuses on this chosen project
+            hub_domain = [('project_id', '=', selected_project_id)]
+        elif role_code == 'consultant':
             # Consultant sees only their assigned tasks
             hub_domain = ['|', ('responsible_id.user_id', '=', user.id), ('responsible_id', 'in', emp_ids)] if emp_ids else [('responsible_id.user_id', '=', user.id)]
         elif role_code == 'team_lead':
             # Team Lead sees tasks for all consultants in his team / projects
-            tl_projects = self.search([
-                '|', '|', '|',
-                ('team_lead_id', 'in', emp_ids),
-                ('team_lead_id.user_id', '=', user.id),
-                ('team_id.team_lead_id', '=', user.id),
-                ('team_id', 'in', user_teams.ids if user_teams else [])
-            ])
-            if not tl_projects and projects:
-                tl_projects = projects
             hub_domain = ['|', ('project_id', 'in', tl_projects.ids), '|', ('responsible_id.user_id', '=', user.id), ('responsible_id', 'in', emp_ids)]
         elif role_code == 'manager':
             # Project Manager sees all tasks under his projects
-            pm_projects = self.search([
-                '|', ('manager_id', 'in', emp_ids),
-                ('manager_id.user_id', '=', user.id)
-            ])
-            if not pm_projects:
-                pm_projects = projects
             hub_domain = ['|', ('project_id', 'in', pm_projects.ids), '|', ('responsible_id.user_id', '=', user.id), ('responsible_id', 'in', emp_ids)]
         else:
             # Executive (VP, CEO, Admin)
@@ -1211,7 +1285,11 @@ class ProjectManage(models.Model):
         sorted_scopes = sorted(all_hub_scopes, key=_task_sort_key)
         tasks_list = [_serialize_task(s) for s in sorted_scopes[:150]]
 
-        if role_code == 'consultant':
+        if selected_project_id and selected_proj:
+            hub_title = f"{selected_proj.name} Tasks Hub"
+            hub_subtitle = f"All consultant tasks for project '{selected_proj.name}'"
+            hub_role_label = "Project Tasks"
+        elif role_code == 'consultant':
             hub_title = "My Tasks Workspace"
             hub_subtitle = "Track your assigned pending tasks with issued dates and completed deliverables"
             hub_role_label = "My Tasks"
@@ -1244,7 +1322,12 @@ class ProjectManage(models.Model):
         }
 
         # ---- Consultant Top Performers Leaderboard (Actual Database Calculations) ----
-        if can_see_all_teams:
+        if selected_project_id:
+            all_emp_scopes = Scope.sudo().search([
+                ('responsible_id', '!=', False),
+                ('project_id', '=', selected_project_id)
+            ])
+        elif can_see_all_teams:
             all_emp_scopes = Scope.sudo().search([('responsible_id', '!=', False)])
         else:
             all_emp_scopes = Scope.sudo().search([
@@ -1300,10 +1383,12 @@ class ProjectManage(models.Model):
 
         # Fallback to database employees if scopes are not yet assigned to responsible_id
         if not top_performers:
-            if can_see_all_teams:
+            if selected_project_id and selected_proj:
+                fallback_emps = (selected_proj.consultant_ids | selected_proj.scope_ids.mapped('responsible_id'))[:10]
+            elif can_see_all_teams:
                 fallback_emps = self.env['hr.employee'].sudo().search([], limit=10)
             else:
-                fallback_emps = (team_member_emps | proj_consultants)[:10] if not can_see_all_teams else []
+                fallback_emps = (team_member_emps | proj_consultants)[:10]
             for emp in fallback_emps:
                 top_performers.append({
                     'id': emp.id,
@@ -1431,6 +1516,9 @@ class ProjectManage(models.Model):
             'teams': teams_data,
             'all_teams_filter': filter_teams,
             'projects': projects_list,
+            'all_projects_filter': filter_projects,
+            'selected_project_id': selected_project_id,
+            'selected_project_name': selected_proj.name if selected_proj else '',
             'calendar_events': calendar_events,
         }
 
