@@ -2483,6 +2483,11 @@ body.o_dark_theme .pm-dashboard-wrapper {
                     vertical-align: middle;
                     color: var(--pm-text-body);
                     overflow: hidden;
+
+                    &.pm-td-status-badge {
+                        overflow: visible !important;
+                        white-space: nowrap;
+                    }
                 }
             }
         }
@@ -2571,10 +2576,10 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-color-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.75rem;
+    gap: 5px;
+    font-size: 0.72rem;
     font-weight: 600;
-    padding: 3px 9px;
+    padding: 3px 8px;
     border-radius: 12px;
     white-space: nowrap;
 

@@ -52,9 +52,34 @@ class ProjectManageScope(models.Model):
             if auth:
                 self.approval_authority = auth
     accountable_id = fields.Many2one('hr.employee', string='Accountable', index=True, tracking=True)
-    responsible_id = fields.Many2one('hr.employee', string='Responsible', tracking=True)
+    responsible_ids = fields.Many2many(
+        'hr.employee',
+        'project_scope_responsible_employee_rel',
+        'scope_id',
+        'employee_id',
+        string='Responsible',
+        tracking=True,
+    )
+    responsible_id = fields.Many2one(
+        'hr.employee',
+        string='Primary Responsible',
+        compute='_compute_responsible_id',
+        store=True,
+        readonly=False,
+        tracking=True,
+    )
     start_date = fields.Date(string='Start Date', tracking=True, default=fields.Date.context_today)
     end_date = fields.Date(string='End Date', tracking=True, default=fields.Date.context_today)
+
+    @api.depends('responsible_ids')
+    def _compute_responsible_id(self):
+        for rec in self:
+            if rec.responsible_ids:
+                if rec.responsible_id and rec.responsible_id in rec.responsible_ids:
+                    continue
+                rec.responsible_id = rec.responsible_ids[0]
+            else:
+                rec.responsible_id = False
 
     @api.onchange('start_date')
     def _onchange_start_date(self):
@@ -67,18 +92,23 @@ class ProjectManageScope(models.Model):
             self.start_date = self.end_date
 
     # Computed compatibility strings for legacy Python references
-    accountable = fields.Char(string='Accountable', compute='_compute_accountable_str', store=False)
-    responsible = fields.Char(string='Responsible', compute='_compute_responsible_str', store=False)
+    accountable = fields.Char(string='Accountable (Text)', compute='_compute_accountable_str', store=False)
+    responsible = fields.Char(string='Responsible (Text)', compute='_compute_responsible_str', store=False)
 
     @api.depends('accountable_id')
     def _compute_accountable_str(self):
         for rec in self:
             rec.accountable = rec.accountable_id.name if rec.accountable_id else ''
 
-    @api.depends('responsible_id')
+    @api.depends('responsible_ids', 'responsible_id')
     def _compute_responsible_str(self):
         for rec in self:
-            rec.responsible = rec.responsible_id.name if rec.responsible_id else ''
+            if rec.responsible_ids:
+                rec.responsible = ', '.join(rec.responsible_ids.mapped('name'))
+            elif rec.responsible_id:
+                rec.responsible = rec.responsible_id.name
+            else:
+                rec.responsible = ''
 
     # ---- Governance, Project & Status ----
     project_id = fields.Many2one(
@@ -210,8 +240,9 @@ class ProjectManageScope(models.Model):
     def _compute_is_my_task(self):
         user = self.env.user
         for rec in self:
-            rec.is_my_task = (
-                (rec.responsible_id.user_id == user) or
+            rec.is_my_task = bool(
+                (user in rec.responsible_ids.mapped('user_id')) or
+                (rec.responsible_id and rec.responsible_id.user_id == user) or
                 (user in rec.project_id.consultant_ids.mapped('user_id'))
             )
 
@@ -244,13 +275,21 @@ class ProjectManageScope(models.Model):
                 rec.can_current_user_complete = False
                 continue
 
-            if not rec.responsible_id:
+            if not rec.responsible_ids and not rec.responsible_id:
                 rec.can_current_user_complete = False
                 continue
 
+            all_resp_users = rec.responsible_ids.mapped('user_id')
+            if rec.responsible_id and rec.responsible_id.user_id:
+                all_resp_users |= rec.responsible_id.user_id
+
+            all_resp_emps = rec.responsible_ids
+            if rec.responsible_id:
+                all_resp_emps |= rec.responsible_id
+
             is_assigned = bool(
-                (rec.responsible_id.user_id == user) or
-                (current_emp and rec.responsible_id == current_emp)
+                (user in all_resp_users) or
+                (current_emp and current_emp in all_resp_emps)
             )
             rec.can_current_user_complete = bool(is_assigned or is_admin)
 
@@ -339,10 +378,12 @@ class ProjectManageScope(models.Model):
         current_emps = self.env['hr.employee'].sudo().search(emp_domain)
         emp_ids = current_emps.ids
         match_terms = [
+            ('responsible_ids.user_id', '=', user.id),
             ('responsible_id.user_id', '=', user.id),
             ('project_id.consultant_ids.user_id', '=', user.id),
         ]
         if emp_ids:
+            match_terms.append(('responsible_ids', 'in', emp_ids))
             match_terms.append(('responsible_id', 'in', emp_ids))
             match_terms.append(('project_id.consultant_ids', 'in', emp_ids))
         domain = list(Domain.OR([[t] for t in match_terms]))
@@ -387,18 +428,41 @@ class ProjectManageScope(models.Model):
             else:
                 rec.display_name = rec.name or rec.item_id or _("New Scope Item")
 
-    # Automatically link employee when responsible text matches
+    # Automatically sync responsible_ids, responsible_id and responsible text
+    @api.onchange('responsible_ids')
+    def _onchange_responsible_ids(self):
+        if self.responsible_ids:
+            if not self.responsible_id or self.responsible_id not in self.responsible_ids:
+                self.responsible_id = self.responsible_ids[0]
+            self.responsible = ', '.join(self.responsible_ids.mapped('name'))
+        else:
+            self.responsible_id = False
+            self.responsible = ''
+
     @api.onchange('responsible_id')
     def _onchange_responsible_id(self):
         if self.responsible_id:
-            self.responsible = self.responsible_id.name
+            if self.responsible_id not in self.responsible_ids:
+                self.responsible_ids = [(4, self.responsible_id.id)]
+            self.responsible = ', '.join(self.responsible_ids.mapped('name'))
 
     @api.onchange('responsible')
     def _onchange_responsible_text(self):
-        if self.responsible and not self.responsible_id:
-            emp = self.env['hr.employee'].sudo().search([('name', '=ilike', self.responsible.strip())], limit=1)
-            if emp:
-                self.responsible_id = emp
+        if self.responsible and not self.responsible_ids:
+            names = [n.strip() for n in self.responsible.split(',') if n.strip()]
+            emps = self.env['hr.employee'].sudo().search([('name', 'in', names)])
+            if not emps:
+                emp_list = []
+                for n in names:
+                    me = self.env['hr.employee'].sudo().search([('name', '=ilike', n)], limit=1)
+                    if me and me.id not in emp_list:
+                        emp_list.append(me.id)
+                if emp_list:
+                    self.responsible_ids = [(6, 0, emp_list)]
+                    self.responsible_id = emp_list[0]
+            else:
+                self.responsible_ids = [(6, 0, emps.ids)]
+                self.responsible_id = emps[0]
 
     @api.model_create_multi
     @api.model
@@ -423,9 +487,48 @@ class ProjectManageScope(models.Model):
         for vals in records_vals:
             if not isinstance(vals, dict):
                 continue
-            # Remove legacy text keys if present; user assigns accountable_id and responsible_id manually
-            vals.pop('responsible', None)
-            vals.pop('accountable', None)
+            # Handle responsible text if present and IDs not set
+            resp_txt = vals.pop('responsible', None)
+            if resp_txt and not vals.get('responsible_ids') and not vals.get('responsible_id'):
+                names = [n.strip() for n in str(resp_txt).split(',') if n.strip()]
+                emps = self.env['hr.employee'].sudo().search([('name', 'in', names)])
+                if not emps:
+                    matched_list = []
+                    for n in names:
+                        me = self.env['hr.employee'].sudo().search([('name', '=ilike', n)], limit=1)
+                        if me and me.id not in matched_list:
+                            matched_list.append(me.id)
+                    if matched_list:
+                        vals['responsible_ids'] = [(6, 0, matched_list)]
+                        vals['responsible_id'] = matched_list[0]
+                else:
+                    vals['responsible_ids'] = [(6, 0, emps.ids)]
+                    vals['responsible_id'] = emps[0].id
+
+            # Sync responsible_id and responsible_ids
+            if vals.get('responsible_id') and not vals.get('responsible_ids'):
+                vals['responsible_ids'] = [(4, vals['responsible_id'])]
+
+            # Handle accountable text if present and accountable_id not set
+            acc_txt = vals.pop('accountable', None)
+            if acc_txt and not vals.get('accountable_id'):
+                acc_emp = self.env['hr.employee'].sudo().search([('name', '=ilike', str(acc_txt).strip())], limit=1)
+                if not acc_emp:
+                    acc_emp = self.env['hr.employee'].sudo().search([('name', 'ilike', str(acc_txt).strip())], limit=1)
+                if acc_emp:
+                    vals['accountable_id'] = acc_emp.id
+
+            # Auto-assign project_id if missing (e.g. from generic Excel import)
+            if not vals.get('project_id'):
+                default_proj = self.env.context.get('default_project_id')
+                if not default_proj and self.env.context.get('active_model') == 'project.manage':
+                    default_proj = self.env.context.get('active_id')
+                if not default_proj:
+                    active_projs = self.env['project.manage'].sudo().search([('state', 'in', ('todo', 'in_progress'))], order='write_date desc')
+                    if len(active_projs) == 1:
+                        default_proj = active_projs[0].id
+                if default_proj:
+                    vals['project_id'] = default_proj
 
             if not vals.get('approval_authority'):
                 auth = get_default_approval_authority(
@@ -447,9 +550,37 @@ class ProjectManageScope(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
-        # Remove legacy text keys if present
-        vals.pop('responsible', None)
-        vals.pop('accountable', None)
+        # Handle responsible text if present and IDs not set
+        resp_txt = vals.pop('responsible', None)
+        if resp_txt and not vals.get('responsible_ids') and not vals.get('responsible_id'):
+            names = [n.strip() for n in str(resp_txt).split(',') if n.strip()]
+            emps = self.env['hr.employee'].sudo().search([('name', 'in', names)])
+            if not emps:
+                matched_list = []
+                for n in names:
+                    me = self.env['hr.employee'].sudo().search([('name', '=ilike', n)], limit=1)
+                    if me and me.id not in matched_list:
+                        matched_list.append(me.id)
+                if matched_list:
+                    vals['responsible_ids'] = [(6, 0, matched_list)]
+                    vals['responsible_id'] = matched_list[0]
+            else:
+                vals['responsible_ids'] = [(6, 0, emps.ids)]
+                vals['responsible_id'] = emps[0].id
+
+        if 'responsible_id' in vals and vals.get('responsible_id') and 'responsible_ids' not in vals:
+            for rec in self:
+                if vals['responsible_id'] not in rec.responsible_ids.ids:
+                    rec.responsible_ids = [(4, vals['responsible_id'])]
+
+        # Handle accountable text if present and accountable_id not set
+        acc_txt = vals.pop('accountable', None)
+        if acc_txt and not vals.get('accountable_id'):
+            acc_emp = self.env['hr.employee'].sudo().search([('name', '=ilike', str(acc_txt).strip())], limit=1)
+            if not acc_emp:
+                acc_emp = self.env['hr.employee'].sudo().search([('name', 'ilike', str(acc_txt).strip())], limit=1)
+            if acc_emp:
+                vals['accountable_id'] = acc_emp.id
 
         user = self.env.user
         is_privileged = bool(
@@ -467,7 +598,7 @@ class ProjectManageScope(models.Model):
             restricted_fields = {
                 'name', 'item_id', 'scope_no', 'scope', 'category', 'item_no',
                 'item_type', 'evidence_proof', 'approval_authority',
-                'accountable_id', 'responsible_id', 'start_date', 'end_date', 'project_id'
+                'accountable_id', 'responsible_id', 'responsible_ids', 'start_date', 'end_date', 'project_id'
             }
             for rf in restricted_fields:
                 vals.pop(rf, None)
@@ -502,14 +633,18 @@ class ProjectManageScope(models.Model):
         )
         for rec in self:
             if not is_admin:
-                if not rec.responsible_id:
+                if not rec.responsible_ids and not rec.responsible_id:
                     raise UserError(_("This task cannot be started because no responsible employee is assigned."))
-                is_assigned = (
-                    (rec.responsible_id.user_id == user) or
-                    (current_emp and rec.responsible_id == current_emp)
-                )
+                all_resp_users = rec.responsible_ids.mapped('user_id')
+                if rec.responsible_id and rec.responsible_id.user_id:
+                    all_resp_users |= rec.responsible_id.user_id
+                all_resp_emps = rec.responsible_ids
+                if rec.responsible_id:
+                    all_resp_emps |= rec.responsible_id
+                is_assigned = (user in all_resp_users) or (current_emp and current_emp in all_resp_emps)
                 if not is_assigned:
-                    raise UserError(_("Only the task assigned employee (%s) has the right to start this task.", rec.responsible_id.name))
+                    names = ', '.join(rec.responsible_ids.mapped('name')) or (rec.responsible_id.name if rec.responsible_id else '')
+                    raise UserError(_("Only the task assigned employee(s) (%s) have the right to start this task.", names))
 
             rec.write({
                 'state': 'in_progress',
@@ -541,14 +676,18 @@ class ProjectManageScope(models.Model):
 
         for rec in self:
             if not is_admin:
-                if not rec.responsible_id:
+                if not rec.responsible_ids and not rec.responsible_id:
                     raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
-                is_assigned = (
-                    (rec.responsible_id.user_id == user) or
-                    (current_emp and rec.responsible_id == current_emp)
-                )
+                all_resp_users = rec.responsible_ids.mapped('user_id')
+                if rec.responsible_id and rec.responsible_id.user_id:
+                    all_resp_users |= rec.responsible_id.user_id
+                all_resp_emps = rec.responsible_ids
+                if rec.responsible_id:
+                    all_resp_emps |= rec.responsible_id
+                is_assigned = (user in all_resp_users) or (current_emp and current_emp in all_resp_emps)
                 if not is_assigned:
-                    raise UserError(_("Only the task assigned employee (%s) has the right to complete this task.", rec.responsible_id.name))
+                    names = ', '.join(rec.responsible_ids.mapped('name')) or (rec.responsible_id.name if rec.responsible_id else '')
+                    raise UserError(_("Only the task assigned employee(s) (%s) have the right to complete this task.", names))
 
             if rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 continue

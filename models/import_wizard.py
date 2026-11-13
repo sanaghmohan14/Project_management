@@ -169,29 +169,32 @@ class ProjectScopeImportWizard(models.TransientModel):
         # Try to locate header row for flat format: Item_ID, Scope_No, Scope, Category, ...
         flat_header_idx = -1
         for idx, r in enumerate(rows):
-            r_lower = [c.lower() for c in r]
-            if 'item_id' in r_lower and 'scope' in r_lower and 'category' in r_lower:
+            r_lower = [str(c).lower().strip().replace(' ', '_').replace('/', '_') for c in r]
+            if 'item_id' in r_lower:
+                flat_header_idx = idx
+                break
+            if ('scope' in r_lower and 'category' in r_lower) or (('name' in r_lower or 'task' in r_lower) and ('responsible' in r_lower or 'start_date' in r_lower)):
                 flat_header_idx = idx
                 break
 
         if flat_header_idx != -1:
-            header = [c.lower().replace(' ', '_').replace('/', '_') for c in rows[flat_header_idx]]
+            header = [str(c).lower().strip().replace(' ', '_').replace('/', '_') for c in rows[flat_header_idx]]
             h_map = {col: i for i, col in enumerate(header)}
 
             for r in rows[flat_header_idx + 1:]:
-                if not r or len(r) <= max(h_map.get('item_id', 0), h_map.get('item_name', 0)):
+                if not r or len(r) <= max(h_map.get('item_id', 0), h_map.get('item_name', 0), h_map.get('name', 0)):
                     continue
 
                 def val(col_name):
                     i = h_map.get(col_name)
-                    return r[i].strip() if i is not None and i < len(r) else ''
+                    return str(r[i]).strip() if i is not None and i < len(r) and r[i] is not None else ''
 
                 item_id = val('item_id')
                 scope_str = val('scope') or val('scope_name') or val('scope_(functional_area)')
                 scope_no_str = val('scope_no')
                 category_str = val('category').lower()
                 item_no_str = val('item_no') or val('doc_no') or val('activity_no')
-                item_name = val('item_name') or val('document_name') or val('implementation_activity')
+                item_name = val('item_name') or val('name') or val('document_name') or val('implementation_activity') or val('task_deliverable') or val('task')
                 item_type = val('item_type') or val('document_type') or val('activity_type')
                 evidence = val('evidence___proof') or val('evidence') or val('proof')
                 auth_str = (
@@ -206,7 +209,7 @@ class ProjectScopeImportWizard(models.TransientModel):
                 start_d = self._parse_date(val('start_date') or val('start'))
                 end_d = self._parse_date(val('end_date') or val('end'))
 
-                if not item_name and not scope_str:
+                if not item_name and not scope_str and not item_id:
                     continue
 
                 try:
@@ -219,16 +222,42 @@ class ProjectScopeImportWizard(models.TransientModel):
                 except ValueError:
                     item_no = 0
 
+                # Deduce scope_no, category, item_no from item_id if missing (e.g. S01-D-001 or S00-I-018)
+                if item_id:
+                    import re
+                    m = re.match(r'S(\d+)-([DI])-(\d+)', item_id.strip().upper())
+                    if m:
+                        if not scope_no:
+                            scope_no = int(m.group(1))
+                        if not category_str:
+                            category_str = 'implementation' if m.group(2) == 'I' else 'documentation'
+                        if not item_no:
+                            item_no = int(m.group(3))
+
                 cat_val = 'Implementation' if 'imp' in category_str else 'Documentation'
                 cand_name = item_name or item_id
+
+                # Deduce scope_str if missing
+                if not scope_str and scope_no is not None:
+                    matched_scope = self.project_id.scope_ids.filtered(lambda s: s.scope_no == scope_no and s.scope)
+                    if matched_scope:
+                        scope_str = matched_scope[0].scope
+                    else:
+                        scope_str = f"Scope {scope_no}"
+
                 cand_key = (scope_str.strip().lower(), cand_name.strip().lower(), cat_val)
 
                 # Check if this item already exists in this project
                 existing_scope = None
-                if item_id and item_id in existing_by_item_id:
-                    existing_scope = existing_by_item_id[item_id]
+                if item_id and item_id.strip().upper() in existing_by_item_id:
+                    existing_scope = existing_by_item_id[item_id.strip().upper()]
                 elif cand_key in existing_by_key:
                     existing_scope = existing_by_key[cand_key]
+                elif cand_name:
+                    # Match by name in project
+                    by_name = self.project_id.scope_ids.filtered(lambda s: (s.name or '').strip().lower() == cand_name.strip().lower())
+                    if by_name:
+                        existing_scope = by_name[0]
 
                 # Map authority: 1) from file column, 2) from live Excel Scope_Task_List, 3) from Master Mapping
                 auth_val = self._clean_authority(auth_str)
@@ -263,15 +292,45 @@ class ProjectScopeImportWizard(models.TransientModel):
                     'project_id': self.project_id.id,
                 }
 
+                if acc_str:
+                    matched_acc = self.env['hr.employee'].sudo().search([('name', '=ilike', str(acc_str).strip())], limit=1)
+                    if matched_acc:
+                        scope_vals['accountable_id'] = matched_acc.id
+
+                if resp_str:
+                    resp_names = [r.strip() for r in str(resp_str).split(',') if r.strip()]
+                    emp_list = []
+                    for rn in resp_names:
+                        me = self.env['hr.employee'].sudo().search([('name', '=ilike', rn)], limit=1)
+                        if not me:
+                            me = self.env['hr.employee'].sudo().search([('name', 'ilike', rn)], limit=1)
+                        if me and me.id not in emp_list:
+                            emp_list.append(me.id)
+                    if emp_list:
+                        scope_vals['responsible_ids'] = [(6, 0, emp_list)]
+                        scope_vals['responsible_id'] = emp_list[0]
+
                 if existing_scope:
-                    # Update missing fields on existing record
+                    # Update fields on existing record
                     update_vals = {}
-                    for field_name, val_to_set in scope_vals.items():
-                        if val_to_set and not getattr(existing_scope, field_name, None):
-                            update_vals[field_name] = val_to_set
-                    # Guarantee approval_authority is filled if missing
-                    if auth_val and not existing_scope.approval_authority:
+                    if 'responsible_ids' in scope_vals and scope_vals['responsible_ids']:
+                        update_vals['responsible_ids'] = scope_vals['responsible_ids']
+                    if 'responsible_id' in scope_vals and scope_vals['responsible_id']:
+                        update_vals['responsible_id'] = scope_vals['responsible_id']
+                    if 'accountable_id' in scope_vals and scope_vals['accountable_id']:
+                        update_vals['accountable_id'] = scope_vals['accountable_id']
+                    if start_d:
+                        update_vals['start_date'] = start_d
+                    if end_d:
+                        update_vals['end_date'] = end_d
+                    if auth_val:
                         update_vals['approval_authority'] = auth_val
+                    if evidence:
+                        update_vals['evidence_proof'] = evidence
+                    if item_type:
+                        update_vals['item_type'] = item_type
+                    if cand_name and not existing_scope.name:
+                        update_vals['name'] = cand_name
                     if update_vals:
                         existing_scope.write(update_vals)
                 else:

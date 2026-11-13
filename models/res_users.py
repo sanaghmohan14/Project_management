@@ -275,19 +275,34 @@ class ResUsers(models.Model):
                     """, (log_model.id, user_grp.id))
 
             # 8. Sync consultant and team lead rule domains in DB so users see assigned tasks or projects they lead/manage
-            domain_consultant = "['|', '|', '|', '|', ('responsible_id.user_id', '=', user.id), ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('project_id.consultant_ids.user_id', '=', user.id)]"
+            domain_consultant = "['|', '|', '|', '|', '|', ('responsible_ids.user_id', '=', user.id), ('responsible_id.user_id', '=', user.id), ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('project_id.consultant_ids.user_id', '=', user.id)]"
             self.env.cr.execute("""
                 UPDATE ir_rule
                 SET domain_force = %s
                 WHERE name = 'Consultant Assigned Tasks';
             """, (domain_consultant,))
 
-            domain_tl_scope = "['|', ('project_id', '=', False), '|', '|', '|', ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('responsible_id.user_id', '=', user.id)]"
+            domain_tl_scope = "['|', ('project_id', '=', False), '|', '|', '|', '|', ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('responsible_ids.user_id', '=', user.id), ('responsible_id.user_id', '=', user.id)]"
             self.env.cr.execute("""
                 UPDATE ir_rule
                 SET domain_force = %s
                 WHERE name = 'Team Lead Scopes Access';
             """, (domain_tl_scope,))
+
+            # 8a. Sync existing responsible_id into project_scope_responsible_employee_rel if table exists
+            try:
+                self.env.cr.execute("""
+                    SELECT 1 FROM information_schema.tables WHERE table_name = 'project_scope_responsible_employee_rel';
+                """)
+                if self.env.cr.fetchone():
+                    self.env.cr.execute("""
+                        INSERT INTO project_scope_responsible_employee_rel (scope_id, employee_id)
+                        SELECT id, responsible_id FROM project_manage_scope
+                        WHERE responsible_id IS NOT NULL
+                        ON CONFLICT DO NOTHING;
+                    """)
+            except Exception:
+                pass
 
             # 8b. Ensure any tasks with state 'under_review' are in pending_tl
             self.env.cr.execute("""

@@ -791,6 +791,11 @@
                                                                         title="Import tasks from Benac Excel tracker">
                                                                     <i class="fa fa-upload me-1"></i> Import Scopes
                                                                 </button>
+                                                                <button class="btn btn-sm pm-btn-outline-success"
+                                                                        t-on-click="(ev) => this.syncProjectImportedScopes(proj.id, ev)"
+                                                                        title="Sync tasks imported via Excel / list view into this project">
+                                                                    <i class="fa fa-refresh me-1"></i> Sync Imported
+                                                                </button>
                                                                 <button class="btn btn-sm pm-btn-send-update"
                                                                         t-on-click="(ev) => this.openClientUpdateWizard(proj.id, ev)"
                                                                         title="Send live progress update or completion report to the client">
@@ -937,14 +942,14 @@
                                                                 <table class="pm-scopes-table">
                                                                     <thead>
                                                                         <tr>
-                                                                            <th style="width: 16%;">Scope</th>
-                                                                            <th style="width: 11%;">Category</th>
-                                                                            <th style="width: 30%;">Task / Document Name</th>
-                                                                            <th style="width: 8%;">Priority</th>
-                                                                            <th style="width: 13%;">Responsible</th>
+                                                                            <th style="width: 14%;">Scope</th>
+                                                                            <th style="width: 10%;">Category</th>
+                                                                            <th style="width: 27%;">Task / Document Name</th>
+                                                                            <th style="width: 7%;">Priority</th>
+                                                                            <th style="width: 15%;">Responsible</th>
                                                                             <th style="width: 8%;">Start Date</th>
                                                                             <th style="width: 8%;">End Date</th>
-                                                                            <th style="width: 6%;">Status</th>
+                                                                            <th style="width: 11%;">Status</th>
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
@@ -987,10 +992,28 @@
 
                                                                                 <!-- Responsible -->
                                                                                 <td class="pm-td-resp">
-                                                                                    <div class="d-flex align-items-center text-truncate">
-                                                                                        <i class="fa fa-user-circle-o text-muted me-1 flex-shrink-0"></i>
-                                                                                        <span class="pm-resp-name text-truncate" t-att-title="item.responsible_name" t-esc="item.responsible_name"/>
-                                                                                    </div>
+                                                                                    <t t-if="item.responsible_names and item.responsible_names.length > 1">
+                                                                                        <div class="d-flex flex-wrap gap-1 align-items-center">
+                                                                                            <t t-foreach="item.responsible_names" t-as="rname" t-key="rname">
+                                                                                                <span class="badge text-bg-light border text-truncate fw-normal d-inline-flex align-items-center" style="max-width: 140px; font-size: 0.75rem;" t-att-title="rname">
+                                                                                                    <i class="fa fa-user text-primary me-1 flex-shrink-0" style="font-size: 0.7rem;"></i>
+                                                                                                    <span class="text-truncate"><t t-esc="rname"/></span>
+                                                                                                </span>
+                                                                                            </t>
+                                                                                        </div>
+                                                                                    </t>
+                                                                                    <t t-elif="item.responsible_name and item.responsible_name !== 'Unassigned'">
+                                                                                        <div class="d-flex align-items-center text-truncate">
+                                                                                            <i class="fa fa-user-circle-o text-primary me-1 flex-shrink-0"></i>
+                                                                                            <span class="pm-resp-name text-truncate" t-att-title="item.responsible_name" t-esc="item.responsible_name"/>
+                                                                                        </div>
+                                                                                    </t>
+                                                                                    <t t-else="">
+                                                                                        <div class="d-flex align-items-center text-muted">
+                                                                                            <i class="fa fa-user-circle-o me-1 flex-shrink-0"></i>
+                                                                                            <span class="pm-resp-name text-muted">Unassigned</span>
+                                                                                        </div>
+                                                                                    </t>
                                                                                 </td>
 
                                                                                 <!-- Start Date -->
@@ -1010,7 +1033,7 @@
                                                                                 <!-- Status Badge with Colors (Green, Blue, Yellow, Red) & Edit Button -->
                                                                                 <td class="pm-td-status-badge">
                                                                                     <div class="d-flex align-items-center justify-content-between">
-                                                                                        <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color">
+                                                                                        <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color" t-att-title="item.status_full_label || item.status_label">
                                                                                             <span class="pm-status-dot" t-att-class="'dot-' + item.status_color"></span>
                                                                                             <t t-esc="item.status_label"/>
                                                                                         </span>
@@ -1495,17 +1518,72 @@
                                             <i class="fa fa-edit me-1"></i> Editable Task Details
                                         </div>
 
-                                        <!-- Responsible Consultant / Employee -->
+                                        <!-- Responsible Consultant(s) / Employees (Multiple) -->
                                         <div class="mb-3">
-                                            <label class="form-label fw-bold small text-uppercase text-muted">Responsible Consultant / Employee</label>
-                                            <select class="form-select pm-form-control" t-model="state.wizardData.responsible_id">
-                                                <option value="">-- Unassigned --</option>
-                                                <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
-                                                    <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
-                                                        <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label fw-bold small text-uppercase text-muted mb-0">
+                                                    <i class="fa fa-users text-primary me-1"></i> Responsible Consultant(s) / Employee(s)
+                                                </label>
+                                                <span class="badge text-bg-light border text-secondary small">
+                                                    <t t-esc="(state.wizardData.responsible_ids and state.wizardData.responsible_ids.length) || 0"/> assigned
+                                                </span>
+                                            </div>
+
+                                            <!-- Assigned Employee Badges / Chips with Remove (x) -->
+                                            <div class="d-flex flex-wrap gap-1 p-2 bg-light rounded border mb-2" style="min-height: 42px;">
+                                                <t t-if="state.wizardData.responsible_ids and state.wizardData.responsible_ids.length">
+                                                    <t t-foreach="state.wizardData.responsible_ids" t-as="rEmpId" t-key="rEmpId">
+                                                        <span class="badge bg-primary text-white d-inline-flex align-items-center py-1 px-2 gap-1 rounded-pill" style="font-size: 0.82rem;">
+                                                            <i class="fa fa-user-circle"></i>
+                                                            <t t-esc="this.getEmployeeName(rEmpId)"/>
+                                                            <i class="fa fa-times ms-1 text-white-50 cursor-pointer"
+                                                               title="Remove"
+                                                               style="cursor: pointer;"
+                                                               t-on-click="() => this.removeWizardResponsible(rEmpId)"></i>
+                                                        </span>
                                                     </t>
                                                 </t>
-                                            </select>
+                                                <t t-else="">
+                                                    <span class="text-muted small fst-italic py-1">-- No employees assigned yet --</span>
+                                                </t>
+                                            </div>
+
+                                            <!-- Dropdown to Add Another Employee -->
+                                            <div class="input-group">
+                                                <span class="input-group-text bg-white"><i class="fa fa-user-plus text-primary"></i></span>
+                                                <select class="form-select pm-form-control" t-on-change="(ev) => this.onAddWizardResponsible(ev)">
+                                                    <option value="">+ Add employee to this task...</option>
+                                                    <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                                        <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
+                                                            <option t-att-value="emp.id" t-att-disabled="this.isEmpSelectedInWizard(emp.id)">
+                                                                <t t-esc="emp.name"/>
+                                                                <t t-if="this.isEmpSelectedInWizard(emp.id)"> (already assigned)</t>
+                                                            </option>
+                                                        </t>
+                                                    </t>
+                                                </select>
+                                                <button t-if="state.wizardData.responsible_ids and state.wizardData.responsible_ids.length"
+                                                        type="button" class="btn btn-outline-danger btn-sm"
+                                                        title="Clear all assigned employees"
+                                                        t-on-click="() => this.clearWizardResponsible()">
+                                                    <i class="fa fa-trash-o"></i> Clear
+                                                </button>
+                                            </div>
+
+                                            <!-- Quick Add Chips for Project Team Members -->
+                                            <div class="d-flex flex-wrap gap-1 mt-2 align-items-center" t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                                <span class="text-muted small me-1" style="font-size: 0.75rem;">Quick Select:</span>
+                                                <t t-foreach="state.projectScopesData.available_employees.slice(0, 8)" t-as="emp" t-key="emp.id">
+                                                    <button type="button"
+                                                            class="btn btn-xs rounded-pill"
+                                                            t-att-class="this.isEmpSelectedInWizard(emp.id) ? 'btn-primary' : 'btn-outline-secondary'"
+                                                            style="font-size: 0.72rem; padding: 2px 8px;"
+                                                            t-on-click="() => this.toggleWizardResponsible(emp.id)">
+                                                        <i class="fa me-1" t-att-class="this.isEmpSelectedInWizard(emp.id) ? 'fa-check' : 'fa-plus'"></i>
+                                                        <t t-esc="emp.name"/>
+                                                    </button>
+                                                </t>
+                                            </div>
                                         </div>
 
                                         <!-- Start Date & End Date -->

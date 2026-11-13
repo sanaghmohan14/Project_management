@@ -36,7 +36,7 @@
                 <field name="name" string="Task / Item"/>
                 <field name="project_id" string="Project"/>
                 <field name="category" string="Category" optional="show"/>
-                <field name="responsible_id" string="Assigned To"/>
+                <field name="responsible_ids" string="Assigned To" widget="many2many_tags"/>
                 <field name="submitted_by_id" string="Submitted By" optional="show"/>
                 <field name="submitted_date" string="Submitted On" optional="show"/>
                 <field name="approval_authority" string="Final Authority" optional="show" widget="badge"/>
@@ -65,7 +65,8 @@
                 <field name="name" string="Task" filter_domain="['|', ('name', 'ilike', self), ('code', 'ilike', self)]"/>
                 <field name="priority"/>
                 <field name="project_id" string="Project"/>
-                <field name="responsible_id" string="Assigned To"/>
+                <field name="responsible_ids" string="Assigned To"/>
+                <field name="responsible_id" string="Primary Assigned"/>
                 <field name="submitted_by_id" string="Submitted By"/>
 
                 <filter string="Starred / High Priority" name="filter_starred" domain="[('priority', 'in', ('2', '3'))]"/>

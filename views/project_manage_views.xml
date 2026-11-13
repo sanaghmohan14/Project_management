@@ -17,6 +17,9 @@
                             invisible="state != 'cancelled'"/>
                     <button name="action_open_import_wizard" string="Import Scopes (Excel/CSV)"
                             type="object" class="btn-secondary" icon="fa-upload"/>
+                    <button name="action_sync_imported_scopes" string="Sync Imported Scopes"
+                            type="object" class="btn-outline-success" icon="fa-refresh"
+                            title="Sync and link imported tasks into this project"/>
                     <button name="action_load_standard_scopes" string="Load Standard 30 Scopes"
                             type="object" class="btn-outline-primary" icon="fa-magic"
                             confirm="Load all 30 standard scopes and tasks into this project?"/>
@@ -99,7 +102,7 @@
                                     <field name="evidence_proof" string="Proof" optional="show"/>
                                     <field name="approval_authority" string="Final Approver" widget="badge" optional="show"/>
                                     <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
-                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
+                                    <field name="responsible_ids" string="Responsible" widget="many2many_tags"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date" optional="show"/>
                                     <field name="approval_state" string="Approval Stage" widget="badge" optional="show"
@@ -127,7 +130,7 @@
                                     <field name="item_type" string="Document Type"/>
                                     <field name="approval_authority" string="Final Approval Authority" widget="badge"/>
                                     <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
-                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
+                                    <field name="responsible_ids" string="Responsible" widget="many2many_tags"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
                                     <field name="approval_state" string="Approval Stage" widget="badge" optional="show"
@@ -154,7 +157,7 @@
                                     <field name="evidence_proof" string="Evidence / Proof"/>
                                     <field name="approval_authority" string="Final Approval Authority" widget="badge"/>
                                     <field name="accountable_id" string="Accountable" widget="many2one_avatar_user"/>
-                                    <field name="responsible_id" string="Responsible" widget="many2one_avatar_user"/>
+                                    <field name="responsible_ids" string="Responsible" widget="many2many_tags"/>
                                     <field name="start_date" string="Start Date" optional="show"/>
                                     <field name="end_date" string="End Date"/>
                                     <field name="approval_state" string="Approval Stage" widget="badge" optional="show"

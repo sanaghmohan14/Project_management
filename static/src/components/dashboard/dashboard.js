@@ -409,7 +409,12 @@ export class ProjectManageDashboard extends Component {
 
         // 3. Consultant Filter
         if (this.state.taskConsultantFilter && this.state.taskConsultantFilter !== 'all') {
-            list = list.filter(t => String(t.responsible_id) === String(this.state.taskConsultantFilter));
+            const filterId = Number(this.state.taskConsultantFilter);
+            list = list.filter(t =>
+                (Array.isArray(t.responsible_ids) && t.responsible_ids.includes(filterId)) ||
+                Number(t.responsible_id) === filterId ||
+                String(t.responsible_id) === String(this.state.taskConsultantFilter)
+            );
         }
 
         // 4. Project Filter
@@ -857,6 +862,12 @@ export class ProjectManageDashboard extends Component {
     openScopeWizard(item = null, ev) {
         if (ev) ev.stopPropagation();
         if (item) {
+            let respIds = [];
+            if (Array.isArray(item.responsible_ids) && item.responsible_ids.length > 0) {
+                respIds = item.responsible_ids.map(id => Number(id));
+            } else if (item.responsible_id) {
+                respIds = [Number(item.responsible_id)];
+            }
             this.state.wizardData = {
                 id: item.id,
                 scope: item.scope || item.scope_name || '',
@@ -864,7 +875,8 @@ export class ProjectManageDashboard extends Component {
                 name: item.name || '',
                 item_type: item.item_type || '',
                 priority: item.priority ? String(item.priority) : '0',
-                responsible_id: item.responsible_id ? String(item.responsible_id) : '',
+                responsible_ids: respIds,
+                responsible_id: respIds[0] ? String(respIds[0]) : (item.responsible_id ? String(item.responsible_id) : ''),
                 start_date: item.start_date || '',
                 end_date: item.end_date || '',
                 state: item.state || 'todo',
@@ -878,6 +890,7 @@ export class ProjectManageDashboard extends Component {
                 name: '',
                 item_type: '',
                 priority: '0',
+                responsible_ids: [],
                 responsible_id: '',
                 start_date: '',
                 end_date: '',
@@ -885,6 +898,60 @@ export class ProjectManageDashboard extends Component {
             };
         }
         this.state.scopeWizardOpen = true;
+    }
+
+    getEmployeeName(empId) {
+        if (!empId) return '';
+        const idNum = Number(empId);
+        const emps = (this.state.projectScopesData && this.state.projectScopesData.available_employees) || [];
+        const found = emps.find(e => e.id === idNum);
+        return found ? found.name : `Employee #${idNum}`;
+    }
+
+    isEmpSelectedInWizard(empId) {
+        const idNum = Number(empId);
+        const curIds = this.state.wizardData.responsible_ids || [];
+        return curIds.includes(idNum);
+    }
+
+    onAddWizardResponsible(ev) {
+        const val = ev.target.value;
+        if (!val) return;
+        const idNum = Number(val);
+        if (!Array.isArray(this.state.wizardData.responsible_ids)) {
+            this.state.wizardData.responsible_ids = [];
+        }
+        if (!this.state.wizardData.responsible_ids.includes(idNum)) {
+            this.state.wizardData.responsible_ids.push(idNum);
+            this.state.wizardData.responsible_id = String(this.state.wizardData.responsible_ids[0]);
+        }
+        ev.target.value = "";
+    }
+
+    removeWizardResponsible(empId) {
+        const idNum = Number(empId);
+        if (Array.isArray(this.state.wizardData.responsible_ids)) {
+            this.state.wizardData.responsible_ids = this.state.wizardData.responsible_ids.filter(id => id !== idNum);
+            this.state.wizardData.responsible_id = this.state.wizardData.responsible_ids[0] ? String(this.state.wizardData.responsible_ids[0]) : '';
+        }
+    }
+
+    toggleWizardResponsible(empId) {
+        const idNum = Number(empId);
+        if (!Array.isArray(this.state.wizardData.responsible_ids)) {
+            this.state.wizardData.responsible_ids = [];
+        }
+        if (this.state.wizardData.responsible_ids.includes(idNum)) {
+            this.removeWizardResponsible(idNum);
+        } else {
+            this.state.wizardData.responsible_ids.push(idNum);
+            this.state.wizardData.responsible_id = String(this.state.wizardData.responsible_ids[0]);
+        }
+    }
+
+    clearWizardResponsible() {
+        this.state.wizardData.responsible_ids = [];
+        this.state.wizardData.responsible_id = '';
     }
 
     isStarActive(priority, star) {
@@ -932,13 +999,16 @@ export class ProjectManageDashboard extends Component {
 
         this.state.savingScope = true;
         try {
+            const respIds = Array.isArray(this.state.wizardData.responsible_ids) ? this.state.wizardData.responsible_ids : [];
+            const primaryRespId = respIds.length > 0 ? respIds[0] : (this.state.wizardData.responsible_id || false);
             const vals = {
                 scope: this.state.wizardData.scope,
                 category: this.state.wizardData.category,
                 name: this.state.wizardData.name,
                 item_type: this.state.wizardData.item_type,
                 priority: this.state.wizardData.priority || '0',
-                responsible_id: this.state.wizardData.responsible_id,
+                responsible_ids: respIds,
+                responsible_id: primaryRespId,
                 start_date: this.state.wizardData.start_date,
                 end_date: this.state.wizardData.end_date,
                 state: this.state.wizardData.state,
@@ -1073,6 +1143,23 @@ export class ProjectManageDashboard extends Component {
                 this.loadData();
             }
         });
+    }
+
+    async syncProjectImportedScopes(projectId, ev) {
+        if (ev) ev.stopPropagation();
+        try {
+            await this.orm.call('project.manage', 'action_sync_imported_scopes', [[projectId]]);
+            if (this.notification) {
+                this.notification.add("Imported tasks synced into project successfully.", { type: "success" });
+            }
+            await this.loadProjectScopes(projectId);
+            await this.loadData();
+        } catch (err) {
+            console.error("Failed to sync imported scopes:", err);
+            if (this.notification) {
+                this.notification.add("Failed to sync imported tasks.", { type: "danger" });
+            }
+        }
     }
 
     async openClientUpdateWizard(projectId, ev) {
