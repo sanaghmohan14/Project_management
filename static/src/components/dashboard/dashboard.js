@@ -52,6 +52,7 @@ export class ProjectManageDashboard extends Component {
                 target: 'scope',
                 scope_name_filter: '',
                 responsible_id: '',
+                responsible_ids: [],
                 start_date: '',
                 end_date: '',
                 state: '',
@@ -148,6 +149,17 @@ export class ProjectManageDashboard extends Component {
                 all_teams_filter: [],
                 projects: [],
                 calendar_events: [],
+                consultant_task_stats: {
+                    total: 0,
+                    completed: 0,
+                    not_completed: 0,
+                    overdue: 0,
+                    pending: 0,
+                    waiting_approval: 0,
+                    completion_pct: 0,
+                    not_completed_pct: 0,
+                    projects_breakdown: [],
+                },
             },
         });
 
@@ -1061,6 +1073,7 @@ export class ProjectManageDashboard extends Component {
             target: defaultScope ? 'scope' : 'all',
             scope_name_filter: defaultScope,
             responsible_id: '',
+            responsible_ids: [],
             start_date: '',
             end_date: '',
             state: '',
@@ -1073,6 +1086,46 @@ export class ProjectManageDashboard extends Component {
         this.state.bulkWizardOpen = false;
     }
 
+    onAddBulkResponsible(ev) {
+        const val = ev.target.value;
+        if (!val) return;
+        const idNum = Number(val);
+        if (!Array.isArray(this.state.bulkData.responsible_ids)) {
+            this.state.bulkData.responsible_ids = [];
+        }
+        if (!this.state.bulkData.responsible_ids.includes(idNum)) {
+            this.state.bulkData.responsible_ids.push(idNum);
+            this.state.bulkData.responsible_id = String(this.state.bulkData.responsible_ids[0]);
+        }
+        ev.target.value = "";
+    }
+
+    removeBulkResponsible(empId) {
+        const idNum = Number(empId);
+        if (Array.isArray(this.state.bulkData.responsible_ids)) {
+            this.state.bulkData.responsible_ids = this.state.bulkData.responsible_ids.filter(id => id !== idNum);
+            this.state.bulkData.responsible_id = this.state.bulkData.responsible_ids[0] ? String(this.state.bulkData.responsible_ids[0]) : '';
+        }
+    }
+
+    toggleBulkResponsible(empId) {
+        const idNum = Number(empId);
+        if (!Array.isArray(this.state.bulkData.responsible_ids)) {
+            this.state.bulkData.responsible_ids = [];
+        }
+        if (this.state.bulkData.responsible_ids.includes(idNum)) {
+            this.removeBulkResponsible(idNum);
+        } else {
+            this.state.bulkData.responsible_ids.push(idNum);
+            this.state.bulkData.responsible_id = String(this.state.bulkData.responsible_ids[0]);
+        }
+    }
+
+    clearBulkResponsible() {
+        this.state.bulkData.responsible_ids = [];
+        this.state.bulkData.responsible_id = '';
+    }
+
     async applyBulkFill() {
         if (this.state.savingScope) return;
         const projectId = this.state.projectScopesData.project.id;
@@ -1080,8 +1133,12 @@ export class ProjectManageDashboard extends Component {
         if (this.state.bulkData.target === 'scope' && this.state.bulkData.scope_name_filter) {
             vals.scope_name_filter = this.state.bulkData.scope_name_filter;
         }
-        if (this.state.bulkData.responsible_id) {
+        if (Array.isArray(this.state.bulkData.responsible_ids) && this.state.bulkData.responsible_ids.length > 0) {
+            vals.responsible_ids = this.state.bulkData.responsible_ids;
+            vals.responsible_id = this.state.bulkData.responsible_ids[0];
+        } else if (this.state.bulkData.responsible_id) {
             vals.responsible_id = this.state.bulkData.responsible_id;
+            vals.responsible_ids = [Number(this.state.bulkData.responsible_id)];
         }
         if (this.state.bulkData.start_date) {
             vals.start_date = this.state.bulkData.start_date;
@@ -1096,7 +1153,8 @@ export class ProjectManageDashboard extends Component {
             vals.category = this.state.bulkData.category;
         }
 
-        if (!vals.responsible_id && !vals.start_date && !vals.end_date && !vals.state && !vals.category) {
+        const hasResponsible = (Array.isArray(this.state.bulkData.responsible_ids) && this.state.bulkData.responsible_ids.length > 0) || Boolean(this.state.bulkData.responsible_id);
+        if (!hasResponsible && !vals.start_date && !vals.end_date && !vals.state && !vals.category) {
             if (this.notification) {
                 this.notification.add("Please select at least one field to update (Responsible, Start Date, End Date, Status, or Category).", { type: "warning" });
             }

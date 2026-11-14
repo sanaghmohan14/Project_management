@@ -863,6 +863,192 @@ body.o_dark_theme .pm-dashboard-wrapper {
     text-align: center;
 }
 
+/* ---------------- Consultant Task Completion Charts ---------------- */
+.pm-task-barchart-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+}
+
+.pm-task-barchart-wrap {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-around;
+    height: 125px;
+    padding-top: 10px;
+}
+
+.pm-task-bar-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 42%;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.pm-task-bar-val {
+    font-size: 0.95rem;
+    font-weight: 700;
+    margin-bottom: 4px;
+}
+
+.pm-task-bar-track {
+    width: 28px;
+    height: 75px;
+    display: flex;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.04);
+    border-radius: 4px 4px 0 0;
+}
+
+.pm-theme-dark .pm-task-bar-track {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.pm-task-bar {
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.4s ease;
+}
+
+.pm-task-bar-lbl {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--pm-text);
+    margin-top: 6px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.pm-task-bar-sub {
+    font-size: 0.7rem;
+    color: var(--pm-text-muted);
+}
+
+/* Consultant Project-by-Project Task Bar Chart Section */
+.pm-consultant-tasks-chart-section {
+    margin-bottom: 24px;
+}
+
+.pm-project-tasks-chart-card {
+    background: var(--pm-card-bg);
+    border: 1px solid var(--pm-border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: var(--pm-shadow);
+}
+
+.pm-projects-task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 12px;
+}
+
+.pm-project-task-row {
+    padding: 12px 16px;
+    background: var(--pm-card-bg);
+    border-radius: 8px;
+    border: 1px solid var(--pm-border);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.pm-project-task-row:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.pm-project-task-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pm-project-task-title-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.pm-project-task-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--pm-text);
+}
+
+.pm-project-task-total {
+    font-size: 0.78rem;
+    color: var(--pm-text-muted);
+}
+
+.pm-project-task-counts {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.pm-cnt-pill {
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.pm-cnt-done {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.pm-cnt-notdone {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.pm-cnt-late {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.pm-theme-dark .pm-cnt-done {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+}
+
+.pm-theme-dark .pm-cnt-notdone {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+}
+
+.pm-theme-dark .pm-cnt-late {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+}
+
+.pm-task-progress-track {
+    height: 10px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 5px;
+    overflow: hidden;
+    display: flex;
+    width: 100%;
+}
+
+.pm-theme-dark .pm-task-progress-track {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.pm-task-prog-seg {
+    height: 100%;
+    transition: width 0.4s ease;
+}
+
 /* ---------------- 3. TEAMS ROW ---------------- */
 .pm-teams-row {
     display: grid;
@@ -3625,27 +3811,49 @@ body.o_dark_theme .pm-dashboard-wrapper {
     display: flex;
     align-items: center;
     gap: 4px;
-    opacity: 0;
+    opacity: 0.6;
     transition: opacity 0.15s ease;
 
-    .pm-btn-row-wizard {
-        padding: 3px 6px !important;
-        font-size: 0.75rem !important;
+    .pm-btn-row-view {
+        width: 24px !important;
+        height: 24px !important;
+        padding: 0 !important;
+        font-size: 0.72rem !important;
         border-radius: 4px !important;
-        color: #3b82f6 !important;
-        border: 1px solid rgba(59, 130, 246, 0.25) !important;
-        background: rgba(59, 130, 246, 0.1) !important;
+        color: #0284c7 !important;
+        border: 1px solid rgba(2, 132, 199, 0.35) !important;
+        background: rgba(2, 132, 199, 0.08) !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        cursor: pointer !important;
+        flex-shrink: 0 !important;
 
         &:hover {
             color: #ffffff !important;
-            background: #2563eb !important;
-            border-color: #2563eb !important;
+            background: #0284c7 !important;
+            border-color: #0284c7 !important;
+            box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25) !important;
         }
     }
 }
 
 tr.pm-scope-item-row:hover .pm-row-hover-actions {
     opacity: 1;
+}
+
+.pm-btn-modal-view-details {
+    font-size: 0.8rem !important;
+    padding: 3px 10px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+}
+
+.pm-btn-footer-view-details {
+    font-size: 0.82rem !important;
+    padding: 5px 12px !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
 }
 
 /* ========================================================

@@ -80,12 +80,14 @@
                     </button>
 
                     <!-- New Project Button (Executives / Managers) -->
-                    <t t-if="!state.data.user_info.is_consultant">
+                    <t t-if="!state.data.user_info.is_consultant and state.data.user_info.can_create_project">
                         <button class="pm-action-btn" t-on-click="createNewProject">
                             <i class="fa fa-plus me-1"></i> New Project
                         </button>
+                    </t>
 
-                        <!-- Project Selector Dropdown (Executive / Manager / Lead) -->
+                    <!-- Project Selector Dropdown (All Roles including Consultant) -->
+                    <t t-if="state.data.all_projects_filter and state.data.all_projects_filter.length > 0">
                         <div class="pm-project-filter-box">
                             <div class="pm-project-select-wrapper" t-att-class="state.selectedProjectId ? 'has-active-project' : ''">
                                 <i class="fa fa-folder-open-o pm-project-select-icon"></i>
@@ -93,7 +95,7 @@
                                         t-on-change="onProjectSelectChange"
                                         t-att-value="state.selectedProjectId || ''"
                                         title="Filter Dashboard by Project">
-                                    <option value="">📁 All Projects (<t t-esc="state.data.all_projects_filter ? state.data.all_projects_filter.length : (state.data.projects ? state.data.projects.length : 0)"/>)</option>
+                                    <option value="">📁 All Projects (<t t-esc="state.data.all_projects_filter.length"/>)</option>
                                     <t t-foreach="state.data.all_projects_filter || []" t-as="p" t-key="p.id">
                                         <option t-att-value="p.id" t-att-selected="state.selectedProjectId == p.id ? 'selected' : undefined">
                                             <t t-esc="p.name"/> (<t t-esc="p.progress"/>% · <t t-esc="p.health"/>)
@@ -114,10 +116,8 @@
             <div class="pm-dashboard-content">
 
                 <!-- ==================== EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
-                <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
-                <t t-if="!state.data.user_info.is_consultant">
-                    <!-- Active Project Filter Banner -->
-                    <t t-if="state.selectedProjectId and state.data.selected_project_name">
+                <!-- Active Project Filter Banner -->
+                <t t-if="state.selectedProjectId and state.data.selected_project_name">
                         <div class="pm-active-filter-banner">
                             <div class="pm-active-filter-content">
                                 <span class="pm-filter-badge">
@@ -182,27 +182,53 @@
                         </div>
                     </div>
 
-                    <!-- Overall Health -->
-                    <div class="pm-kpi-card">
-                        <div class="pm-kpi-header">
-                            <span class="pm-kpi-title">Overall health</span>
-                            <div class="pm-kpi-icon-box bg-emerald-subtle">
-                                <i class="fa fa-heart-o text-success"></i>
+                    <!-- Overall Health (For Managers/Executives) OR Task Completion (For Consultants) -->
+                    <t t-if="!state.data.user_info.is_consultant">
+                        <div class="pm-kpi-card">
+                            <div class="pm-kpi-header">
+                                <span class="pm-kpi-title">Overall health</span>
+                                <div class="pm-kpi-icon-box bg-emerald-subtle">
+                                    <i class="fa fa-heart-o text-success"></i>
+                                </div>
+                            </div>
+                            <div class="pm-kpi-value-row">
+                                <span class="pm-kpi-value"><t t-esc="state.data.overall_health_score"/>%</span>
+                                <span class="pm-kpi-badge pm-health-good" t-esc="state.data.overall_health_label"/>
+                            </div>
+                            <div class="pm-segmented-bar">
+                                <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.health_good_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                                <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.health_fair_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                                <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.health_poor_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
+                            </div>
+                            <div class="pm-kpi-subtext">
+                                <t t-esc="state.data.health_good_count"/> good · <t t-esc="state.data.health_fair_count"/> fair · <t t-esc="state.data.health_poor_count"/> poor
                             </div>
                         </div>
-                        <div class="pm-kpi-value-row">
-                            <span class="pm-kpi-value"><t t-esc="state.data.overall_health_score"/>%</span>
-                            <span class="pm-kpi-badge pm-health-good" t-esc="state.data.overall_health_label"/>
+                    </t>
+                    <t t-else="">
+                        <!-- Task Completion Card for Consultant (Replaces Overall Health) -->
+                        <div class="pm-kpi-card">
+                            <div class="pm-kpi-header">
+                                <span class="pm-kpi-title">Tasks Completed</span>
+                                <div class="pm-kpi-icon-box bg-emerald-subtle">
+                                    <i class="fa fa-check-square-o text-success"></i>
+                                </div>
+                            </div>
+                            <div class="pm-kpi-value-row">
+                                <span class="pm-kpi-value"><t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completion_pct : 0"/>%</span>
+                                <span class="pm-kpi-badge" t-att-class="(state.data.consultant_task_stats and state.data.consultant_task_stats.completion_pct >= 50) ? 'pm-health-good' : 'pm-risk-high'">
+                                    <t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completed : 0"/> Done
+                                </span>
+                            </div>
+                            <div class="pm-segmented-bar">
+                                <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ state.data.consultant_task_stats ? state.data.consultant_task_stats.completion_pct : 0 }}%;"></div>
+                                <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ state.data.consultant_task_stats ? state.data.consultant_task_stats.not_completed_pct : 100 }}%;"></div>
+                            </div>
+                            <div class="pm-kpi-subtext">
+                                <t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completed : 0"/> completed · <t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.not_completed : 0"/> not completed
+                            </div>
                         </div>
-                        <div class="pm-segmented-bar">
-                            <div class="pm-seg pm-seg-emerald" t-attf-style="width: {{ (state.data.health_good_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
-                            <div class="pm-seg pm-seg-amber" t-attf-style="width: {{ (state.data.health_fair_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
-                            <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.health_poor_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
-                        </div>
-                        <div class="pm-kpi-subtext">
-                            <t t-esc="state.data.health_good_count"/> good · <t t-esc="state.data.health_fair_count"/> fair · <t t-esc="state.data.health_poor_count"/> poor
-                        </div>
-                    </div>
+                    </t>
 
                     <!-- High-Risk Projects -->
                     <div class="pm-kpi-card">
@@ -250,57 +276,110 @@
 
                 <!-- ==================== 2. MIDDLE ROW: 4 ANALYTICAL CHARTS ==================== -->
                 <section class="pm-charts-row">
-                    <!-- 1. Project Health Donut -->
-                    <div class="pm-widget-card">
-                        <div class="pm-widget-header">
-                            <div>
-                                <h3 class="pm-widget-title">Project health</h3>
-                                <p class="pm-widget-sub">How healthy each project is</p>
+                    <!-- 1. Project Health Donut (For Managers/Leads) OR Tasks Bar Chart (For Consultants) -->
+                    <t t-if="!state.data.user_info.is_consultant">
+                        <div class="pm-widget-card">
+                            <div class="pm-widget-header">
+                                <div>
+                                    <h3 class="pm-widget-title">Project health</h3>
+                                    <p class="pm-widget-sub">How healthy each project is</p>
+                                </div>
+                            </div>
+                            <div class="pm-widget-body pm-health-body">
+                                <!-- SVG Donut Chart with live data -->
+                                <div class="pm-donut-container">
+                                    <svg viewBox="0 0 100 100" class="pm-donut-svg">
+                                        <circle cx="50" cy="50" r="38" class="pm-donut-bg"/>
+                                        <!-- Good segment -->
+                                        <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-green"
+                                                t-att-stroke-dasharray="state.data.donut_good_dash"
+                                                t-att-stroke-dashoffset="state.data.donut_good_offset"/>
+                                        <!-- Fair segment -->
+                                        <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-amber"
+                                                t-att-stroke-dasharray="state.data.donut_fair_dash"
+                                                t-att-stroke-dashoffset="state.data.donut_fair_offset"/>
+                                        <!-- Poor segment -->
+                                        <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-red"
+                                                t-att-stroke-dasharray="state.data.donut_poor_dash"
+                                                t-att-stroke-dashoffset="state.data.donut_poor_offset"/>
+                                    </svg>
+                                    <div class="pm-donut-center-text">
+                                        <span class="pm-donut-score"><t t-esc="state.data.overall_health_score"/>%</span>
+                                        <span class="pm-donut-lbl">health score</span>
+                                    </div>
+                                </div>
+                                <!-- Legend -->
+                                <div class="pm-donut-legend">
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-emerald"></span>
+                                        <span class="pm-legend-label">Good</span>
+                                        <strong class="pm-legend-val" t-esc="state.data.health_good_count"/>
+                                    </div>
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-amber"></span>
+                                        <span class="pm-legend-label">Fair</span>
+                                        <strong class="pm-legend-val" t-esc="state.data.health_fair_count"/>
+                                    </div>
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-rose"></span>
+                                        <span class="pm-legend-label">Poor</span>
+                                        <strong class="pm-legend-val" t-esc="state.data.health_poor_count"/>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div class="pm-widget-body pm-health-body">
-                            <!-- SVG Donut Chart with live data -->
-                            <div class="pm-donut-container">
-                                <svg viewBox="0 0 100 100" class="pm-donut-svg">
-                                    <circle cx="50" cy="50" r="38" class="pm-donut-bg"/>
-                                    <!-- Good segment -->
-                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-green"
-                                            t-att-stroke-dasharray="state.data.donut_good_dash"
-                                            t-att-stroke-dashoffset="state.data.donut_good_offset"/>
-                                    <!-- Fair segment -->
-                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-amber"
-                                            t-att-stroke-dasharray="state.data.donut_fair_dash"
-                                            t-att-stroke-dashoffset="state.data.donut_fair_offset"/>
-                                    <!-- Poor segment -->
-                                    <circle cx="50" cy="50" r="38" class="pm-donut-seg pm-donut-seg-red"
-                                            t-att-stroke-dasharray="state.data.donut_poor_dash"
-                                            t-att-stroke-dashoffset="state.data.donut_poor_offset"/>
-                                </svg>
-                                <div class="pm-donut-center-text">
-                                    <span class="pm-donut-score"><t t-esc="state.data.overall_health_score"/>%</span>
-                                    <span class="pm-donut-lbl">health score</span>
+                    </t>
+                    <t t-else="">
+                        <!-- Consultant Tasks Completion Bar Chart (Replaces Health Donut) -->
+                        <div class="pm-widget-card">
+                            <div class="pm-widget-header">
+                                <div>
+                                    <h3 class="pm-widget-title">Task completion</h3>
+                                    <p class="pm-widget-sub">Completed vs not completed tasks</p>
                                 </div>
                             </div>
-                            <!-- Legend -->
-                            <div class="pm-donut-legend">
-                                <div class="pm-legend-row">
-                                    <span class="pm-legend-dot bg-emerald"></span>
-                                    <span class="pm-legend-label">Good</span>
-                                    <strong class="pm-legend-val" t-esc="state.data.health_good_count"/>
+                            <div class="pm-widget-body pm-task-barchart-body">
+                                <div class="pm-task-barchart-wrap">
+                                    <div class="pm-task-bar-col">
+                                        <span class="pm-task-bar-val text-success"><t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completed : 0"/></span>
+                                        <div class="pm-task-bar-track">
+                                            <div class="pm-task-bar bg-emerald"
+                                                 t-attf-style="height: {{ (state.data.consultant_task_stats and state.data.consultant_task_stats.total > 0) ? Math.max((state.data.consultant_task_stats.completed / state.data.consultant_task_stats.total) * 75, 4) : 4 }}px;"></div>
+                                        </div>
+                                        <span class="pm-task-bar-lbl">Completed</span>
+                                        <span class="pm-task-bar-sub"><t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completion_pct : 0"/>%</span>
+                                    </div>
+
+                                    <div class="pm-task-bar-col">
+                                        <span class="pm-task-bar-val text-danger"><t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.not_completed : 0"/></span>
+                                        <div class="pm-task-bar-track">
+                                            <div class="pm-task-bar bg-rose"
+                                                 t-attf-style="height: {{ (state.data.consultant_task_stats and state.data.consultant_task_stats.total > 0) ? Math.max((state.data.consultant_task_stats.not_completed / state.data.consultant_task_stats.total) * 75, 4) : 4 }}px;"></div>
+                                        </div>
+                                        <span class="pm-task-bar-lbl">Not Completed</span>
+                                        <span class="pm-task-bar-sub"><t t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.not_completed_pct : 0"/>%</span>
+                                    </div>
                                 </div>
-                                <div class="pm-legend-row">
-                                    <span class="pm-legend-dot bg-amber"></span>
-                                    <span class="pm-legend-label">Fair</span>
-                                    <strong class="pm-legend-val" t-esc="state.data.health_fair_count"/>
-                                </div>
-                                <div class="pm-legend-row">
-                                    <span class="pm-legend-dot bg-rose"></span>
-                                    <span class="pm-legend-label">Poor</span>
-                                    <strong class="pm-legend-val" t-esc="state.data.health_poor_count"/>
+                                <div class="pm-donut-legend">
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-emerald"></span>
+                                        <span class="pm-legend-label">Completed</span>
+                                        <strong class="pm-legend-val text-success" t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.completed : 0"/>
+                                    </div>
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-amber"></span>
+                                        <span class="pm-legend-label">Pending</span>
+                                        <strong class="pm-legend-val text-warning" t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.pending : 0"/>
+                                    </div>
+                                    <div class="pm-legend-row">
+                                        <span class="pm-legend-dot bg-rose"></span>
+                                        <span class="pm-legend-label">Overdue</span>
+                                        <strong class="pm-legend-val text-danger" t-esc="state.data.consultant_task_stats ? state.data.consultant_task_stats.overdue : 0"/>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </t>
 
                     <!-- 2. Running Status 2x2 Grid -->
                     <div class="pm-widget-card">
@@ -438,6 +517,8 @@
                 </section>
 
                 <!-- ==================== 3. THIRD ROW: TEAMS + TEAM COMPARISON ==================== -->
+                <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants - not others performance) -->
+                <t t-if="!state.data.user_info.is_consultant">
                 <section class="pm-teams-row">
                     <!-- Individual Team Cards -->
                     <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
@@ -561,6 +642,64 @@
                         </div>
                     </div>
                 </section>
+                </t>
+
+                <!-- ==================== TASKS COMPLETION BY PROJECT (ALL ROLES: Admin, CEO, VP, PM, Team Lead, Consultant) ==================== -->
+                <t t-if="state.data.consultant_task_stats and state.data.consultant_task_stats.projects_breakdown and state.data.consultant_task_stats.projects_breakdown.length > 0">
+                    <section class="pm-consultant-tasks-chart-section">
+                        <div class="pm-widget-card pm-project-tasks-chart-card">
+                            <div class="pm-widget-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <h3 class="pm-widget-title"><i class="fa fa-bar-chart text-primary me-2"></i>Tasks Completion by Project</h3>
+                                    <p class="pm-widget-sub">Completed vs not completed deliverables across projects</p>
+                                </div>
+                                <div class="d-flex align-items-center gap-3">
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                        <i class="fa fa-circle text-success me-1"></i> Completed
+                                    </span>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                        <i class="fa fa-circle text-danger me-1"></i> Not Completed
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="pm-widget-body">
+                                <div class="pm-projects-task-list">
+                                    <t t-foreach="state.data.consultant_task_stats.projects_breakdown" t-as="p_stat" t-key="p_stat.project_id">
+                                        <div class="pm-project-task-row">
+                                            <div class="pm-project-task-meta">
+                                                <div class="pm-project-task-title-wrap">
+                                                    <span class="pm-project-task-name" t-esc="p_stat.project_name"/>
+                                                    <span class="pm-project-task-total ms-2">(<t t-esc="p_stat.total"/> total tasks)</span>
+                                                </div>
+                                                <div class="pm-project-task-counts">
+                                                    <span class="pm-cnt-pill pm-cnt-done">
+                                                        <i class="fa fa-check me-1"></i><t t-esc="p_stat.completed"/> completed (<t t-esc="p_stat.completed_pct"/>%)
+                                                    </span>
+                                                    <span class="pm-cnt-pill pm-cnt-notdone">
+                                                        <i class="fa fa-clock-o me-1"></i><t t-esc="p_stat.not_completed"/> not completed (<t t-esc="p_stat.not_completed_pct"/>%)
+                                                    </span>
+                                                    <t t-if="p_stat.overdue > 0">
+                                                        <span class="pm-cnt-pill pm-cnt-late">
+                                                            <i class="fa fa-exclamation-triangle me-1"></i><t t-esc="p_stat.overdue"/> overdue
+                                                        </span>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                            <!-- Comparative Horizontal Stacked Bar Chart -->
+                                            <div class="pm-task-progress-track">
+                                                <div class="pm-task-prog-seg bg-emerald"
+                                                     t-attf-style="width: {{ p_stat.completed_pct }}%;"
+                                                     t-att-title="p_stat.completed + ' Completed (' + p_stat.completed_pct + '%)'"></div>
+                                                <div class="pm-task-prog-seg bg-rose"
+                                                     t-attf-style="width: {{ p_stat.not_completed_pct }}%;"
+                                                     t-att-title="p_stat.not_completed + ' Not Completed (' + p_stat.not_completed_pct + '%)'"></div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </t>
 
                 <!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
@@ -1015,7 +1154,7 @@
                                                                                     </span>
                                                                                 </td>
 
-                                                                                <!-- Status Badge with Colors (Green, Blue, Yellow, Red) & Edit Button -->
+                                                                                <!-- Status Badge with Colors (Green, Blue, Yellow, Red) & View Details Button -->
                                                                                 <td class="pm-td-status-badge">
                                                                                     <div class="d-flex align-items-center justify-content-between">
                                                                                         <span class="pm-color-badge" t-att-class="'pm-badge-' + item.status_color" t-att-title="item.status_full_label || item.status_label">
@@ -1023,8 +1162,10 @@
                                                                                             <t t-esc="item.status_label"/>
                                                                                         </span>
                                                                                         <div class="pm-row-hover-actions">
-                                                                                            <button class="btn btn-sm pm-btn-row-wizard" title="Edit in wizard" t-on-click="(ev) => this.openScopeWizard(item, ev)">
-                                                                                                <i class="fa fa-pencil"></i>
+                                                                                            <button class="btn btn-sm pm-btn-row-view"
+                                                                                                    title="View backend details"
+                                                                                                    t-on-click="(ev) => { ev.stopPropagation(); this.openScope(item.id); }">
+                                                                                                <i class="fa fa-external-link"></i>
                                                                                             </button>
                                                                                         </div>
                                                                                     </div>
@@ -1236,8 +1377,8 @@
                                 </select>
                             </t>
 
-                            <!-- Project Filter (For Team Leads, Managers, Executives) -->
-                            <t t-if="!state.data.user_info.is_consultant and state.data.tasks_hub and state.data.tasks_hub.available_projects and state.data.tasks_hub.available_projects.length > 1">
+                            <!-- Project Filter (Available when multiple projects exist) -->
+                            <t t-if="state.data.tasks_hub and state.data.tasks_hub.available_projects and state.data.tasks_hub.available_projects.length > 1">
                                 <select class="form-select form-select-sm pm-select-filter"
                                         t-on-change="setTaskProjectFilter"
                                         t-att-value="state.taskProjectFilter">
@@ -1388,18 +1529,27 @@
                     <div class="pm-modal-backdrop" t-on-click="closeScopeWizard">
                         <div class="pm-modal-dialog" t-on-click.stop="">
                             <div class="pm-modal-content">
-                                <div class="pm-modal-header">
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center">
                                     <div>
                                         <h5 class="pm-modal-title">
                                             <i class="fa fa-tasks me-2 text-primary"></i>
-                                            <t t-if="state.wizardData.id">Edit Scope Task</t>
+                                            <t t-if="state.wizardData.id">Scope Task Details &amp; Edit</t>
                                             <t t-else="">Fill / Add New Scope Task</t>
                                         </h5>
                                         <div class="pm-modal-subtitle text-muted small">
                                             Project: <span class="fw-semibold text-primary"><t t-esc="state.projectScopesData and state.projectScopesData.project.name"/></span>
                                         </div>
                                     </div>
-                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeScopeWizard" aria-label="Close"></button>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <t t-if="state.wizardData.id">
+                                            <button type="button" class="btn btn-sm btn-outline-primary pm-btn-modal-view-details"
+                                                    title="View full scope details in Odoo backend form"
+                                                    t-on-click="() => this.openScope(state.wizardData.id)">
+                                                <i class="fa fa-external-link me-1"></i> View Details
+                                            </button>
+                                        </t>
+                                        <button type="button" class="btn-close pm-modal-close" t-on-click="closeScopeWizard" aria-label="Close"></button>
+                                    </div>
                                 </div>
 
                                 <div class="pm-modal-body">
@@ -1626,26 +1776,37 @@
                                     </div>
                                 </div>
 
-                                <div class="pm-modal-footer">
-                                    <button type="button" class="btn btn-outline-secondary pm-btn-modal-cancel" t-on-click="closeScopeWizard">
-                                        Cancel
-                                    </button>
-                                    <t t-if="state.wizardData.id">
-                                        <button type="button" class="btn btn-outline-primary pm-btn-modal-next"
-                                                t-att-disabled="state.savingScope"
-                                                t-on-click="() => this.saveScopeWizard(true)"
-                                                title="Save current and automatically open the next task in the list">
-                                            <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i></t>
-                                            <i t-else="" class="fa fa-arrow-right me-1"></i> Save &amp; Next Task
+                                <div class="pm-modal-footer d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <t t-if="state.wizardData.id">
+                                            <button type="button" class="btn btn-sm btn-outline-info pm-btn-footer-view-details"
+                                                    title="Open full scope details in Odoo backend form"
+                                                    t-on-click="() => this.openScope(state.wizardData.id)">
+                                                <i class="fa fa-external-link me-1"></i> View Backend Details
+                                            </button>
+                                        </t>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-outline-secondary pm-btn-modal-cancel" t-on-click="closeScopeWizard">
+                                            Cancel
                                         </button>
-                                    </t>
-                                    <button type="button" class="btn btn-primary pm-btn-modal-save"
-                                            t-att-disabled="state.savingScope"
-                                            t-on-click="() => this.saveScopeWizard(false)">
-                                        <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i> Saving...</t>
-                                        <t t-elif="state.wizardData.id"><i class="fa fa-check me-1"></i> Save Changes</t>
-                                        <t t-else=""><i class="fa fa-plus me-1"></i> Create Scope Task</t>
-                                    </button>
+                                        <t t-if="state.wizardData.id">
+                                            <button type="button" class="btn btn-outline-primary pm-btn-modal-next"
+                                                    t-att-disabled="state.savingScope"
+                                                    t-on-click="() => this.saveScopeWizard(true)"
+                                                    title="Save current and automatically open the next task in the list">
+                                                <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i></t>
+                                                <i t-else="" class="fa fa-arrow-right me-1"></i> Save &amp; Next Task
+                                            </button>
+                                        </t>
+                                        <button type="button" class="btn btn-primary pm-btn-modal-save"
+                                                t-att-disabled="state.savingScope"
+                                                t-on-click="() => this.saveScopeWizard(false)">
+                                            <t t-if="state.savingScope"><i class="fa fa-spinner fa-spin me-1"></i> Saving...</t>
+                                            <t t-elif="state.wizardData.id"><i class="fa fa-check me-1"></i> Save Changes</t>
+                                            <t t-else=""><i class="fa fa-plus me-1"></i> Create Scope Task</t>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1706,17 +1867,66 @@
                                         Fields to Fill (Leave empty to keep existing values):
                                     </div>
 
-                                    <!-- Assign Responsible -->
+                                    <!-- Assign Responsible Consultant(s) / Employee(s) -->
                                     <div class="mb-3">
-                                        <label class="form-label small fw-semibold">Assign Responsible Consultant:</label>
-                                        <select class="form-select pm-form-control" t-model="state.bulkData.responsible_id">
-                                            <option value="">-- Do Not Change --</option>
-                                            <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
-                                                <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
-                                                    <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <label class="form-label small fw-semibold mb-0">
+                                                <i class="fa fa-users text-primary me-1"></i> Assign Responsible Consultant(s):
+                                            </label>
+                                            <span class="badge text-bg-light border text-secondary small">
+                                                <t t-esc="(state.bulkData.responsible_ids and state.bulkData.responsible_ids.length) || 0"/> selected
+                                            </span>
+                                        </div>
+
+                                        <!-- Assigned Employee Badges / Chips with Remove (x) -->
+                                        <div class="d-flex flex-wrap gap-1 p-2 bg-light rounded border mb-2" style="min-height: 42px;">
+                                            <t t-if="state.bulkData.responsible_ids and state.bulkData.responsible_ids.length">
+                                                <t t-foreach="state.bulkData.responsible_ids" t-as="rEmpId" t-key="rEmpId">
+                                                    <span class="badge bg-primary text-white d-inline-flex align-items-center py-1 px-2 gap-1 rounded-pill" style="font-size: 0.82rem;">
+                                                        <i class="fa fa-user-circle"></i>
+                                                        <t t-esc="this.getEmployeeName(rEmpId)"/>
+                                                        <i class="fa fa-times ms-1 text-white-50 cursor-pointer"
+                                                           title="Remove"
+                                                           style="cursor: pointer;"
+                                                           t-on-click="() => this.removeBulkResponsible(rEmpId)"></i>
+                                                    </span>
                                                 </t>
                                             </t>
-                                        </select>
+                                            <t t-else="">
+                                                <span class="text-muted small align-self-center fst-italic">Leave empty to keep existing responsible, or select below to assign in bulk.</span>
+                                            </t>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <select class="form-select form-select-sm pm-form-control"
+                                                    t-on-change="(ev) => this.onAddBulkResponsible(ev)">
+                                                <option value="">+ Add Employee / Consultant...</option>
+                                                <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                                    <t t-foreach="state.projectScopesData.available_employees" t-as="emp" t-key="emp.id">
+                                                        <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                                    </t>
+                                                </t>
+                                            </select>
+                                            <button t-if="state.bulkData.responsible_ids and state.bulkData.responsible_ids.length"
+                                                    type="button" class="btn btn-outline-danger btn-sm"
+                                                    title="Clear selection"
+                                                    t-on-click="() => this.clearBulkResponsible()">
+                                                <i class="fa fa-trash-o"></i> Clear
+                                            </button>
+                                        </div>
+
+                                        <!-- Quick Add Chips for Project Team Members -->
+                                        <div class="d-flex flex-wrap gap-1 mt-2 align-items-center" t-if="state.projectScopesData and state.projectScopesData.available_employees">
+                                            <span class="text-muted small me-1" style="font-size: 0.75rem;">Quick Select:</span>
+                                            <t t-foreach="state.projectScopesData.available_employees.slice(0, 8)" t-as="emp" t-key="emp.id">
+                                                <span class="badge border cursor-pointer"
+                                                      style="cursor: pointer; font-size: 0.75rem;"
+                                                      t-att-class="(state.bulkData.responsible_ids and state.bulkData.responsible_ids.includes(emp.id)) ? 'bg-primary text-white border-primary' : 'bg-white text-dark border-secondary-subtle'"
+                                                      t-on-click="() => this.toggleBulkResponsible(emp.id)">
+                                                    + <t t-esc="emp.name"/>
+                                                </span>
+                                            </t>
+                                        </div>
                                     </div>
 
                                     <!-- Set Start Date -->
