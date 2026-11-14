@@ -1,7 +1,7 @@
 import base64
 import uuid
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import UserError, ValidationError, AccessError
 
 
 class ProjectManageTag(models.Model):
@@ -638,8 +638,10 @@ class ProjectManage(models.Model):
             target_role = 'manager'
         elif user.has_group('project_manage.group_project_manage_team_lead'):
             target_role = 'team_lead'
-        else:
+        elif user.has_group('project_manage.group_project_manage_consultant'):
             target_role = 'consultant'
+        else:
+            raise AccessError(_("You do not have access rights to the Project Management module."))
 
         # Only Project Manager, CEO, VP, and Admin can see all teams' data and create projects
         can_see_all_teams = target_role in ('admin', 'ceo', 'vp', 'manager')
@@ -821,7 +823,7 @@ class ProjectManage(models.Model):
                     'can_approve': False,
                     'can_create_project': False,
                     'can_see_all_teams': False,
-                    'can_switch_roles': is_actual_admin or is_actual_ceo,
+                    'can_switch_roles': False,
                     'active_view_mode': 'consultant',
                 },
                 'user_team_name': user_team_name,
@@ -1606,7 +1608,7 @@ class ProjectManage(models.Model):
                 'can_approve': True if (is_actual_admin or is_actual_ceo) else role_code in ('vp', 'manager', 'team_lead'),
                 'can_create_project': can_create_project,
                 'can_see_all_teams': can_see_all_teams,
-                'can_switch_roles': is_actual_admin or is_actual_ceo,
+                'can_switch_roles': False,
                 'active_view_mode': role_code,
             },
             'user_team_name': user_team_name,

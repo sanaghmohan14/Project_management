@@ -191,27 +191,27 @@
                         </group>
                     </group>
                     <notebook>
-                        <page string="Notes &amp; Details" name="notes">
-                            <field name="notes" placeholder="Notes, instructions or deliverables..."/>
-                        </page>
                         <page string="Documents &amp; Files" name="documents">
                             <group string="Quick File Upload (Multiple Attachments)">
                                 <field name="attachment_ids" widget="many2many_binary" string="Upload Files" nolabel="1"/>
                             </group>
-                            <group string="Document &amp; Deliverable Register">
+                            <group string="Document &amp; Deliverable Register (Upload Details)">
                                 <field name="document_ids" nolabel="1">
                                     <list editable="bottom">
                                         <field name="name" string="Document Title" placeholder="e.g. Approved SOP, Audit Evidence..."/>
-                                        <field name="doc_type" string="Category"/>
+                                        <field name="doc_type" string="Category" widget="badge"/>
                                         <field name="file" filename="filename" string="File (Upload / Download)"/>
                                         <field name="filename" column_invisible="True"/>
-                                        <field name="file_size_display" string="Size"/>
-                                        <field name="uploaded_by" string="Uploaded By" optional="show"/>
-                                        <field name="upload_date" string="Upload Date" optional="show"/>
+                                        <field name="file_size_display" string="Size" readonly="1"/>
+                                        <field name="uploaded_by" string="Uploaded By" widget="many2one_avatar_user" readonly="1"/>
+                                        <field name="upload_date" string="Upload Date" widget="datetime" readonly="1"/>
                                         <field name="notes" string="Notes" optional="show"/>
                                     </list>
                                 </field>
                             </group>
+                        </page>
+                        <page string="Notes &amp; Details" name="notes">
+                            <field name="notes" placeholder="Notes, instructions or deliverables..."/>
                         </page>
                         <page string="Approval History &amp; Audit Trail" name="approval_history">
                             <field name="approval_log_ids" readonly="1">

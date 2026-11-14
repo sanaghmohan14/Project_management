@@ -407,10 +407,60 @@ class ProjectManageScope(models.Model):
     document_count = fields.Integer(
         string='Document Count', compute='_compute_document_count')
 
+    @api.onchange('attachment_ids')
+    def _onchange_attachment_ids(self):
+        self._sync_attachments_to_documents()
+
+    def _sync_attachments_to_documents(self):
+        """Automatically create/sync document_ids from attachment_ids so upload details (uploader, date, size)
+        are visible in the document register.
+        """
+        Doc = self.env['project.manage.scope.document'].sudo()
+        for scope in self:
+            if not scope.id:
+                continue
+            existing_doc_files = set(scope.document_ids.mapped('filename')) | set(scope.document_ids.mapped('name'))
+            for att in scope.attachment_ids:
+                fname = att.name
+                if not fname:
+                    continue
+                if fname not in existing_doc_files:
+                    uploader = att.create_uid or self.env.user
+                    upload_dt = att.create_date or fields.Datetime.now()
+                    raw_data = att.datas
+                    sz = att.file_size or 0
+                    if not sz and raw_data:
+                        try:
+                            sz = len(base64.b64decode(raw_data))
+                        except Exception:
+                            sz = len(raw_data) if isinstance(raw_data, (bytes, str)) else 0
+                    if sz < 1024:
+                        sz_str = f"{sz} B"
+                    elif sz < 1024 * 1024:
+                        sz_str = f"{sz / 1024:.1f} KB"
+                    else:
+                        sz_str = f"{sz / (1024 * 1024):.1f} MB"
+
+                    cat_val = 'proof' if 'proof' in (scope.evidence_proof or '').lower() or 'evidence' in (scope.evidence_proof or '').lower() else 'deliverable'
+                    Doc.create({
+                        'scope_id': scope.id,
+                        'name': fname,
+                        'filename': fname,
+                        'file': raw_data,
+                        'doc_type': cat_val,
+                        'file_size': sz,
+                        'file_size_display': sz_str,
+                        'uploaded_by': uploader.id,
+                        'upload_date': upload_dt,
+                    })
+                    existing_doc_files.add(fname)
+
     @api.depends('document_ids', 'attachment_ids')
     def _compute_document_count(self):
         for rec in self:
-            rec.document_count = len(rec.document_ids) + len(rec.attachment_ids)
+            if rec.id and rec.attachment_ids:
+                rec._sync_attachments_to_documents()
+            rec.document_count = max(len(rec.document_ids), len(rec.attachment_ids))
 
     def _group_expand_states(self, states, domain=None, *args, **kwargs):
         return [key for key, _val in self._fields['state'].selection if key != 'cancelled']
@@ -469,7 +519,7 @@ class ProjectManageScope(models.Model):
     def check_access(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('base.group_user'):
+        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access(operation, raise_exception=raise_exception)
 
@@ -477,7 +527,7 @@ class ProjectManageScope(models.Model):
     def check_access_rights(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('base.group_user'):
+        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access_rights(operation, raise_exception=raise_exception)
 
@@ -619,7 +669,10 @@ class ProjectManageScope(models.Model):
         elif vals.get('end_date') and not vals.get('start_date') and not any(r.start_date for r in self):
             vals['start_date'] = vals['end_date']
 
-        return super().write(vals)
+        res = super().write(vals)
+        if 'attachment_ids' in vals:
+            self._sync_attachments_to_documents()
+        return res
 
     # ---- Hierarchical Approval Actions ----
     def action_start(self):
@@ -895,7 +948,7 @@ class ProjectManageScopeDocument(models.Model):
     def check_access(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('base.group_user'):
+        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access(operation, raise_exception=raise_exception)
 
@@ -903,7 +956,7 @@ class ProjectManageScopeDocument(models.Model):
     def check_access_rights(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('base.group_user'):
+        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access_rights(operation, raise_exception=raise_exception)
 
@@ -923,10 +976,19 @@ class ProjectManageScopeDocument(models.Model):
     file_size = fields.Integer(string='File Size Bytes', compute='_compute_file_size', store=True)
     file_size_display = fields.Char(string='Size', compute='_compute_file_size', store=True)
     uploaded_by = fields.Many2one(
-        'res.users', string='Uploaded By', default=lambda self: self.env.user, readonly=True)
+        'res.users', string='Uploaded By', default=lambda self: self.env.user)
     upload_date = fields.Datetime(
-        string='Uploaded On', default=fields.Datetime.now, readonly=True)
+        string='Uploaded On', default=fields.Datetime.now)
     notes = fields.Char(string='Notes / Description')
+
+    @api.onchange('filename', 'file')
+    def _onchange_file_set_name(self):
+        if self.filename and not self.name:
+            self.name = self.filename
+        if not self.uploaded_by:
+            self.uploaded_by = self.env.user
+        if not self.upload_date:
+            self.upload_date = fields.Datetime.now()
 
     @api.depends('file')
     def _compute_file_size(self):
@@ -935,7 +997,7 @@ class ProjectManageScopeDocument(models.Model):
                 try:
                     raw_bytes = len(base64.b64decode(rec.file))
                 except Exception:
-                    raw_bytes = len(rec.file)
+                    raw_bytes = len(rec.file) if isinstance(rec.file, (bytes, str)) else 0
                 rec.file_size = raw_bytes
                 if raw_bytes < 1024:
                     rec.file_size_display = f"{raw_bytes} B"
@@ -946,6 +1008,41 @@ class ProjectManageScopeDocument(models.Model):
             else:
                 rec.file_size = 0
                 rec.file_size_display = "0 B"
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if not vals.get('name') and vals.get('filename'):
+                vals['name'] = vals['filename']
+            if not vals.get('uploaded_by'):
+                vals['uploaded_by'] = self.env.user.id
+            if not vals.get('upload_date'):
+                vals['upload_date'] = fields.Datetime.now()
+        records = super().create(vals_list)
+        # Mirror into scope attachment_ids
+        for doc in records:
+            if doc.scope_id and doc.file:
+                fname = doc.filename or doc.name
+                existing = doc.scope_id.attachment_ids.filtered(lambda a: a.name == fname)
+                if not existing:
+                    att = self.env['ir.attachment'].sudo().create({
+                        'name': fname,
+                        'datas': doc.file,
+                        'res_model': 'project.manage.scope',
+                        'res_id': doc.scope_id.id,
+                        'type': 'binary',
+                    })
+                    doc.scope_id.sudo().write({'attachment_ids': [(4, att.id)]})
+        return records
+
+    def unlink(self):
+        for doc in self:
+            if doc.scope_id and (doc.filename or doc.name):
+                fname = doc.filename or doc.name
+                to_remove = doc.scope_id.attachment_ids.filtered(lambda a: a.name == fname)
+                if to_remove:
+                    doc.scope_id.sudo().write({'attachment_ids': [(3, a.id) for a in to_remove]})
+        return super().unlink()
 
 
 class ProjectManageScopeApprovalLog(models.Model):

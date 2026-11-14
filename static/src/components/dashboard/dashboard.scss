@@ -1575,6 +1575,9 @@ body.o_dark_theme .pm-dashboard-wrapper {
     padding: 2px 5px;
     border-radius: 4px;
     font-weight: 600;
+    display: inline-block;
+    min-width: 22px;
+    text-align: center;
 }
 
 .pm-approval-badge {

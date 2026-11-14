@@ -1,43 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <!-- Root Menu -->
-    <menuitem id="menu_project_manage_root" name="Project Management" sequence="20"/>
+    <menuitem id="menu_project_manage_root" name="Project Management"
+              groups="project_manage.group_project_manage_consultant" sequence="20"/>
 
     <!-- Main Navigation Menus -->
     <menuitem id="menu_project_manage_dashboard" name="Dashboard"
-              parent="menu_project_manage_root" action="action_project_manage_dashboard" sequence="5"/>
+              parent="menu_project_manage_root" action="action_project_manage_dashboard"
+              groups="project_manage.group_project_manage_consultant" sequence="5"/>
 
     <menuitem id="menu_project_manage_projects" name="Projects"
-              parent="menu_project_manage_root" action="action_project_manage" sequence="10"/>
+              parent="menu_project_manage_root" action="action_project_manage"
+              groups="project_manage.group_project_manage_consultant" sequence="10"/>
 
     <menuitem id="menu_project_manage_calendar" name="Calendar"
-              parent="menu_project_manage_root" action="action_project_manage_scope_calendar" sequence="11"/>
+              parent="menu_project_manage_root" action="action_project_manage_scope_calendar"
+              groups="project_manage.group_project_manage_consultant" sequence="11"/>
 
     <menuitem id="menu_project_manage_reviews" name="Customer Reviews"
-              parent="menu_project_manage_root" action="action_project_manage_review" sequence="12"/>
+              parent="menu_project_manage_root" action="action_project_manage_review"
+              groups="project_manage.group_project_manage_team_lead" sequence="12"/>
 
     <menuitem id="menu_project_manage_approvals" name="Approval Requests"
-              parent="menu_project_manage_root" action="action_project_manage_approvals" sequence="15"/>
+              parent="menu_project_manage_root" action="action_project_manage_approvals"
+              groups="project_manage.group_project_manage_team_lead" sequence="15"/>
 
     <!-- Scopes Dropdown Menu -->
     <menuitem id="menu_project_manage_scopes_menu" name="Scopes"
-              parent="menu_project_manage_root" sequence="20"/>
+              parent="menu_project_manage_root"
+              groups="project_manage.group_project_manage_team_lead" sequence="20"/>
 
     <menuitem id="menu_project_manage_scopes_calendar" name="Tasks Calendar"
-              parent="menu_project_manage_scopes_menu" action="action_project_manage_scope_calendar" sequence="5"/>
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_scope_calendar"
+              groups="project_manage.group_project_manage_team_lead" sequence="5"/>
 
     <menuitem id="menu_project_manage_scopes" name="Scopes"
-              parent="menu_project_manage_scopes_menu" action="action_project_manage_scope" sequence="10"/>
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_scope"
+              groups="project_manage.group_project_manage_team_lead" sequence="10"/>
 
     <menuitem id="menu_project_manage_documentation" name="Documentation Tasks"
-              parent="menu_project_manage_scopes_menu" action="action_project_manage_documentation" sequence="20"/>
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_documentation"
+              groups="project_manage.group_project_manage_team_lead" sequence="20"/>
 
     <menuitem id="menu_project_manage_implementation" name="Implementation Tasks"
-              parent="menu_project_manage_scopes_menu" action="action_project_manage_implementation" sequence="30"/>
+              parent="menu_project_manage_scopes_menu" action="action_project_manage_implementation"
+              groups="project_manage.group_project_manage_team_lead" sequence="30"/>
 
     <!-- Configuration Menu -->
     <menuitem id="menu_project_manage_config" name="Configuration"
-              parent="menu_project_manage_root" sequence="99"/>
+              parent="menu_project_manage_root"
+              groups="project_manage.group_project_manage_manager" sequence="99"/>
 
     <menuitem id="menu_project_config_documentation" name="Documentation"
               parent="menu_project_manage_config" action="action_project_manage_config_documentation" sequence="10"/>

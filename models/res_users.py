@@ -78,6 +78,43 @@ class ResUsers(models.Model):
                     WHERE gid = %s AND hid = %s
                 """, (sys_grp.id, admin_grp.id))
 
+            # 2a. Explicitly unbind consultant group from Customer Reviews, Approval Requests, and Scopes menus in DB
+            cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
+            tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
+            if cons_grp and tl_grp:
+                restricted_menu_names = (
+                    'menu_project_manage_reviews',
+                    'menu_project_manage_approvals',
+                    'menu_project_manage_scopes_menu',
+                    'menu_project_manage_scopes_calendar',
+                    'menu_project_manage_scopes',
+                    'menu_project_manage_documentation',
+                    'menu_project_manage_implementation',
+                )
+                self.env.cr.execute("""
+                    DELETE FROM ir_ui_menu_group_rel
+                    WHERE gid = %s
+                      AND menu_id IN (
+                          SELECT res_id FROM ir_model_data
+                          WHERE module = 'project_manage'
+                            AND name IN %s
+                      );
+                """, (cons_grp.id, restricted_menu_names))
+
+                self.env.cr.execute("""
+                    INSERT INTO ir_ui_menu_group_rel (menu_id, gid)
+                    SELECT imd.res_id, %s
+                    FROM ir_model_data imd
+                    WHERE imd.module = 'project_manage'
+                      AND imd.name IN %s
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ir_ui_menu_group_rel r
+                          WHERE r.menu_id = imd.res_id AND r.gid = %s
+                      );
+                """, (tl_grp.id, restricted_menu_names, tl_grp.id))
+
+                self.env['ir.ui.menu'].clear_caches()
+
             # 3. Ensure Mitchell Admin (id=2), root (id=1), and any admin users belong to group_project_manage_administrator
             if admin_grp:
                 self.env.cr.execute("""
@@ -94,21 +131,42 @@ class ResUsers(models.Model):
                       );
                 """, (admin_grp.id, admin_grp.id))
 
-            # 4. Guarantee ir_model_access permissions for project.manage.scope in this database
+            # 4. Clean up any base.group_user access for PM models and ensure PM groups have proper permissions
+            user_grp = self.env.ref('base.group_user', raise_if_not_found=False)
+            if user_grp:
+                self.env.cr.execute("""
+                    DELETE FROM ir_model_access
+                    WHERE group_id = %s
+                      AND model_id IN (
+                          SELECT id FROM ir_model WHERE model IN (
+                              'project.manage',
+                              'project.manage.team',
+                              'project.manage.scope',
+                              'project.manage.scope.document',
+                              'project.manage.scope.approval.log',
+                              'project.manage.review',
+                              'project.manage.tag',
+                              'project.scope.import.wizard',
+                              'project.manage.scope.reject.wizard',
+                              'project.manage.client.update.wizard'
+                          )
+                      );
+                """, (user_grp.id,))
+
             scope_model = self.env['ir.model'].search([('model', '=', 'project.manage.scope')], limit=1)
             if scope_model:
-                user_grp = self.env.ref('base.group_user', raise_if_not_found=False)
-                if user_grp:
+                cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
+                if cons_grp:
                     self.env.cr.execute("""
                         INSERT INTO ir_model_access (name, model_id, group_id, perm_read, perm_write, perm_create, perm_unlink, active)
-                        SELECT 'access_pm_scope_user_auto', %s, %s, true, true, true, false, true
+                        SELECT 'access_pm_scope_consultant_auto', %s, %s, true, true, true, false, true
                         WHERE NOT EXISTS (
                             SELECT 1 FROM ir_model_access WHERE model_id = %s AND group_id = %s
                         );
                         UPDATE ir_model_access
                         SET perm_create = true, perm_write = true, perm_read = true
                         WHERE model_id = %s AND group_id = %s;
-                    """, (scope_model.id, user_grp.id, scope_model.id, user_grp.id, scope_model.id, user_grp.id))
+                    """, (scope_model.id, cons_grp.id, scope_model.id, cons_grp.id, scope_model.id, cons_grp.id))
                 if sys_grp:
                     self.env.cr.execute("""
                         INSERT INTO ir_model_access (name, model_id, group_id, perm_read, perm_write, perm_create, perm_unlink, active)
@@ -266,13 +324,6 @@ class ResUsers(models.Model):
                         SET perm_create = true, perm_write = true, perm_read = true
                         WHERE model_id = %s AND group_id = %s;
                     """, (log_model.id, consultant_grp.id))
-                user_grp = self.env.ref('base.group_user', raise_if_not_found=False)
-                if user_grp:
-                    self.env.cr.execute("""
-                        UPDATE ir_model_access
-                        SET perm_create = true, perm_write = true, perm_read = true
-                        WHERE model_id = %s AND group_id = %s;
-                    """, (log_model.id, user_grp.id))
 
             # 8. Sync consultant and team lead rule domains in DB so users see assigned tasks or projects they lead/manage
             domain_consultant = "['|', '|', '|', '|', '|', ('responsible_ids.user_id', '=', user.id), ('responsible_id.user_id', '=', user.id), ('project_id.team_lead_id.user_id', '=', user.id), ('project_id.team_id.team_lead_id', '=', user.id), ('project_id.manager_id.user_id', '=', user.id), ('project_id.consultant_ids.user_id', '=', user.id)]"

@@ -10,23 +10,6 @@
                         <div class="d-flex align-items-center gap-2 flex-wrap">
                             <h1 class="pm-main-title">Project Dashboard</h1>
                             <span class="pm-user-role-badge" t-att-class="state.data.user_info.role_badge_class" t-esc="state.data.user_info.role_badge"/>
-                            <t t-if="state.data.user_info.can_switch_roles">
-                                <div class="pm-role-switcher" role="group">
-                                    <span class="pm-role-switcher-lbl">VIEW AS:</span>
-                                    <button type="button" class="pm-role-switcher-btn"
-                                            t-att-class="state.data.user_info.active_view_mode === 'admin' ? 'active-admin' : ''"
-                                            t-on-click="() => this.switchRoleView('admin')"
-                                            title="View Dashboard as Administrator">
-                                        👑 Admin
-                                    </button>
-                                    <button type="button" class="pm-role-switcher-btn"
-                                            t-att-class="state.data.user_info.active_view_mode === 'ceo' ? 'active-ceo' : ''"
-                                            t-on-click="() => this.switchRoleView('ceo')"
-                                            title="View Dashboard as CEO">
-                                        💼 CEO
-                                    </button>
-                                </div>
-                            </t>
                         </div>
                         <p class="pm-sub-title">
                             <t t-esc="state.data.company_name"/> · <span class="pm-user-name"><t t-esc="state.data.user_info.name"/></span>
@@ -57,13 +40,15 @@
                     <div class="pm-date-badge" t-esc="state.data.current_date_str"/>
 
                     <!-- Approvals Shortcut Button -->
-                    <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="viewAllApprovals" title="View Approval Requests">
-                        <i class="fa fa-check-circle me-1 text-warning"></i>
-                        <span>Approvals</span>
-                        <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
-                            <span class="pm-counter-pill bg-danger"><t t-esc="state.data.approvals_summary.pending_my_approval_count"/></span>
-                        </t>
-                    </button>
+                    <t t-if="!state.data.user_info.is_consultant and state.data.user_info.can_approve">
+                        <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="viewAllApprovals" title="View Approval Requests">
+                            <i class="fa fa-check-circle me-1 text-warning"></i>
+                            <span>Approvals</span>
+                            <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
+                                <span class="pm-counter-pill bg-danger"><t t-esc="state.data.approvals_summary.pending_my_approval_count"/></span>
+                            </t>
+                        </button>
+                    </t>
 
                     <!-- Tasks Shortcut Button -->
                     <button class="pm-nav-pill-btn pm-tasks-pill-btn" t-on-click="scrollToTasksHub" title="View Tasks Hub">
@@ -1279,7 +1264,7 @@
                         <table class="pm-mytasks-table">
                             <thead>
                                 <tr>
-                                    <th>Code</th>
+                                    <th>#</th>
                                     <th>Task Deliverable</th>
                                     <th>Priority</th>
                                     <th>Project</th>
@@ -1321,7 +1306,7 @@
                                     <t t-foreach="this.filteredTasks" t-as="tsk" t-key="tsk.id">
                                         <tr t-att-class="tsk.is_overdue ? 'pm-row-overdue' : ''">
                                             <td>
-                                                <span class="pm-task-code" t-esc="tsk.code"/>
+                                                <span class="pm-task-code" t-esc="tsk_index + 1"/>
                                             </td>
                                             <td>
                                                 <div class="d-flex flex-column">

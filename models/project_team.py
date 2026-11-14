@@ -53,7 +53,7 @@ class ProjectManageTeam(models.Model):
            self.env.user.has_group('project_manage.group_project_manage_vp') or \
            self.env.user.has_group('project_manage.group_project_manage_manager'):
             return True
-        if operation == 'read' and self.env.user.has_group('base.group_user'):
+        if operation == 'read' and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access(operation, raise_exception=raise_exception)
 
@@ -66,7 +66,7 @@ class ProjectManageTeam(models.Model):
            self.env.user.has_group('project_manage.group_project_manage_vp') or \
            self.env.user.has_group('project_manage.group_project_manage_manager'):
             return True
-        if operation == 'read' and self.env.user.has_group('base.group_user'):
+        if operation == 'read' and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access_rights(operation, raise_exception=raise_exception)
 
