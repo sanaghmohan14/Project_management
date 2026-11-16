@@ -139,7 +139,7 @@
                     <!-- ==================== 1. TOP ROW: 5 METRIC CARDS ==================== -->
                     <section class="pm-kpi-row">
                     <!-- Total Projects -->
-                    <div class="pm-kpi-card" t-on-click="viewAllProjects">
+                    <div class="pm-kpi-card" t-on-click="() => this.viewAllProjects([], 'Total Projects')" title="Click to view all projects">
                         <div class="pm-kpi-header">
                             <span class="pm-kpi-title">Total projects</span>
                             <div class="pm-kpi-icon-box bg-blue-subtle">
@@ -160,7 +160,7 @@
                     </div>
 
                     <!-- Running Now -->
-                    <div class="pm-kpi-card">
+                    <div class="pm-kpi-card" t-on-click="() => this.viewRunningProjects()" title="Click to view running projects">
                         <div class="pm-kpi-header">
                             <span class="pm-kpi-title">Running now</span>
                             <div class="pm-kpi-icon-box bg-indigo-subtle">
@@ -178,7 +178,9 @@
                             <div class="pm-seg pm-seg-slate" t-attf-style="width: {{ (state.data.not_started_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
                         </div>
                         <div class="pm-kpi-subtext">
-                            <t t-esc="state.data.completed_count"/> completed · <t t-esc="state.data.on_hold_count"/> on hold · <t t-esc="state.data.not_started_count"/> not started
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRunningStatus('completed', ev)"><t t-esc="state.data.completed_count"/> completed</span> · 
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRunningStatus('on_hold', ev)"><t t-esc="state.data.on_hold_count"/> on hold</span> · 
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRunningStatus('not_started', ev)"><t t-esc="state.data.not_started_count"/> not started</span>
                         </div>
                     </div>
 
@@ -231,7 +233,7 @@
                     </t>
 
                     <!-- High-Risk Projects -->
-                    <div class="pm-kpi-card">
+                    <div class="pm-kpi-card" t-on-click="() => this.viewHighRiskProjects()" title="Click to view high-risk projects">
                         <div class="pm-kpi-header">
                             <span class="pm-kpi-title">High-risk projects</span>
                             <div class="pm-kpi-icon-box bg-rose-subtle">
@@ -248,7 +250,9 @@
                             <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.risk_high_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
                         </div>
                         <div class="pm-kpi-subtext">
-                            <t t-esc="state.data.risk_low_count"/> low · <t t-esc="state.data.risk_med_count"/> medium · <t t-esc="state.data.risk_high_count"/> high
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('low', ev)"><t t-esc="state.data.risk_low_count"/> low</span> · 
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('medium', ev)"><t t-esc="state.data.risk_med_count"/> medium</span> · 
+                            <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('high', ev)"><t t-esc="state.data.risk_high_count"/> high</span>
                         </div>
                     </div>
 
@@ -382,7 +386,7 @@
                     </t>
 
                     <!-- 2. Running Status 2x2 Grid -->
-                    <div class="pm-widget-card">
+                    <div class="pm-widget-card pm-card-clickable" t-on-click="() => this.viewProjectsByRunningStatus('all')" title="Click to view all projects by running status">
                         <div class="pm-widget-header">
                             <div>
                                 <h3 class="pm-widget-title">Running status</h3>
@@ -397,28 +401,28 @@
                                 <div class="pm-seg pm-seg-slate" t-attf-style="width: {{ (state.data.not_started_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
                             </div>
                             <div class="pm-status-grid">
-                                <div class="pm-status-tile">
+                                <div class="pm-status-tile pm-tile-clickable" t-on-click="(ev) => this.viewProjectsByRunningStatus('running', ev)" title="View running projects">
                                     <div class="pm-tile-icon-box bg-blue"><i class="fa fa-play text-white"></i></div>
                                     <div class="pm-tile-info">
                                         <span class="pm-tile-count" t-esc="state.data.running_count"/>
                                         <span class="pm-tile-label">Running</span>
                                     </div>
                                 </div>
-                                <div class="pm-status-tile">
+                                <div class="pm-status-tile pm-tile-clickable" t-on-click="(ev) => this.viewProjectsByRunningStatus('completed', ev)" title="View completed projects">
                                     <div class="pm-tile-icon-box bg-emerald"><i class="fa fa-check text-white"></i></div>
                                     <div class="pm-tile-info">
                                         <span class="pm-tile-count" t-esc="state.data.completed_count"/>
                                         <span class="pm-tile-label">Completed</span>
                                     </div>
                                 </div>
-                                <div class="pm-status-tile">
+                                <div class="pm-status-tile pm-tile-clickable" t-on-click="(ev) => this.viewProjectsByRunningStatus('on_hold', ev)" title="View on-hold projects">
                                     <div class="pm-tile-icon-box bg-amber"><i class="fa fa-pause text-white"></i></div>
                                     <div class="pm-tile-info">
                                         <span class="pm-tile-count" t-esc="state.data.on_hold_count"/>
                                         <span class="pm-tile-label">On hold</span>
                                     </div>
                                 </div>
-                                <div class="pm-status-tile">
+                                <div class="pm-status-tile pm-tile-clickable" t-on-click="(ev) => this.viewProjectsByRunningStatus('not_started', ev)" title="View not-started projects">
                                     <div class="pm-tile-icon-box bg-slate"><i class="fa fa-hourglass-start text-white"></i></div>
                                     <div class="pm-tile-info">
                                         <span class="pm-tile-count" t-esc="state.data.not_started_count"/>
@@ -430,7 +434,7 @@
                     </div>
 
                     <!-- 3. Risk Level Speedometer -->
-                    <div class="pm-widget-card">
+                    <div class="pm-widget-card pm-card-clickable" t-on-click="() => this.viewProjectsByRisk('all')" title="Click to view projects by risk level">
                         <div class="pm-widget-header">
                             <div>
                                 <h3 class="pm-widget-title">Risk level</h3>
@@ -457,15 +461,15 @@
                                 <div class="pm-gauge-status-text" t-esc="state.data.risk_status_label"/>
                             </div>
                             <div class="pm-risk-chips-row">
-                                <div class="pm-risk-chip pm-chip-low">
+                                <div class="pm-risk-chip pm-chip-low pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('low', ev)" title="View low-risk projects">
                                     <strong t-esc="state.data.risk_low_count"/>
                                     <span>Low</span>
                                 </div>
-                                <div class="pm-risk-chip pm-chip-med">
+                                <div class="pm-risk-chip pm-chip-med pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('medium', ev)" title="View medium-risk projects">
                                     <strong t-esc="state.data.risk_med_count"/>
                                     <span>Medium</span>
                                 </div>
-                                <div class="pm-risk-chip pm-chip-high">
+                                <div class="pm-risk-chip pm-chip-high pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByRisk('high', ev)" title="View high-risk projects">
                                     <strong t-esc="state.data.risk_high_count"/>
                                     <span>High</span>
                                 </div>
@@ -474,7 +478,7 @@
                     </div>
 
                     <!-- 4. Project Condition Bars -->
-                    <div class="pm-widget-card">
+                    <div class="pm-widget-card pm-card-clickable" t-on-click="() => this.viewProjectsByCondition('all')" title="Click to view all projects by condition">
                         <div class="pm-widget-header">
                             <div>
                                 <h3 class="pm-widget-title">Project condition</h3>
@@ -483,28 +487,28 @@
                         </div>
                         <div class="pm-widget-body pm-condition-body">
                             <div class="pm-condition-chart">
-                                <div class="pm-cond-col">
+                                <div class="pm-cond-col pm-col-clickable" t-on-click="(ev) => this.viewProjectsByCondition('ahead', ev)" title="View ahead projects">
                                     <span class="pm-cond-val" t-esc="state.data.condition_ahead_count"/>
                                     <div class="pm-cond-bar-track">
                                         <div class="pm-cond-bar bg-ahead" t-attf-style="height: {{ state.data.condition_ahead_count > 0 ? (state.data.condition_ahead_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
                                     </div>
                                     <span class="pm-cond-lbl">Ahead</span>
                                 </div>
-                                <div class="pm-cond-col">
+                                <div class="pm-cond-col pm-col-clickable" t-on-click="(ev) => this.viewProjectsByCondition('on_plan', ev)" title="View on plan projects">
                                     <span class="pm-cond-val" t-esc="state.data.condition_on_plan_count"/>
                                     <div class="pm-cond-bar-track">
                                         <div class="pm-cond-bar bg-onplan" t-attf-style="height: {{ state.data.condition_on_plan_count > 0 ? (state.data.condition_on_plan_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
                                     </div>
                                     <span class="pm-cond-lbl">On plan</span>
                                 </div>
-                                <div class="pm-cond-col">
+                                <div class="pm-cond-col pm-col-clickable" t-on-click="(ev) => this.viewProjectsByCondition('behind', ev)" title="View behind projects">
                                     <span class="pm-cond-val" t-esc="state.data.condition_behind_count"/>
                                     <div class="pm-cond-bar-track">
                                         <div class="pm-cond-bar bg-behind" t-attf-style="height: {{ state.data.condition_behind_count > 0 ? (state.data.condition_behind_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
                                     </div>
                                     <span class="pm-cond-lbl">Behind</span>
                                 </div>
-                                <div class="pm-cond-col">
+                                <div class="pm-cond-col pm-col-clickable" t-on-click="(ev) => this.viewProjectsByCondition('overdue', ev)" title="View overdue projects">
                                     <span class="pm-cond-val" t-esc="state.data.condition_overdue_count"/>
                                     <div class="pm-cond-bar-track">
                                         <div class="pm-cond-bar bg-overdue" t-attf-style="height: {{ state.data.condition_overdue_count > 0 ? (state.data.condition_overdue_count / state.data.cond_max_count) * 75 : 4 }}px;"></div>
@@ -1012,24 +1016,52 @@
                                                             </div>
                                                         </div>
 
-                                                        <!-- Functional Scope Area Chips (Horizontal Scroll) -->
+                                                        <!-- Functional Scope Area Dropdown Selector -->
                                                         <t t-if="state.projectScopesData and state.projectScopesData.unique_scopes and state.projectScopesData.unique_scopes.length > 0">
-                                                            <div class="pm-scope-chips-bar">
-                                                                <span class="pm-chips-label">Scopes:</span>
-                                                                <button class="pm-scope-chip"
-                                                                        t-att-class="!state.selectedScopeName ? 'active' : ''"
-                                                                        t-on-click="() => this.setScopeNameFilter(null)">
-                                                                    All Scopes
-                                                                </button>
-                                                                <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
-                                                                    <button class="pm-scope-chip"
-                                                                            t-att-class="state.selectedScopeName === sc.name ? 'active' : ''"
-                                                                            t-on-click="() => this.setScopeNameFilter(sc.name)">
-                                                                        <span class="pm-scope-no-tag">Scope <t t-esc="sc.scope_no"/></span>
-                                                                        <span class="pm-scope-name-text" t-esc="sc.name"/>
-                                                                        <span class="pm-scope-pct-badge"><t t-esc="sc.done"/>/<t t-esc="sc.total"/></span>
-                                                                    </button>
-                                                                </t>
+                                                            <div class="pm-scope-dropdown-bar">
+                                                                <div class="pm-scope-select-container">
+                                                                    <span class="pm-scope-dropdown-label">
+                                                                        <i class="fa fa-cubes text-primary me-1"></i> SCOPES:
+                                                                    </span>
+                                                                    <div class="pm-scope-select-wrapper" t-att-class="state.selectedScopeName ? 'has-active-scope' : ''">
+                                                                        <select class="form-select form-select-sm pm-scope-select"
+                                                                                t-on-change="(ev) => this.onScopeSelectChange(ev)"
+                                                                                t-att-value="state.selectedScopeName || ''"
+                                                                                title="Filter tasks by functional scope area">
+                                                                            <option value="">📁 All Scopes (<t t-esc="state.projectScopesData ? state.projectScopesData.stats.total_items : 0"/> tasks across <t t-esc="state.projectScopesData.unique_scopes.length"/> scopes)</option>
+                                                                            <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
+                                                                                <option t-att-value="sc.name">
+                                                                                    <t t-if="!sc.name.toLowerCase().startsWith('scope')">Scope <t t-esc="sc.scope_no"/>: </t><t t-esc="sc.name"/> (<t t-esc="sc.done"/>/<t t-esc="sc.total"/> done)
+                                                                                </option>
+                                                                            </t>
+                                                                        </select>
+                                                                        <button t-if="state.selectedScopeName"
+                                                                                type="button"
+                                                                                class="pm-scope-clear-btn"
+                                                                                t-on-click="() => this.setScopeNameFilter(null)"
+                                                                                title="Reset to All Scopes">
+                                                                            <i class="fa fa-times"></i>
+                                                                        </button>
+                                                                    </div>
+
+                                                                    <t t-if="state.selectedScopeName">
+                                                                        <div class="pm-active-scope-badge">
+                                                                            <span class="pm-active-scope-text">
+                                                                                Filtered: <strong><t t-esc="state.selectedScopeName"/></strong>
+                                                                            </span>
+                                                                            <button type="button" class="pm-active-scope-remove"
+                                                                                    t-on-click="() => this.setScopeNameFilter(null)"
+                                                                                    title="Show all scopes">
+                                                                                <i class="fa fa-times"></i>
+                                                                            </button>
+                                                                        </div>
+                                                                    </t>
+                                                                    <t t-else="">
+                                                                        <span class="pm-scope-summary-text">
+                                                                            Showing all <strong t-esc="state.projectScopesData.unique_scopes.length"/> scopes (<t t-esc="state.projectScopesData.stats.total_items"/> deliverables)
+                                                                        </span>
+                                                                    </t>
+                                                                </div>
                                                             </div>
                                                         </t>
 
@@ -1345,7 +1377,7 @@
 
                             <!-- Priority Star Filter (Selection Dropdown) -->
                             <select class="form-select form-select-sm pm-select-priority"
-                                    t-on-change="setTaskPriorityFilter"
+                                    t-on-change="(ev) => this.setTaskPriorityFilter(ev)"
                                     t-att-value="state.taskPriorityFilter"
                                     t-att-class="state.taskPriorityFilter !== 'all' ? 'pm-priority-filter-active' : ''"
                                     title="Filter tasks by star priority">

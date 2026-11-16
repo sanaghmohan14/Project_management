@@ -226,7 +226,22 @@
                        decoration-warning="health == 'fair'"
                        decoration-danger="health == 'poor'"
                        optional="show"/>
-                <field name="condition" optional="show"/>
+                <field name="condition" widget="badge"
+                       decoration-success="condition in ('ahead', 'on_plan')"
+                       decoration-warning="condition == 'behind'"
+                       decoration-danger="condition == 'overdue'"
+                       optional="show"/>
+                <field name="running_status" widget="badge"
+                       decoration-info="running_status == 'running'"
+                       decoration-success="running_status == 'completed'"
+                       decoration-warning="running_status == 'on_hold'"
+                       decoration-muted="running_status == 'not_started'"
+                       optional="show"/>
+                <field name="risk_level" widget="badge"
+                       decoration-danger="risk_level == 'high'"
+                       decoration-warning="risk_level == 'medium'"
+                       decoration-success="risk_level == 'low'"
+                       optional="show"/>
                 <field name="state" widget="badge"
                        decoration-info="state == 'todo'"
                        decoration-warning="state == 'in_progress'"
@@ -276,6 +291,20 @@
                 <separator/>
                 <filter name="f_starred" string="Starred / High Priority" domain="[('priority', 'in', ('2', '3'))]"/>
                 <separator/>
+                <filter name="f_running" string="Running Status: Running" domain="[('running_status', '=', 'running')]"/>
+                <filter name="f_completed" string="Running Status: Completed" domain="[('running_status', '=', 'completed')]"/>
+                <filter name="f_on_hold" string="Running Status: On Hold" domain="[('running_status', '=', 'on_hold')]"/>
+                <filter name="f_not_started" string="Running Status: Not Started" domain="[('running_status', '=', 'not_started')]"/>
+                <separator/>
+                <filter name="f_high_risk" string="Risk: High" domain="[('risk_level', '=', 'high')]"/>
+                <filter name="f_med_risk" string="Risk: Medium" domain="[('risk_level', '=', 'medium')]"/>
+                <filter name="f_low_risk" string="Risk: Low" domain="[('risk_level', '=', 'low')]"/>
+                <separator/>
+                <filter name="f_cond_ahead" string="Condition: Ahead" domain="[('condition', '=', 'ahead')]"/>
+                <filter name="f_cond_on_plan" string="Condition: On Plan" domain="[('condition', '=', 'on_plan')]"/>
+                <filter name="f_cond_behind" string="Condition: Behind" domain="[('condition', '=', 'behind')]"/>
+                <filter name="f_cond_overdue" string="Condition: Overdue" domain="[('condition', '=', 'overdue')]"/>
+                <separator/>
                 <filter name="f_todo" string="To Do" domain="[('state','=','todo')]"/>
                 <filter name="f_progress" string="In Progress" domain="[('state','=','in_progress')]"/>
                 <filter name="f_done" string="Done" domain="[('state','=','done')]"/>
@@ -283,6 +312,9 @@
                 <separator/>
                 <group>
                     <filter name="g_priority" string="Priority" context="{'group_by':'priority'}"/>
+                    <filter name="g_running_status" string="Running Status" context="{'group_by':'running_status'}"/>
+                    <filter name="g_risk_level" string="Risk Level" context="{'group_by':'risk_level'}"/>
+                    <filter name="g_condition" string="Condition" context="{'group_by':'condition'}"/>
                     <filter name="g_team" string="Project Team" context="{'group_by':'team_id'}"/>
                     <filter name="g_state" string="Stage" context="{'group_by':'state'}"/>
                     <filter name="g_client" string="Client" context="{'group_by':'partner_id'}"/>

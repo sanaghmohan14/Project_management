@@ -549,6 +549,21 @@ body.o_dark_theme .pm-dashboard-wrapper {
     font-weight: 400;
 }
 
+.pm-clickable-sub {
+    cursor: pointer;
+    transition: color 0.15s ease, text-decoration 0.15s ease, transform 0.15s ease, background-color 0.15s ease;
+    display: inline-block;
+    border-radius: 4px;
+    padding: 1px 3px;
+
+    &:hover {
+        color: #2563eb !important;
+        text-decoration: underline;
+        background-color: rgba(37, 99, 235, 0.08);
+        transform: translateY(-1px);
+    }
+}
+
 /* ---------------- 2. ANALYTICS WIDGETS ROW ---------------- */
 .pm-charts-row,
 .pm-widgets-row {
@@ -569,6 +584,17 @@ body.o_dark_theme .pm-dashboard-wrapper {
     justify-content: space-between;
     min-height: 200px;
     box-sizing: border-box;
+
+    &.pm-card-clickable {
+        cursor: pointer;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+
+        &:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--pm-shadow-md);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+    }
 }
 
 .pm-widget-header {
@@ -713,6 +739,18 @@ body.o_dark_theme .pm-dashboard-wrapper {
     border-radius: 8px;
     background: var(--pm-tile-bg);
     border: 1px solid var(--pm-border);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+
+    &.pm-tile-clickable {
+        cursor: pointer;
+
+        &:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border-color: #3b82f6;
+            background: var(--pm-card-bg);
+        }
+    }
 }
 
 .pm-tile-icon-box {
@@ -792,6 +830,13 @@ body.o_dark_theme .pm-dashboard-wrapper {
     gap: 5px;
     font-size: 0.75rem;
     font-weight: 600;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+    &.pm-clickable-sub:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.12);
+        background-color: var(--pm-card-bg);
+    }
 }
 
 .pm-chip-low { background: #ecfdf5; color: #047857; }
@@ -825,6 +870,24 @@ body.o_dark_theme .pm-dashboard-wrapper {
     width: 22%;
     height: 100%;
     justify-content: flex-end;
+    transition: transform 0.15s ease, background-color 0.15s ease;
+
+    &.pm-col-clickable {
+        cursor: pointer;
+        border-radius: 6px;
+        padding: 4px 2px;
+
+        &:hover {
+            transform: translateY(-2px);
+            background-color: rgba(59, 130, 246, 0.08);
+
+            .pm-cond-val,
+            .pm-cond-lbl {
+                font-weight: 700;
+                color: var(--pm-text-heading);
+            }
+        }
+    }
 }
 
 .pm-cond-val {
@@ -2594,67 +2657,165 @@ body.o_dark_theme .pm-select-priority.pm-priority-filter-active {
     }
 }
 
-/* Scope Chips Bar */
-.pm-scope-chips-bar {
+/* Scope Dropdown Bar */
+.pm-scope-dropdown-bar {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 0 12px 0;
-    flex-wrap: wrap;
-    overflow-x: visible;
+    padding: 8px 14px;
+    margin-bottom: 12px;
+    background: var(--pm-bg);
+    border: 1px solid var(--pm-border-light);
+    border-radius: 10px;
 
-    .pm-chips-label {
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        font-weight: 700;
-        letter-spacing: 0.04em;
-        color: var(--pm-text-muted);
-        margin-right: 2px;
+    .pm-scope-select-container {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        width: 100%;
     }
 
-    .pm-scope-chip {
+    .pm-scope-dropdown-label {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        color: var(--pm-text-muted);
         display: inline-flex;
         align-items: center;
-        gap: 6px;
-        background: var(--pm-tile-bg);
+        white-space: nowrap;
+    }
+
+    .pm-scope-select-wrapper {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        flex: 1;
+        min-width: 280px;
+        max-width: 540px;
+        background: var(--pm-card-bg);
         border: 1px solid var(--pm-border);
-        color: var(--pm-text-body);
-        font-size: 0.74rem;
-        font-weight: 500;
-        padding: 3px 8px;
-        border-radius: 14px;
-        cursor: pointer;
-        transition: all 0.15s ease;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 
         &:hover {
             border-color: #3b82f6;
         }
 
-        &.active {
-            background: rgba(59, 130, 246, 0.12);
+        &.has-active-scope {
             border-color: #3b82f6;
-            color: #3b82f6;
-            font-weight: 600;
+            background: rgba(59, 130, 246, 0.06);
+            box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+        }
+    }
 
-            .pm-scope-pct-badge {
-                background: #3b82f6;
-                color: #ffffff;
+    .pm-scope-select {
+        width: 100%;
+        height: 34px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--pm-text-heading);
+        background-color: transparent;
+        border: none;
+        outline: none;
+        cursor: pointer;
+        padding-left: 10px;
+        padding-right: 30px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &:focus {
+            border: none;
+            outline: none;
+            box-shadow: none;
+        }
+
+        option {
+            background: var(--pm-card-bg);
+            color: var(--pm-text-heading);
+            font-size: 0.84rem;
+            padding: 8px 12px;
+            font-weight: 500;
+        }
+    }
+
+    .pm-scope-clear-btn {
+        position: absolute;
+        right: 24px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        color: var(--pm-text-muted);
+        font-size: 0.78rem;
+        padding: 2px 6px;
+        cursor: pointer;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s ease;
+
+        &:hover {
+            color: #ef4444;
+            background-color: rgba(239, 68, 68, 0.1);
+        }
+    }
+
+    .pm-active-scope-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(59, 130, 246, 0.3);
+        color: #2563eb;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.78rem;
+        font-weight: 600;
+
+        .pm-active-scope-remove {
+            background: transparent;
+            border: none;
+            color: #2563eb;
+            cursor: pointer;
+            padding: 0;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            opacity: 0.7;
+            transition: opacity 0.15s ease;
+
+            &:hover {
+                opacity: 1;
+                color: #ef4444;
             }
         }
+    }
 
-        .pm-scope-no-tag {
-            font-size: 0.68rem;
-            font-weight: 700;
-            color: var(--pm-text-muted);
-        }
+    .pm-scope-summary-text {
+        font-size: 0.78rem;
+        color: var(--pm-text-muted);
+        margin-left: auto;
+    }
+}
 
-        .pm-scope-pct-badge {
-            font-size: 0.65rem;
-            font-weight: 700;
-            padding: 1px 5px;
-            border-radius: 8px;
-            background: var(--pm-border);
-            color: var(--pm-text-body);
+[data-color-scheme="dark"] .pm-scope-dropdown-bar,
+body.o_dark_theme .pm-scope-dropdown-bar,
+.pm-theme-dark .pm-scope-dropdown-bar {
+    .pm-scope-select-wrapper.has-active-scope {
+        background: rgba(59, 130, 246, 0.18);
+        border-color: #60a5fa;
+    }
+
+    .pm-active-scope-badge {
+        background: rgba(59, 130, 246, 0.2);
+        border-color: rgba(96, 165, 250, 0.4);
+        color: #93c5fd;
+
+        .pm-active-scope-remove {
+            color: #93c5fd;
         }
     }
 }

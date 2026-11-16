@@ -301,6 +301,11 @@ export class ProjectManageDashboard extends Component {
         }
     }
 
+    onScopeSelectChange(ev) {
+        const val = ev.target.value;
+        this.state.selectedScopeName = val ? val : null;
+    }
+
     onSearchChange(ev) {
         this.state.searchQuery = ev.target.value.toLowerCase().trim();
     }
@@ -821,10 +826,12 @@ export class ProjectManageDashboard extends Component {
     openScopeForm(scopeId, ev) {
         if (ev) ev.stopPropagation();
         if (!scopeId) return;
+        const numericId = parseInt(scopeId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "project.manage.scope",
-            res_id: scopeId,
+            res_id: numericId,
             views: [[false, "form"]],
             target: "current",
         });
@@ -1213,12 +1220,14 @@ export class ProjectManageDashboard extends Component {
 
     openImportWizardForProject(projectId, ev) {
         if (ev) ev.stopPropagation();
+        const numericId = parseInt(projectId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "project.scope.import.wizard",
             views: [[false, "form"]],
             target: "new",
-            context: { default_project_id: projectId },
+            context: { default_project_id: numericId },
         }, {
             onClose: () => {
                 if (this.state.selectedProjectId) {
@@ -1361,10 +1370,12 @@ export class ProjectManageDashboard extends Component {
 
     openProject(projectId) {
         if (!projectId) return;
+        const numericId = parseInt(projectId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "project.manage",
-            res_id: projectId,
+            res_id: numericId,
             views: [[false, "form"]],
             target: "current",
         });
@@ -1372,10 +1383,29 @@ export class ProjectManageDashboard extends Component {
 
     openTeam(teamId) {
         if (!teamId) return;
+        if (typeof teamId === "string" && teamId.startsWith("lead_")) {
+            const leadId = parseInt(teamId.replace("lead_", ""), 10);
+            if (!isNaN(leadId) && leadId > 0) {
+                this.actionService.doAction({
+                    name: "Team Projects",
+                    type: "ir.actions.act_window",
+                    res_model: "project.manage",
+                    views: [[false, "list"], [false, "kanban"], [false, "form"]],
+                    domain: [["team_lead_id", "=", leadId]],
+                    context: { default_team_lead_id: leadId },
+                    target: "current",
+                });
+            }
+            return;
+        }
+        const numericId = parseInt(teamId, 10);
+        if (isNaN(numericId) || numericId <= 0) {
+            return;
+        }
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "project.manage.team",
-            res_id: teamId,
+            res_id: numericId,
             views: [[false, "form"]],
             target: "current",
         });
@@ -1411,13 +1441,76 @@ export class ProjectManageDashboard extends Component {
         });
     }
 
-    viewAllProjects() {
+    viewAllProjects(domain = [], name = "Projects") {
+        const fullDomain = Array.isArray(domain) ? [...domain] : [];
+        const actionTitle = typeof name === "string" ? name : "Projects";
+        if (this.state.selectedTeamId) {
+            if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
+                const leadId = parseInt(this.state.selectedTeamId.replace('lead_', ''), 10);
+                if (!isNaN(leadId) && leadId > 0) {
+                    fullDomain.push(["team_lead_id", "=", leadId]);
+                }
+            } else {
+                const teamId = parseInt(this.state.selectedTeamId, 10);
+                if (!isNaN(teamId) && teamId > 0) {
+                    fullDomain.push(["team_id", "=", teamId]);
+                }
+            }
+        }
         this.actionService.doAction({
+            name: actionTitle,
             type: "ir.actions.act_window",
             res_model: "project.manage",
             views: [[false, "list"], [false, "kanban"], [false, "form"]],
+            domain: fullDomain,
             target: "current",
         });
+    }
+
+    viewRunningProjects() {
+        this.viewAllProjects([["running_status", "=", "running"]], "Running Projects");
+    }
+
+    viewHighRiskProjects() {
+        this.viewProjectsByRisk("high");
+    }
+
+    viewProjectsByRisk(level, ev) {
+        if (ev) ev.stopPropagation();
+        const titles = {
+            low: "Low-Risk Projects",
+            medium: "Medium-Risk Projects",
+            high: "High-Risk Projects",
+        };
+        const domain = level && level !== "all" ? [["risk_level", "=", level]] : [];
+        const title = titles[level] || "Projects by Risk";
+        this.viewAllProjects(domain, title);
+    }
+
+    viewProjectsByRunningStatus(status, ev) {
+        if (ev) ev.stopPropagation();
+        const titles = {
+            running: "Running Projects",
+            completed: "Completed Projects",
+            on_hold: "On Hold Projects",
+            not_started: "Not Started Projects",
+        };
+        const domain = status && status !== "all" ? [["running_status", "=", status]] : [];
+        const title = titles[status] || "Projects by Running Status";
+        this.viewAllProjects(domain, title);
+    }
+
+    viewProjectsByCondition(condition, ev) {
+        if (ev) ev.stopPropagation();
+        const titles = {
+            ahead: "Ahead Projects",
+            on_plan: "On Plan Projects",
+            behind: "Behind Projects",
+            overdue: "Overdue Projects",
+        };
+        const domain = condition && condition !== "all" ? [["condition", "=", condition]] : [];
+        const title = titles[condition] || "Projects by Condition";
+        this.viewAllProjects(domain, title);
     }
 
     async approveTask(taskId) {
@@ -1467,10 +1560,12 @@ export class ProjectManageDashboard extends Component {
 
     openScope(scopeId) {
         if (!scopeId) return;
+        const numericId = parseInt(scopeId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
         this.actionService.doAction({
             type: "ir.actions.act_window",
             res_model: "project.manage.scope",
-            res_id: scopeId,
+            res_id: numericId,
             views: [[false, "form"]],
             target: "current",
         });

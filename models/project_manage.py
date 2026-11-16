@@ -734,15 +734,34 @@ class ProjectManage(models.Model):
         elif can_see_all_teams:
             domain = []
             if team_id:
-                domain.append(('team_id', '=', int(team_id)))
+                if str(team_id).startswith('lead_'):
+                    try:
+                        lead_emp_id = int(str(team_id).replace('lead_', ''))
+                        domain.append(('team_lead_id', '=', lead_emp_id))
+                    except (ValueError, TypeError):
+                        pass
+                elif str(team_id).isdigit():
+                    domain.append(('team_id', '=', int(team_id)))
             all_base_projects = self.search(domain)
         else:
             domain = []
             if all_teams:
-                if team_id and int(team_id) in all_teams.ids:
+                if team_id and str(team_id).isdigit() and int(team_id) in all_teams.ids:
                     domain.append(('team_id', '=', int(team_id)))
+                elif team_id and str(team_id).startswith('lead_'):
+                    try:
+                        lead_emp_id = int(str(team_id).replace('lead_', ''))
+                        domain.append(('team_lead_id', '=', lead_emp_id))
+                    except (ValueError, TypeError):
+                        pass
                 else:
                     domain.append(('team_id', 'in', all_teams.ids))
+            elif team_id and str(team_id).startswith('lead_'):
+                try:
+                    lead_emp_id = int(str(team_id).replace('lead_', ''))
+                    domain.append(('team_lead_id', '=', lead_emp_id))
+                except (ValueError, TypeError):
+                    pass
             elif emp:
                 domain.append(('team_lead_id', '=', emp.id))
             else:
@@ -875,8 +894,11 @@ class ProjectManage(models.Model):
                     'name': tm.name,
                     'lead_name': tm.team_lead_id.name if tm.team_lead_id else '',
                 })
-                if can_see_all_teams and team_id and tm.id != int(team_id):
-                    continue
+                if can_see_all_teams and team_id:
+                    if str(team_id).isdigit() and tm.id != int(team_id):
+                        continue
+                    elif str(team_id).startswith('lead_'):
+                        continue
 
                 tm_projects = tm.project_ids
                 if not can_see_all_teams:
@@ -951,6 +973,11 @@ class ProjectManage(models.Model):
             leads = projects.mapped('team_lead_id')
             for idx, lead in enumerate(leads, 1):
                 lead_projects = projects.filtered(lambda p: p.team_lead_id == lead)
+                if can_see_all_teams and team_id:
+                    if str(team_id).startswith('lead_') and str(team_id) != f"lead_{lead.id}":
+                        continue
+                    elif str(team_id).isdigit():
+                        continue
                 tm_tot = len(lead_projects)
                 tm_healthy = len(lead_projects.filtered(lambda p: p.health == 'good'))
                 tm_progress = round(sum(lead_projects.mapped('progress')) / tm_tot) if tm_tot else 0
@@ -970,9 +997,14 @@ class ProjectManage(models.Model):
                 trend_text = f"+{var} pts vs plan" if var > 0 else (f"{var} pts vs plan" if var < 0 else "On plan")
                 rating = 'Excellent' if tm_progress >= 85 else ('Good' if tm_progress >= 60 else 'Needs support')
 
+                # Check if there is an existing team assigned to any of these projects
+                proj_teams = lead_projects.mapped('team_id').filtered(lambda t: t)
+                real_team = proj_teams[0] if proj_teams else False
+                team_card_id = real_team.id if real_team else f"lead_{lead.id}"
+
                 teams_data.append({
-                    'id': f"lead_{lead.id}",
-                    'name': f"Team {lead.name}",
+                    'id': team_card_id,
+                    'name': real_team.name if real_team else f"Team {lead.name}",
                     'lead_name': lead.name,
                     'members_count': len(consultants),
                     'projects_count': tm_tot,
@@ -985,6 +1017,12 @@ class ProjectManage(models.Model):
                     'rating_class': 'text-bg-success' if rating == 'Excellent' else ('text-bg-primary' if rating == 'Good' else 'text-bg-warning'),
                     'trend_text': trend_text,
                     'trend_color': 'success' if var >= 0 else 'danger',
+                })
+
+                filter_teams.append({
+                    'id': team_card_id,
+                    'name': real_team.name if real_team else f"Team {lead.name}",
+                    'lead_name': lead.name,
                 })
 
         # Build real project rows
@@ -1053,18 +1091,62 @@ class ProjectManage(models.Model):
             ])
         all_pending_count = len(all_pending_scopes)
 
-        # Pending items targeted to current user based on their approval tier:
+        # Pending items targeted to current user based on their specific approval tier:
+        # User requirement: Only show approval requests waiting for THEIR action (do not show other roles' approvals)
         if role_code in ('admin', 'ceo'):
-            my_pending_scopes = all_pending_scopes
+            # Only items awaiting CEO approval (or if personally assigned as manager/TL of that project)
+            my_pending_scopes = all_pending_scopes.filtered(
+                lambda s: s.approval_state == 'pending_ceo' or
+                (s.approval_state == 'pending_pm' and (
+                    (s.project_id.manager_id.user_id == user) or
+                    (emp and s.project_id.manager_id == emp)
+                )) or
+                (s.approval_state == 'pending_tl' and (
+                    (s.project_id.team_lead_id.user_id == user) or
+                    (emp and s.project_id.team_lead_id == emp) or
+                    (s.project_id.team_id.team_lead_id == user)
+                ))
+            )
         elif role_code == 'vp':
-            my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state in ('pending_tl', 'pending_pm', 'pending_vp'))
+            # Only items awaiting Vice President approval (or if personally assigned as manager/TL of that project)
+            my_pending_scopes = all_pending_scopes.filtered(
+                lambda s: s.approval_state == 'pending_vp' or
+                (s.approval_state == 'pending_pm' and (
+                    (s.project_id.manager_id.user_id == user) or
+                    (emp and s.project_id.manager_id == emp)
+                )) or
+                (s.approval_state == 'pending_tl' and (
+                    (s.project_id.team_lead_id.user_id == user) or
+                    (emp and s.project_id.team_lead_id == emp) or
+                    (s.project_id.team_id.team_lead_id == user)
+                ))
+            )
         elif role_code == 'manager':
-            my_pending_scopes = all_pending_scopes.filtered(lambda s: s.approval_state in ('pending_tl', 'pending_pm'))
+            # Only items awaiting Project Manager approval for their projects
+            my_pending_scopes = all_pending_scopes.filtered(
+                lambda s: (
+                    s.approval_state == 'pending_pm' and (
+                        (s.project_id.manager_id.user_id == user) or
+                        (emp and s.project_id.manager_id == emp) or
+                        (not s.project_id.manager_id)
+                    )
+                ) or (
+                    # Fallback: if project has no Team Lead assigned at all, PM acts as first reviewer
+                    s.approval_state == 'pending_tl' and (
+                        (s.project_id.manager_id.user_id == user or (emp and s.project_id.manager_id == emp)) and
+                        not s.project_id.team_lead_id and
+                        not s.project_id.team_id.team_lead_id
+                    )
+                )
+            )
         elif role_code == 'team_lead':
+            # Only items awaiting Team Lead approval for their team / projects
             my_pending_scopes = all_pending_scopes.filtered(
                 lambda s: s.approval_state == 'pending_tl' and (
-                    (s.project_id and s.project_id in projects) or
                     (s.project_id.team_lead_id.user_id == user) or
+                    (emp and s.project_id.team_lead_id == emp) or
+                    (s.project_id.team_id.team_lead_id == user) or
+                    (s.project_id in projects) or
                     (s.project_id.team_id in all_teams)
                 )
             )
@@ -1446,8 +1528,8 @@ class ProjectManage(models.Model):
                         'record_id': s.id,
                         'project_id': p.id,
                         'project_name': p.name,
-                        'team_id': p.team_id.id if p.team_id else False,
-                        'team_name': p.team_id.name if p.team_id else '',
+                        'team_id': p.team_id.id if p.team_id else (f"lead_{p.team_lead_id.id}" if p.team_lead_id else False),
+                        'team_name': p.team_id.name if p.team_id else (f"Team {p.team_lead_id.name}" if p.team_lead_id else ''),
                         'model': 'project.manage.scope',
                         'type': 'task',
                         'title': s.name,

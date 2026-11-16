@@ -177,6 +177,11 @@ class ProjectManageScope(models.Model):
         current_emps = self.env['hr.employee'].sudo().search(emp_domain)
         emp_ids = set(current_emps.ids)
 
+        has_ceo_group = user.has_group('project_manage.group_project_manage_ceo')
+        has_vp_group = user.has_group('project_manage.group_project_manage_vp')
+        has_pm_group = user.has_group('project_manage.group_project_manage_manager')
+        has_tl_group = user.has_group('project_manage.group_project_manage_team_lead')
+
         is_admin = bool(
             self.env.is_superuser() or
             user.id in (1, 2) or
@@ -184,23 +189,15 @@ class ProjectManageScope(models.Model):
             user.has_group('base.group_erp_manager') or
             user.has_group('project_manage.group_project_manage_administrator')
         )
-        is_ceo = bool(is_admin or user.has_group('project_manage.group_project_manage_ceo'))
-        is_vp = bool(is_ceo or user.has_group('project_manage.group_project_manage_vp'))
-        is_pm = bool(is_vp or user.has_group('project_manage.group_project_manage_manager'))
-        is_tl = bool(is_pm or user.has_group('project_manage.group_project_manage_team_lead'))
+        is_ceo = bool(has_ceo_group or is_admin)
+        is_vp = bool(has_vp_group and not has_ceo_group)
+        is_pm = bool(has_pm_group and not has_vp_group and not has_ceo_group)
+        is_tl = bool(has_tl_group and not has_pm_group and not has_vp_group and not has_ceo_group)
 
         for rec in self:
             st = rec.approval_state
             if not st or st in ('draft', 'in_progress', 'todo', 'approved', 'rejected'):
                 rec.can_user_approve = False
-                continue
-
-            if is_admin or is_ceo:
-                rec.can_user_approve = True
-                continue
-
-            if is_vp:
-                rec.can_user_approve = True
                 continue
 
             proj = rec.project_id
@@ -221,9 +218,11 @@ class ProjectManageScope(models.Model):
             has_no_pm = bool(proj and not proj.manager_id)
 
             if st == 'pending_ceo':
+                # Strictly items awaiting CEO approval
                 rec.can_user_approve = is_ceo
             elif st == 'pending_vp':
-                rec.can_user_approve = is_vp
+                # Strictly items awaiting Vice President approval
+                rec.can_user_approve = bool(is_vp)
             elif st == 'pending_pm':
                 # Came specifically for Project Manager of this project
                 rec.can_user_approve = bool(is_proj_pm or (is_pm and has_no_pm))
@@ -303,6 +302,11 @@ class ProjectManageScope(models.Model):
         current_emps = self.env['hr.employee'].sudo().search(emp_domain)
         emp_ids = current_emps.ids
 
+        has_ceo_group = user.has_group('project_manage.group_project_manage_ceo')
+        has_vp_group = user.has_group('project_manage.group_project_manage_vp')
+        has_pm_group = user.has_group('project_manage.group_project_manage_manager')
+        has_tl_group = user.has_group('project_manage.group_project_manage_team_lead')
+
         is_admin = bool(
             self.env.is_superuser() or
             user.id in (1, 2) or
@@ -310,35 +314,32 @@ class ProjectManageScope(models.Model):
             user.has_group('base.group_erp_manager') or
             user.has_group('project_manage.group_project_manage_administrator')
         )
-        is_ceo = bool(is_admin or user.has_group('project_manage.group_project_manage_ceo'))
-        is_vp = bool(is_ceo or user.has_group('project_manage.group_project_manage_vp'))
-        is_pm = bool(is_vp or user.has_group('project_manage.group_project_manage_manager'))
-        is_tl = bool(is_pm or user.has_group('project_manage.group_project_manage_team_lead'))
-
-        if is_admin or is_ceo:
-            admin_domain = [('approval_state', 'in', ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'))]
-            return admin_domain if positive else list(Domain(['!'] + admin_domain))
+        is_ceo = bool(has_ceo_group or is_admin)
+        is_vp = bool(has_vp_group and not has_ceo_group)
 
         domains_list = []
 
-        # 1. VP stage
-        if is_vp:
+        # 1. CEO stage ('pending_ceo') -> only CEO / Admin
+        if is_ceo:
+            domains_list.append([('approval_state', '=', 'pending_ceo')])
+
+        # 2. VP stage ('pending_vp') -> only VP
+        if is_vp or (has_vp_group and not is_ceo):
             domains_list.append([('approval_state', '=', 'pending_vp')])
 
-        # 2. PM stage ('pending_pm')
+        # 3. PM stage ('pending_pm') -> Project Manager assigned to this project
         pm_match = [('project_id.manager_id.user_id', '=', user.id)]
         if emp_ids:
             pm_match.append(('project_id.manager_id', 'in', emp_ids))
-        if is_pm:
+        if has_pm_group and not is_ceo and not has_vp_group:
             pm_match.append(('project_id.manager_id', '=', False))
 
         pm_assigned_domain = list(Domain.OR([[cond] for cond in pm_match]))
         pm_full_domain = list(Domain.AND([[('approval_state', '=', 'pending_pm')], pm_assigned_domain]))
-        if is_vp:
-            pm_full_domain = [('approval_state', '=', 'pending_pm')]
-        domains_list.append(pm_full_domain)
+        if pm_match:
+            domains_list.append(pm_full_domain)
 
-        # 3. TL stage ('pending_tl')
+        # 4. TL stage ('pending_tl') -> Team Lead assigned to this project
         tl_match = [
             ('project_id.team_lead_id.user_id', '=', user.id),
             ('project_id.team_id.team_lead_id', '=', user.id),
@@ -346,22 +347,24 @@ class ProjectManageScope(models.Model):
         if emp_ids:
             tl_match.append(('project_id.team_lead_id', 'in', emp_ids))
 
+        tl_assigned_domain = list(Domain.OR([[cond] for cond in tl_match]))
+        tl_full_domain = list(Domain.AND([[('approval_state', '=', 'pending_tl')], tl_assigned_domain]))
+
+        # Fallback: if project has no Team Lead assigned, and current user is PM
         no_tl_domain = list(Domain.AND([
             [('project_id.team_lead_id', '=', False)],
             [('project_id.team_id.team_lead_id', '=', False)],
         ]))
-        pm_fallback_domain = list(Domain.AND([pm_assigned_domain, no_tl_domain]))
+        pm_fallback_tl_domain = list(Domain.AND([
+            [('approval_state', '=', 'pending_tl')],
+            pm_assigned_domain,
+            no_tl_domain,
+        ]))
 
-        tl_options = [[m] for m in tl_match]
-        tl_options.append(pm_fallback_domain)
-        if is_tl:
-            tl_options.append(no_tl_domain)
-
-        tl_assigned_domain = list(Domain.OR(tl_options))
-        tl_full_domain = list(Domain.AND([[('approval_state', '=', 'pending_tl')], tl_assigned_domain]))
-        if is_vp:
-            tl_full_domain = [('approval_state', '=', 'pending_tl')]
-        domains_list.append(tl_full_domain)
+        if tl_match:
+            domains_list.append(tl_full_domain)
+        if pm_match:
+            domains_list.append(pm_fallback_tl_domain)
 
         full_domain = list(Domain.OR(domains_list)) if domains_list else [(0, '=', 1)]
 
@@ -782,8 +785,14 @@ class ProjectManageScope(models.Model):
             pending_tl -> pending_pm -> pending_vp -> pending_ceo -> Approved (Done).
         """
         user = self.env.user
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
         for rec in self:
-            if not rec.can_user_approve:
+            if not rec.can_user_approve and not is_admin:
                 raise UserError(_("You are not authorized to approve this task (%s) at stage %s.") % (rec.name, rec.approval_state))
             cur = rec.approval_state or 'draft'
             final_auth = (rec.approval_authority or 'TL').upper()
