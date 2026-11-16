@@ -394,6 +394,23 @@ export class ProjectManageDashboard extends Component {
         this.state.taskSearchQuery = '';
     }
 
+    scrollToApprovals() {
+        if (typeof document !== 'undefined') {
+            const el = document.getElementById("pm-approval-section");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+            }
+            const hubEl = document.getElementById("pm-tasks-hub");
+            if (hubEl) {
+                this.setTaskTab('waiting_approval');
+                hubEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                return;
+            }
+        }
+        this.viewAllApprovals();
+    }
+
     scrollToTasksHub() {
         if (typeof document !== 'undefined') {
             const el = document.getElementById("pm-tasks-hub");

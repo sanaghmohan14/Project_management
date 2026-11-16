@@ -41,7 +41,7 @@
 
                     <!-- Approvals Shortcut Button -->
                     <t t-if="!state.data.user_info.is_consultant and state.data.user_info.can_approve">
-                        <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="viewAllApprovals" title="View Approval Requests">
+                        <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="scrollToApprovals" title="View Approval Requests">
                             <i class="fa fa-check-circle me-1 text-warning"></i>
                             <span>Approvals</span>
                             <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
@@ -1222,7 +1222,7 @@
 
                 <!-- ==================== URGENT: APPROVALS PENDING ACTION ==================== -->
                 <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
-                    <section class="pm-approval-section">
+                    <section class="pm-approval-section" id="pm-approval-section">
                         <div class="pm-approval-header">
                             <div class="d-flex align-items-center gap-2">
                                 <span class="pm-pulse-badge">
