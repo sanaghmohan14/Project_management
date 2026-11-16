@@ -77,6 +77,7 @@ class ProjectManageTeam(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage',
             'view_mode': 'kanban,list,form',
+            'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
             'domain': [('team_id', '=', self.id)],
             'context': {'default_team_id': self.id},
         }

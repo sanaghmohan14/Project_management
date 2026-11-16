@@ -289,6 +289,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
+            'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
             'domain': [('project_id', '=', self.id)],
             'context': {'default_project_id': self.id},
         }
@@ -300,6 +301,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
+            'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
             'domain': [('project_id', '=', self.id), ('category', '=', 'Documentation')],
             'context': {'default_project_id': self.id, 'default_category': 'Documentation'},
         }
@@ -311,6 +313,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
+            'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
             'domain': [('project_id', '=', self.id), ('category', '=', 'Implementation')],
             'context': {'default_project_id': self.id, 'default_category': 'Implementation'},
         }
@@ -322,6 +325,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.review',
             'view_mode': 'list,kanban,form,pivot,graph',
+            'views': [(False, 'list'), (False, 'kanban'), (False, 'form'), (False, 'pivot'), (False, 'graph')],
             'domain': [('project_id', '=', self.id)],
             'context': {
                 'default_project_id': self.id,
@@ -338,6 +342,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.review',
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'current',
             'context': {
                 'default_project_id': self.id,
@@ -384,6 +389,7 @@ class ProjectManage(models.Model):
             'res_model': 'project.manage.client.update.wizard',
             'res_id': wizard.id,
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
         }
 
@@ -394,6 +400,7 @@ class ProjectManage(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.scope.import.wizard',
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
             'context': {'default_project_id': self.id},
         }
@@ -1234,17 +1241,18 @@ class ProjectManage(models.Model):
             }
 
         def _task_sort_key(s):
+            pri_weight = -(int(s.priority or 0))
             is_late = bool(s.end_date and today > s.end_date and s.state != 'done')
             is_pend = bool((s.responsible_ids or s.responsible_id) and (s.start_date or s.end_date) and s.state not in ('done', 'cancelled'))
             if is_pend and is_late:
-                return (0, s.end_date or fields.Date.today())
+                return (pri_weight, 0, s.end_date or fields.Date.today())
             if is_pend:
-                return (1, s.end_date or fields.Date.from_string('2099-12-31'))
+                return (pri_weight, 1, s.end_date or fields.Date.from_string('2099-12-31'))
             if s.approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
-                return (2, s.end_date or fields.Date.from_string('2099-12-31'))
+                return (pri_weight, 2, s.end_date or fields.Date.from_string('2099-12-31'))
             if s.state == 'done':
-                return (3, s.end_date or fields.Date.from_string('2000-01-01'))
-            return (4, s.end_date or fields.Date.from_string('2099-12-31'))
+                return (pri_weight, 3, s.end_date or fields.Date.from_string('2000-01-01'))
+            return (pri_weight, 4, s.end_date or fields.Date.from_string('2099-12-31'))
 
         sorted_scopes = sorted(all_hub_scopes, key=_task_sort_key)
         tasks_list = [_serialize_task(s) for s in sorted_scopes[:150]]

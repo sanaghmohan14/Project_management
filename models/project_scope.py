@@ -916,6 +916,7 @@ class ProjectManageScope(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage.scope.reject.wizard',
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'target': 'new',
             'context': {'default_scope_id': self.id},
         }

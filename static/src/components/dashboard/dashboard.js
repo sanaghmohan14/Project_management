@@ -61,6 +61,7 @@ export class ProjectManageDashboard extends Component {
             savingScope: false,
             taskTab: 'pending', // 'pending', 'completed', 'overdue', 'waiting_approval', 'all'
             taskCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
+            taskPriorityFilter: 'all', // 'all', 'starred', '3', '2', '1', '0'
             taskConsultantFilter: 'all', // 'all' or consultant id
             taskProjectFilter: 'all', // 'all' or project id
             taskSearchQuery: "",
@@ -363,6 +364,10 @@ export class ProjectManageDashboard extends Component {
         this.state.taskCategoryFilter = cat;
     }
 
+    setTaskPriorityFilter(ev) {
+        this.state.taskPriorityFilter = ev.target.value;
+    }
+
     setTaskConsultantFilter(ev) {
         this.state.taskConsultantFilter = ev.target.value;
     }
@@ -378,6 +383,7 @@ export class ProjectManageDashboard extends Component {
     clearTaskFilters() {
         this.state.taskTab = 'pending';
         this.state.taskCategoryFilter = 'all';
+        this.state.taskPriorityFilter = 'all';
         this.state.taskConsultantFilter = 'all';
         this.state.taskProjectFilter = 'all';
         this.state.taskSearchQuery = '';
@@ -419,7 +425,17 @@ export class ProjectManageDashboard extends Component {
             list = list.filter(t => (t.category || '').toLowerCase().includes('imp'));
         }
 
-        // 3. Consultant Filter
+        // 3. Priority Filter (Star)
+        if (this.state.taskPriorityFilter && this.state.taskPriorityFilter !== 'all') {
+            if (this.state.taskPriorityFilter === 'starred') {
+                list = list.filter(t => (Number(t.priority) || 0) > 0);
+            } else {
+                const targetPri = String(this.state.taskPriorityFilter);
+                list = list.filter(t => String(t.priority || '0') === targetPri);
+            }
+        }
+
+        // 4. Consultant Filter
         if (this.state.taskConsultantFilter && this.state.taskConsultantFilter !== 'all') {
             const filterId = Number(this.state.taskConsultantFilter);
             list = list.filter(t =>
@@ -429,12 +445,12 @@ export class ProjectManageDashboard extends Component {
             );
         }
 
-        // 4. Project Filter
+        // 5. Project Filter
         if (this.state.taskProjectFilter && this.state.taskProjectFilter !== 'all') {
             list = list.filter(t => String(t.project_id) === String(this.state.taskProjectFilter));
         }
 
-        // 5. Search Query
+        // 6. Search Query
         if (this.state.taskSearchQuery) {
             const q = this.state.taskSearchQuery;
             list = list.filter(t =>
@@ -444,6 +460,16 @@ export class ProjectManageDashboard extends Component {
                 (t.responsible_name && t.responsible_name.toLowerCase().includes(q))
             );
         }
+
+        // High priority task on top (3 -> 2 -> 1 -> 0)
+        list = [...list].sort((a, b) => {
+            const pA = Number(a.priority) || 0;
+            const pB = Number(b.priority) || 0;
+            if (pB !== pA) {
+                return pB - pA;
+            }
+            return 0;
+        });
 
         return list;
     }
@@ -1226,6 +1252,9 @@ export class ProjectManageDashboard extends Component {
         try {
             const action = await this.orm.call("project.manage", "action_open_client_update_wizard", [projectId]);
             if (action) {
+                if (!action.views || !Array.isArray(action.views)) {
+                    action.views = [[false, "form"]];
+                }
                 this.actionService.doAction(action);
             }
         } catch (err) {
@@ -1243,6 +1272,13 @@ export class ProjectManageDashboard extends Component {
             type: "ir.actions.act_window",
             res_model: "project.manage.review",
             view_mode: "list,kanban,form,pivot,graph",
+            views: [
+                [false, "list"],
+                [false, "kanban"],
+                [false, "form"],
+                [false, "pivot"],
+                [false, "graph"],
+            ],
             domain: projectId ? [["project_id", "=", projectId]] : [],
             context: projectId ? { default_project_id: projectId } : {},
         });

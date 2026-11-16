@@ -1342,6 +1342,20 @@
                                 All Tasks
                                 <span class="badge rounded-pill bg-secondary ms-1" t-esc="state.data.tasks_hub ? state.data.tasks_hub.total_count : 0"/>
                             </button>
+
+                            <!-- Priority Star Filter (Selection Dropdown) -->
+                            <select class="form-select form-select-sm pm-select-priority"
+                                    t-on-change="setTaskPriorityFilter"
+                                    t-att-value="state.taskPriorityFilter"
+                                    t-att-class="state.taskPriorityFilter !== 'all' ? 'pm-priority-filter-active' : ''"
+                                    title="Filter tasks by star priority">
+                                <option value="all">⭐ All Priorities</option>
+                                <option value="starred">⭐ Starred (1-3 Stars)</option>
+                                <option value="3">★★★ 3 Stars (Very High)</option>
+                                <option value="2">★★☆ 2 Stars (High)</option>
+                                <option value="1">★☆☆ 1 Star (Low)</option>
+                                <option value="0">☆☆☆ 0 Stars (Normal)</option>
+                            </select>
                         </div>
 
                         <!-- Secondary Filters: Category, Consultant, Project, Search -->

@@ -297,6 +297,7 @@ class ProjectManageReview(models.Model):
             'type': 'ir.actions.act_window',
             'res_model': 'project.manage',
             'view_mode': 'form',
+            'views': [(False, 'form')],
             'res_id': self.project_id.id,
             'target': 'current',
         }
