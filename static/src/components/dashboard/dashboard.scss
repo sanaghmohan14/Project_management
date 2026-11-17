@@ -4088,6 +4088,10 @@ tr.pm-scope-item-row:hover .pm-row-hover-actions {
     &.pm-modal-dialog-md {
         max-width: 550px;
     }
+
+    &.pm-modal-dialog-lg {
+        max-width: 860px;
+    }
 }
 
 .pm-modal-content {
@@ -4140,6 +4144,90 @@ tr.pm-scope-item-row:hover .pm-row-hover-actions {
     padding: 14px 20px;
     border-top: 1px solid var(--pm-border-light);
     background: var(--pm-tile-bg);
+}
+
+/* ========================================================
+   Clean, Borderless Project Creation Modal
+   ======================================================== */
+.pm-modal-clean {
+    .pm-modal-dialog {
+        border: 1px solid var(--pm-border-light, rgba(255, 255, 255, 0.1)) !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+        border-radius: 16px !important;
+    }
+
+    .pm-modal-header {
+        border-bottom: none !important;
+        background: transparent !important;
+        padding: 24px 32px 8px 32px !important;
+    }
+
+    .pm-modal-body {
+        padding: 8px 32px 16px 32px !important;
+        max-height: 75vh !important;
+    }
+
+    .pm-modal-footer {
+        border-top: none !important;
+        background: transparent !important;
+        padding: 12px 32px 28px 32px !important;
+    }
+
+    .pm-title-underline {
+        font-size: 1.45rem !important;
+        font-weight: 600 !important;
+        color: var(--pm-text-heading) !important;
+        background: transparent !important;
+        border: none !important;
+        border-bottom: 2px solid var(--pm-border, #cbd5e1) !important;
+        border-radius: 0 !important;
+        padding: 6px 0 !important;
+        outline: none !important;
+        box-shadow: none !important;
+        transition: border-color 0.2s ease;
+
+        &:focus {
+            border-bottom-color: #3b82f6 !important;
+        }
+
+        &::placeholder {
+            color: var(--pm-text-muted, #94a3b8) !important;
+            font-weight: 400 !important;
+        }
+    }
+
+    .pm-section-heading {
+        font-size: 0.8rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        color: var(--pm-text-heading, #1e293b) !important;
+        margin-bottom: 14px !important;
+    }
+
+    .pm-field-label {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+        color: var(--pm-text-body, #475569) !important;
+        margin-bottom: 4px !important;
+    }
+
+    .pm-clean-input {
+        font-size: 0.88rem !important;
+        background-color: var(--pm-tile-bg, #f8fafc) !important;
+        color: var(--pm-text-heading, #0f172a) !important;
+        border: 1px solid var(--pm-border-light, #e2e8f0) !important;
+        border-radius: 8px !important;
+        padding: 8px 12px !important;
+        transition: all 0.2s ease !important;
+
+        &:focus {
+            background-color: var(--pm-card-bg, #ffffff) !important;
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+            outline: none !important;
+        }
+    }
 }
 
 .pm-scope-mini-chip {

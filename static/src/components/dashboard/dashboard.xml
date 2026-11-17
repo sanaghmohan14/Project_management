@@ -2026,6 +2026,302 @@
                         </div>
                     </div>
                 </t>
+
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL: CREATE NEW PROJECT (CLEAN & SIMPLE)      -->
+                <!-- ======================================================== -->
+                <t t-if="state.projectWizardOpen">
+                    <div class="pm-modal-backdrop pm-modal-clean" t-on-click="closeProjectWizard">
+                        <div class="pm-modal-dialog pm-modal-dialog-lg" t-on-click.stop="">
+                            <div class="pm-modal-content">
+                                <!-- Modal Header -->
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center">
+                                    <h5 class="fw-bold m-0" style="color: var(--pm-text-heading);">New Project</h5>
+                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeProjectWizard" aria-label="Close"></button>
+                                </div>
+
+                                <div class="pm-modal-body">
+                                    <t t-if="state.projectWizardLoading">
+                                        <div class="text-center py-5">
+                                            <i class="fa fa-spinner fa-spin text-primary fa-2x mb-2"></i>
+                                            <div class="text-muted small">Loading project setup options...</div>
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <!-- Top Row: Project Name & Priority Stars -->
+                                        <div class="mb-4">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small text-muted text-uppercase fw-semibold mb-0">Project Name <span class="text-danger">*</span></label>
+                                                <!-- Priority Stars -->
+                                                <div class="d-flex align-items-center gap-1" title="Set project priority">
+                                                    <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                        <i class="fa cursor-pointer"
+                                                           t-att-class="this.isProjectStarActive(star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                           t-on-click="() => this.setNewProjectPriority(star)"
+                                                           style="cursor: pointer; font-size: 1.25rem;"></i>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                            <input type="text" class="form-control pm-title-underline w-100"
+                                                   t-model="state.newProjectData.name"
+                                                   placeholder="e.g. Website Redesign..."
+                                                   required="1"
+                                                   autofocus="1"/>
+                                        </div>
+
+                                        <!-- Two Column Layout: GENERAL and TEAM -->
+                                        <div class="row g-4">
+                                            <!-- Column 1: GENERAL -->
+                                            <div class="col-md-6">
+                                                <div class="pm-section-heading">General</div>
+
+                                                <!-- Client -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Client <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-on-change="onProjectClientSelect"
+                                                            t-att-value="state.newProjectData.partner_id || ''">
+                                                        <option value="">-- Select Client --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.clients">
+                                                            <t t-foreach="state.projectFormData.clients" t-as="cl" t-key="cl.id">
+                                                                <option t-att-value="cl.id"><t t-esc="cl.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Client Implementation Coordinator -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Client Implementation Coordinator <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.newProjectData.client_coordinator_id">
+                                                        <option value="">-- Select Client Coordinator --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.coordinators">
+                                                            <t t-foreach="state.projectFormData.coordinators" t-as="coor" t-key="coor.id">
+                                                                <option t-att-value="coor.id"><t t-esc="coor.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Start Date & End Date -->
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-6">
+                                                        <label class="form-label pm-field-label">Start Date <span class="text-danger">*</span></label>
+                                                        <input type="date" class="form-control pm-clean-input"
+                                                               t-model="state.newProjectData.date_start"
+                                                               required="1"/>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label pm-field-label">End Date <span class="text-danger">*</span></label>
+                                                        <input type="date" class="form-control pm-clean-input"
+                                                               t-model="state.newProjectData.date_end"
+                                                               required="1"/>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Tags -->
+                                                <div class="mb-2">
+                                                    <label class="form-label pm-field-label d-flex justify-content-between">
+                                                        <span>Tags</span>
+                                                        <span class="text-muted small" t-if="state.newProjectData.tag_ids.length">
+                                                            <t t-esc="state.newProjectData.tag_ids.length"/> selected
+                                                        </span>
+                                                    </label>
+                                                    <div class="d-flex flex-wrap gap-1" t-if="state.projectFormData and state.projectFormData.tags">
+                                                        <t t-foreach="state.projectFormData.tags" t-as="tag" t-key="tag.id">
+                                                            <button type="button"
+                                                                    class="btn btn-sm rounded-pill py-1 px-2"
+                                                                    t-att-class="state.newProjectData.tag_ids.includes(tag.id) ? 'btn-primary' : 'btn-light border-0 text-muted'"
+                                                                    style="font-size: 0.75rem;"
+                                                                    t-on-click="() => this.toggleProjectTag(tag.id)">
+                                                                <t t-esc="tag.name"/>
+                                                            </button>
+                                                        </t>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Column 2: TEAM -->
+                                            <div class="col-md-6">
+                                                <div class="pm-section-heading">Team</div>
+
+                                                <!-- Project Team -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label d-flex justify-content-between">
+                                                        <span>Project Team</span>
+                                                        <span class="text-muted fw-normal small" style="font-size: 0.72rem;">Auto-fills lead &amp; members</span>
+                                                    </label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-on-change="onProjectTeamSelect"
+                                                            t-att-value="state.newProjectData.team_id || ''">
+                                                        <option value="">-- No Team (Individual Assignment) --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.teams">
+                                                            <t t-foreach="state.projectFormData.teams" t-as="tm" t-key="tm.id">
+                                                                <option t-att-value="tm.id"><t t-esc="tm.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Project Manager -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Project Manager <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.newProjectData.manager_id">
+                                                        <option value="">-- Select Project Manager --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id">
+                                                                    <t t-esc="emp.name"/><t t-if="emp.job_title"> (<t t-esc="emp.job_title"/>)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Team Lead -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Team Lead <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.newProjectData.team_lead_id">
+                                                        <option value="">-- Select Team Lead --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id">
+                                                                    <t t-esc="emp.name"/><t t-if="emp.job_title"> (<t t-esc="emp.job_title"/>)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Project Implementation Coordinator -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Project Implementation Coordinator</label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.newProjectData.project_coordinator_id">
+                                                        <option value="">-- Optional Coordinator --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Consultants -->
+                                                <div class="mb-2">
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <label class="form-label pm-field-label mb-0">Consultants <span class="text-danger">*</span></label>
+                                                        <span class="text-muted small">
+                                                            <t t-esc="state.newProjectData.consultant_ids.length"/> assigned
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Consultant Chips -->
+                                                    <div class="d-flex flex-wrap gap-1 mb-2" t-if="state.newProjectData.consultant_ids.length">
+                                                        <t t-foreach="state.newProjectData.consultant_ids" t-as="cid" t-key="cid">
+                                                            <span class="badge bg-primary text-white d-inline-flex align-items-center py-1 px-2 gap-1 rounded-pill" style="font-size: 0.8rem; font-weight: 500;">
+                                                                <t t-esc="this.getEmployeeNameFromMeta(cid)"/>
+                                                                <i class="fa fa-times ms-1 text-white-50 cursor-pointer"
+                                                                   title="Remove"
+                                                                   style="cursor: pointer;"
+                                                                   t-on-click="() => this.removeProjectConsultant(cid)"></i>
+                                                            </span>
+                                                        </t>
+                                                    </div>
+
+                                                    <!-- Dropdown to add consultant -->
+                                                    <select class="form-select form-select-sm pm-clean-input" t-on-change="(ev) => this.addProjectConsultant(ev)">
+                                                        <option value="">+ Add consultant...</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id" t-att-disabled="state.newProjectData.consultant_ids.includes(emp.id)">
+                                                                    <t t-esc="emp.name"/>
+                                                                    <t t-if="state.newProjectData.consultant_ids.includes(emp.id)"> (assigned)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Scopes & Tasks Options -->
+                                        <div class="mt-4 pt-3">
+                                            <div class="pm-section-heading mb-2">Scope &amp; Tasks Setup</div>
+                                            <div class="d-flex flex-column gap-3">
+                                                <!-- Option 1: Pre-populate Standard Scopes -->
+                                                <div class="d-flex align-items-center justify-content-between">
+                                                    <div>
+                                                        <div class="small fw-semibold" style="color: var(--pm-text-heading);">Pre-populate Standard Scopes &amp; Tasks (~120 items)</div>
+                                                        <div class="text-muted small" style="font-size: 0.78rem;">Automatically loads Project Initiation, Blueprints, Configuration, and Handover tasks</div>
+                                                    </div>
+                                                    <div class="form-check form-switch m-0 ms-3">
+                                                        <input class="form-check-input cursor-pointer" type="checkbox" id="pmLoadStandardScopesToggle"
+                                                               t-model="state.newProjectData.load_standard_scopes"
+                                                               t-att-disabled="state.newProjectData.import_filename ? 'disabled' : undefined"
+                                                               style="cursor: pointer; width: 2.3em; height: 1.2em;"/>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Option 2: Import Custom Scope File (Excel / CSV) -->
+                                                <div class="d-flex align-items-center justify-content-between">
+                                                    <div>
+                                                        <div class="small fw-semibold" style="color: var(--pm-text-heading);">Import Custom Scopes &amp; Tasks (Excel / CSV)</div>
+                                                        <div class="text-muted small d-flex align-items-center gap-2" style="font-size: 0.78rem;">
+                                                            <span>Upload project scope tracker spreadsheet (.xlsx, .csv)</span>
+                                                            <span>·</span>
+                                                            <a href="javascript:void(0)" class="text-primary text-decoration-none" t-on-click="downloadScopeTemplate">
+                                                                <i class="fa fa-download me-1"></i>Sample Template
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                    <div class="d-flex align-items-center gap-2 ms-3">
+                                                        <t t-if="state.newProjectData.import_filename">
+                                                            <span class="badge bg-success text-white d-inline-flex align-items-center gap-1 py-1 px-2 rounded-pill small" style="font-size: 0.8rem; font-weight: 500;">
+                                                                <i class="fa fa-file-excel-o"></i>
+                                                                <span class="text-truncate" style="max-width: 160px;" t-esc="state.newProjectData.import_filename"/>
+                                                                <i class="fa fa-times ms-1 cursor-pointer text-white-50" title="Remove file" t-on-click="clearProjectImportFile"></i>
+                                                            </span>
+                                                        </t>
+                                                        <t t-else="">
+                                                            <label class="btn btn-sm btn-outline-primary mb-0 cursor-pointer d-inline-flex align-items-center gap-1 py-1 px-3 rounded-pill" style="font-size: 0.8rem;">
+                                                                <i class="fa fa-upload"></i>
+                                                                <span>Import File</span>
+                                                                <input type="file" accept=".xlsx,.xls,.csv" class="d-none" t-on-change="onProjectImportFileChange"/>
+                                                            </label>
+                                                        </t>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Modal Footer -->
+                                <div class="pm-modal-footer d-flex justify-content-end align-items-center gap-2">
+                                    <button type="button" class="btn btn-sm btn-link text-muted text-decoration-none px-3"
+                                            t-att-disabled="state.savingNewProject"
+                                            t-on-click="closeProjectWizard">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-primary fw-semibold px-4 py-2 rounded-3"
+                                            t-att-disabled="state.savingNewProject or state.projectWizardLoading"
+                                            t-on-click="saveNewProject">
+                                        <t t-if="state.savingNewProject">
+                                            <i class="fa fa-spinner fa-spin me-1"></i> Creating...
+                                        </t>
+                                        <t t-else="">
+                                            Create Project
+                                        </t>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
             </div>
         </div>
     </t>

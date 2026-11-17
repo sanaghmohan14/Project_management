@@ -1,4 +1,5 @@
 import base64
+import datetime
 import uuid
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError, AccessError
@@ -1228,7 +1229,16 @@ class ProjectManage(models.Model):
         else:
             # Executive (VP, CEO, Admin)
             if team_id:
-                team_projects = self.search([('team_id', '=', int(team_id))])
+                if str(team_id).startswith('lead_'):
+                    try:
+                        lead_emp_id = int(str(team_id).replace('lead_', ''))
+                        team_projects = self.search([('team_lead_id', '=', lead_emp_id)])
+                    except (ValueError, TypeError):
+                        team_projects = self.env['project.manage']
+                elif str(team_id).isdigit():
+                    team_projects = self.search([('team_id', '=', int(team_id))])
+                else:
+                    team_projects = self.env['project.manage']
                 hub_domain = [('project_id', 'in', team_projects.ids)]
             else:
                 hub_domain = []
@@ -2063,3 +2073,216 @@ class ProjectManage(models.Model):
             project._compute_metrics()
 
         return self.get_project_scopes_dashboard(project.id)
+
+    @api.model
+    def get_new_project_form_data(self):
+        """Return lists of Partners, Teams, Employees, and Tags for in-dashboard project creation."""
+        user = self.env.user
+        today = fields.Date.context_today(self)
+        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+
+        # Clients & Coordinators (all active res.partner records sorted A-Z)
+        partners = self.env['res.partner'].sudo().search_read(
+            [('active', '=', True)],
+            ['id', 'name', 'is_company'],
+            order='name asc'
+        )
+        partners_list = [{
+            'id': p['id'],
+            'name': p['name'],
+            'is_company': bool(p.get('is_company')),
+        } for p in partners if p.get('name')]
+
+        clients_list = partners_list
+        coordinators_list = partners_list
+
+        # Teams
+        teams_data = []
+        all_teams = self.env['project.manage.team'].sudo().search([('active', '=', True)], order='name asc')
+        for tm in all_teams:
+            lead_emp_id = False
+            if tm.team_lead_id:
+                emp = self.env['hr.employee'].sudo().search([('user_id', '=', tm.team_lead_id.id)], limit=1)
+                if emp:
+                    lead_emp_id = emp.id
+            member_emp_ids = []
+            if tm.member_ids:
+                m_emps = self.env['hr.employee'].sudo().search([('user_id', 'in', tm.member_ids.ids)])
+                member_emp_ids = m_emps.ids
+            teams_data.append({
+                'id': tm.id,
+                'name': tm.name,
+                'team_lead_emp_id': lead_emp_id,
+                'member_emp_ids': member_emp_ids,
+            })
+
+        # Active Employees
+        all_emps = self.env['hr.employee'].sudo().search_read(
+            [('active', '=', True)],
+            ['id', 'name', 'job_title', 'work_email', 'user_id'],
+            order='name asc'
+        )
+        employees_list = [{
+            'id': e['id'],
+            'name': e['name'],
+            'job_title': e.get('job_title') or '',
+            'user_id': e['user_id'][0] if e.get('user_id') else False,
+        } for e in all_emps]
+
+        # Tags
+        tags = self.env['project.manage.tag'].sudo().search_read([], ['id', 'name', 'color'], order='name asc')
+        tags_list = [{'id': t['id'], 'name': t['name'], 'color': t.get('color', 0)} for t in tags]
+
+        end_date = today + datetime.timedelta(days=90)
+
+        return {
+            'clients': clients_list,
+            'coordinators': coordinators_list,
+            'teams': teams_data,
+            'employees': employees_list,
+            'tags': tags_list,
+            'default_manager_id': current_emp.id if current_emp else (employees_list[0]['id'] if employees_list else False),
+            'default_date_start': today.strftime('%Y-%m-%d'),
+            'default_date_end': end_date.strftime('%Y-%m-%d'),
+        }
+
+    @api.model
+    def create_project_from_dashboard(self, vals):
+        """Create a new project directly from the dashboard modal without navigating to backend."""
+        user = self.env.user
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
+        can_create = (
+            is_admin or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager')
+        )
+        if not can_create:
+            raise AccessError(_("You do not have permission to create projects. Only Project Managers, VP, CEO, and Administrators have project creation access."))
+
+        name = (vals.get('name') or '').strip()
+        if not name:
+            raise UserError(_("Project Name is required."))
+
+        partner_id = vals.get('partner_id')
+        if not partner_id or not str(partner_id).isdigit():
+            raise UserError(_("Client is required."))
+        partner_id = int(partner_id)
+
+        date_start = vals.get('date_start')
+        date_end = vals.get('date_end')
+        if not date_start or not date_end:
+            raise UserError(_("Start Date and End Date are required."))
+
+        manager_id = vals.get('manager_id')
+        if not manager_id or not str(manager_id).isdigit():
+            raise UserError(_("Project Manager is required."))
+        manager_id = int(manager_id)
+
+        team_lead_id = vals.get('team_lead_id')
+        if not team_lead_id or not str(team_lead_id).isdigit():
+            raise UserError(_("Team Lead is required."))
+        team_lead_id = int(team_lead_id)
+
+        raw_consultants = vals.get('consultant_ids') or []
+        consultant_ids = [int(cid) for cid in raw_consultants if str(cid).isdigit()]
+        if not consultant_ids:
+            consultant_ids = [team_lead_id]
+
+        client_coordinator_id = vals.get('client_coordinator_id')
+        if client_coordinator_id and str(client_coordinator_id).isdigit():
+            client_coordinator_id = int(client_coordinator_id)
+        else:
+            client_coordinator_id = partner_id
+
+        project_coordinator_id = vals.get('project_coordinator_id')
+        if project_coordinator_id and str(project_coordinator_id).isdigit():
+            project_coordinator_id = int(project_coordinator_id)
+        else:
+            project_coordinator_id = False
+
+        team_id = vals.get('team_id')
+        if team_id and str(team_id).isdigit():
+            team_id = int(team_id)
+        else:
+            team_id = False
+
+        raw_tags = vals.get('tag_ids') or []
+        tag_ids = [int(tid) for tid in raw_tags if str(tid).isdigit()]
+
+        priority = str(vals.get('priority') or '0')
+
+        project_vals = {
+            'name': name,
+            'partner_id': partner_id,
+            'client_coordinator_id': client_coordinator_id,
+            'date_start': date_start,
+            'date_end': date_end,
+            'manager_id': manager_id,
+            'team_lead_id': team_lead_id,
+            'project_coordinator_id': project_coordinator_id,
+            'team_id': team_id,
+            'consultant_ids': [(6, 0, consultant_ids)],
+            'priority': priority,
+            'state': 'todo',
+        }
+        if tag_ids:
+            project_vals['tag_ids'] = [(6, 0, tag_ids)]
+
+        new_project = self.create(project_vals)
+
+        # Scope Import / Setup Options:
+        import_file_b64 = vals.get('import_file')
+        import_filename = vals.get('import_filename') or 'scopes_import.xlsx'
+        import_mode = vals.get('import_mode') or 'append'
+        load_standard_scopes = vals.get('load_standard_scopes', True)
+
+        if import_file_b64:
+            try:
+                if ',' in import_file_b64:
+                    import_file_b64 = import_file_b64.split(',', 1)[1]
+                wizard = self.env['project.scope.import.wizard'].create({
+                    'project_id': new_project.id,
+                    'file': import_file_b64,
+                    'filename': import_filename,
+                    'import_mode': import_mode,
+                })
+                wizard.action_import()
+            except Exception as e:
+                raise UserError(_("Project created, but scope file import failed: %s") % str(e))
+        elif load_standard_scopes:
+            try:
+                new_project.action_load_standard_scopes()
+            except Exception:
+                pass
+
+        return {
+            'success': True,
+            'project_id': new_project.id,
+            'project_name': new_project.name,
+        }
+
+    @api.model
+    def get_default_scope_csv_template(self):
+        """Return base64 encoded default scope CSV template for download."""
+        import os
+        from odoo import tools
+        try:
+            csv_path = tools.file_path('project_manage/data/default_scope_data.csv')
+        except Exception:
+            csv_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'data', 'default_scope_data.csv'))
+
+        if not csv_path or not os.path.exists(csv_path):
+            raise UserError(_('Default scope template file not found.'))
+
+        with open(csv_path, 'rb') as f:
+            data = f.read()
+
+        return {
+            'filename': 'project_scope_template.csv',
+            'file_content': base64.b64encode(data).decode('utf-8'),
+        }

@@ -47,6 +47,27 @@ export class ProjectManageDashboard extends Component {
             editRowData: {},
             scopeWizardOpen: false,
             wizardData: {},
+            projectWizardOpen: false,
+            projectWizardLoading: false,
+            projectFormData: null,
+            newProjectData: {
+                name: "",
+                priority: "0",
+                partner_id: "",
+                client_coordinator_id: "",
+                date_start: "",
+                date_end: "",
+                tag_ids: [],
+                team_id: "",
+                manager_id: "",
+                team_lead_id: "",
+                project_coordinator_id: "",
+                consultant_ids: [],
+                load_standard_scopes: true,
+                import_file: null,
+                import_filename: "",
+            },
+            savingNewProject: false,
             bulkWizardOpen: false,
             bulkData: {
                 target: 'scope',
@@ -1428,19 +1449,220 @@ export class ProjectManageDashboard extends Component {
         });
     }
 
-    createNewProject() {
+    async createNewProject() {
         if (!this.state.data.user_info.can_create_project) {
             if (this.notification) {
                 this.notification.add("Team Leads cannot create projects. Only Project Managers, VP, CEO, and Administrators have project creation access.", { type: "warning" });
             }
             return;
         }
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "project.manage",
-            views: [[false, "form"]],
-            target: "current",
-        });
+        this.state.projectWizardOpen = true;
+        this.state.projectWizardLoading = true;
+        try {
+            if (!this.state.projectFormData) {
+                const meta = await this.orm.call("project.manage", "get_new_project_form_data", []);
+                this.state.projectFormData = meta || {};
+            }
+            const meta = this.state.projectFormData;
+            const todayStr = meta.default_date_start || new Date().toISOString().split('T')[0];
+            const endStr = meta.default_date_end || todayStr;
+            this.state.newProjectData = {
+                name: "",
+                priority: "0",
+                partner_id: "",
+                client_coordinator_id: "",
+                date_start: todayStr,
+                date_end: endStr,
+                tag_ids: [],
+                team_id: "",
+                manager_id: meta.default_manager_id || (meta.employees && meta.employees[0] ? meta.employees[0].id : ""),
+                team_lead_id: "",
+                project_coordinator_id: "",
+                consultant_ids: [],
+                load_standard_scopes: true,
+                import_file: null,
+                import_filename: "",
+            };
+        } catch (err) {
+            console.error("Failed to load project form data:", err);
+            if (this.notification) {
+                this.notification.add("Could not load project setup form.", { type: "danger" });
+            }
+        } finally {
+            this.state.projectWizardLoading = false;
+        }
+    }
+
+    closeProjectWizard() {
+        if (this.state.savingNewProject) {
+            return;
+        }
+        this.state.projectWizardOpen = false;
+    }
+
+    isProjectStarActive(star) {
+        const cur = parseInt(this.state.newProjectData.priority || 0, 10);
+        return cur >= star;
+    }
+
+    setNewProjectPriority(star) {
+        const starStr = String(star);
+        this.state.newProjectData.priority = (this.state.newProjectData.priority === starStr) ? "0" : starStr;
+    }
+
+    onProjectTeamSelect(ev) {
+        const teamIdVal = ev.target.value;
+        this.state.newProjectData.team_id = teamIdVal;
+        if (!teamIdVal || !this.state.projectFormData || !this.state.projectFormData.teams) {
+            return;
+        }
+        const selectedTeam = this.state.projectFormData.teams.find(t => String(t.id) === String(teamIdVal));
+        if (selectedTeam) {
+            if (selectedTeam.team_lead_emp_id) {
+                this.state.newProjectData.team_lead_id = selectedTeam.team_lead_emp_id;
+            }
+            if (selectedTeam.member_emp_ids && selectedTeam.member_emp_ids.length > 0) {
+                const current = new Set(this.state.newProjectData.consultant_ids);
+                selectedTeam.member_emp_ids.forEach(id => current.add(id));
+                this.state.newProjectData.consultant_ids = Array.from(current);
+            }
+        }
+    }
+
+    onProjectClientSelect(ev) {
+        const partnerId = ev.target.value;
+        this.state.newProjectData.partner_id = partnerId;
+        if (partnerId && !this.state.newProjectData.client_coordinator_id) {
+            this.state.newProjectData.client_coordinator_id = partnerId;
+        }
+    }
+
+    getFilteredCoordinators() {
+        if (!this.state.projectFormData || !this.state.projectFormData.coordinators) {
+            return [];
+        }
+        return this.state.projectFormData.coordinators;
+    }
+
+    getEmployeeNameFromMeta(empId) {
+        if (!empId) return "";
+        if (this.state.projectFormData && this.state.projectFormData.employees) {
+            const found = this.state.projectFormData.employees.find(e => e.id === empId);
+            if (found) return found.name;
+        }
+        return this.getEmployeeName(empId);
+    }
+
+    addProjectConsultant(ev) {
+        const empId = parseInt(ev.target.value, 10);
+        if (!empId) return;
+        if (!this.state.newProjectData.consultant_ids.includes(empId)) {
+            this.state.newProjectData.consultant_ids.push(empId);
+        }
+        ev.target.value = "";
+    }
+
+    removeProjectConsultant(empId) {
+        this.state.newProjectData.consultant_ids = this.state.newProjectData.consultant_ids.filter(id => id !== empId);
+    }
+
+    toggleProjectTag(tagId) {
+        const current = this.state.newProjectData.tag_ids;
+        if (current.includes(tagId)) {
+            this.state.newProjectData.tag_ids = current.filter(id => id !== tagId);
+        } else {
+            this.state.newProjectData.tag_ids.push(tagId);
+        }
+    }
+
+    onProjectImportFileChange(ev) {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            this.state.newProjectData.import_file = e.target.result;
+            this.state.newProjectData.import_filename = file.name;
+            this.state.newProjectData.load_standard_scopes = false;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    clearProjectImportFile() {
+        this.state.newProjectData.import_file = null;
+        this.state.newProjectData.import_filename = "";
+        this.state.newProjectData.load_standard_scopes = true;
+    }
+
+    async downloadScopeTemplate() {
+        try {
+            const res = await this.orm.call("project.manage", "get_default_scope_csv_template", []);
+            if (res && res.file_content) {
+                const link = document.createElement("a");
+                link.href = "data:text/csv;base64," + res.file_content;
+                link.download = res.filename || "project_scope_template.csv";
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        } catch (err) {
+            console.error("Failed to download template:", err);
+            if (this.notification) {
+                this.notification.add("Could not download template file.", { type: "danger" });
+            }
+        }
+    }
+
+    async saveNewProject() {
+        const data = this.state.newProjectData;
+        if (!data.name || !data.name.trim()) {
+            if (this.notification) this.notification.add("Project Name is required.", { type: "warning" });
+            return;
+        }
+        if (!data.partner_id) {
+            if (this.notification) this.notification.add("Please select a Client.", { type: "warning" });
+            return;
+        }
+        if (!data.date_start || !data.date_end) {
+            if (this.notification) this.notification.add("Please provide Start and End Dates.", { type: "warning" });
+            return;
+        }
+        if (new Date(data.date_end) < new Date(data.date_start)) {
+            if (this.notification) this.notification.add("End date cannot be earlier than start date.", { type: "warning" });
+            return;
+        }
+        if (!data.manager_id) {
+            if (this.notification) this.notification.add("Please select a Project Manager.", { type: "warning" });
+            return;
+        }
+        if (!data.team_lead_id) {
+            if (this.notification) this.notification.add("Please select a Team Lead.", { type: "warning" });
+            return;
+        }
+        if (!data.consultant_ids || data.consultant_ids.length === 0) {
+            data.consultant_ids = [parseInt(data.team_lead_id, 10)];
+        }
+
+        this.state.savingNewProject = true;
+        try {
+            const res = await this.orm.call("project.manage", "create_project_from_dashboard", [data]);
+            if (res && res.success) {
+                if (this.notification) {
+                    this.notification.add(`Project "${res.project_name}" created successfully!`, { type: "success" });
+                }
+                this.state.projectWizardOpen = false;
+                this.state.selectedProjectId = res.project_id;
+                await this.loadData();
+                await this.loadProjectScopes(res.project_id);
+            }
+        } catch (err) {
+            console.error("Failed to create project from dashboard:", err);
+            const msg = err && err.data && err.data.message ? err.data.message : (err && err.message ? err.message : "Failed to create project.");
+            if (this.notification) {
+                this.notification.add(msg, { type: "danger" });
+            }
+        } finally {
+            this.state.savingNewProject = false;
+        }
     }
 
     createNewTeam() {
