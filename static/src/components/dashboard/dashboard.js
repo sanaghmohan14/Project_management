@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onMounted, useRef } from "@odoo/owl";
+import { Component, useState, onWillStart, onMounted, onWillUnmount, useRef } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 
@@ -25,7 +25,9 @@ export class ProjectManageDashboard extends Component {
         this.state = useState({
             loading: true,
             darkMode: initialDark,
-            activeMainView: 'dashboard',  // 'dashboard' or 'calendar'
+            isMobile: typeof window !== 'undefined' ? (window.innerWidth < 992) : false,
+            activeMainView: 'home',  // 'home', 'projects', 'approvals', 'scopes', 'calendar' (used on mobile only)
+            projectStatusFilter: 'all',  // 'all', 'running', 'on_hold', 'completed', 'high_risk'
             calendarTimeFilter: 'month',  // 'today', 'tomorrow', 'week', 'month', 'all'
             calendarViewMode: 'month',   // 'month', 'week', 'agenda'
             calendarCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
@@ -68,6 +70,9 @@ export class ProjectManageDashboard extends Component {
                 import_filename: "",
             },
             savingNewProject: false,
+            scopeDetailWizardOpen: false,
+            scopeDetailLoading: false,
+            scopeDetailData: null,
             bulkWizardOpen: false,
             bulkData: {
                 target: 'scope',
@@ -187,6 +192,24 @@ export class ProjectManageDashboard extends Component {
 
         onWillStart(async () => {
             await this.loadData();
+        });
+
+        const checkMobile = () => {
+            if (typeof window !== 'undefined') {
+                const mobile = window.innerWidth < 992;
+                if (this.state.isMobile !== mobile) {
+                    this.state.isMobile = mobile;
+                }
+            }
+        };
+        this._onResize = checkMobile;
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', this._onResize);
+        }
+        onWillUnmount(() => {
+            if (typeof window !== 'undefined' && this._onResize) {
+                window.removeEventListener('resize', this._onResize);
+            }
         });
     }
 
@@ -416,31 +439,25 @@ export class ProjectManageDashboard extends Component {
     }
 
     scrollToApprovals() {
-        if (typeof document !== 'undefined') {
+        if (!this.state.isMobile && typeof document !== 'undefined') {
             const el = document.getElementById("pm-approval-section");
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "start" });
                 return;
             }
-            const hubEl = document.getElementById("pm-tasks-hub");
-            if (hubEl) {
-                this.setTaskTab('waiting_approval');
-                hubEl.scrollIntoView({ behavior: "smooth", block: "start" });
-                return;
-            }
         }
-        this.viewAllApprovals();
+        this.setActiveTab('approvals');
     }
 
     scrollToTasksHub() {
-        if (typeof document !== 'undefined') {
+        if (!this.state.isMobile && typeof document !== 'undefined') {
             const el = document.getElementById("pm-tasks-hub");
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "start" });
                 return;
             }
         }
-        this.viewMyTasks();
+        this.setActiveTab('scopes');
     }
 
     get filteredTasks() {
@@ -517,9 +534,87 @@ export class ProjectManageDashboard extends Component {
         return list;
     }
 
+    // ==================== 5-VIEW TAB NAVIGATION METHODS ====================
+    setActiveTab(tab) {
+        this.state.activeMainView = tab;
+        if (tab === 'scopes' && !this.state.selectedProjectId) {
+            const projs = (this.state.data && this.state.data.projects) || [];
+            if (projs.length > 0) {
+                this.selectProjectForScopes(projs[0].id);
+            }
+        }
+        if (this.rootRef && this.rootRef.el) {
+            this.rootRef.el.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+    isTabActive(tab) {
+        const current = this.state.activeMainView || 'home';
+        if (tab === 'home') {
+            return current === 'home' || current === 'dashboard';
+        }
+        if (tab === 'scopes') {
+            return current === 'scopes' || current === 'tasks';
+        }
+        return current === tab;
+    }
+
+    isSectionVisible(section) {
+        if (!this.state.isMobile) {
+            // Desktop view: ALWAYS show all sections continuously as before
+            if (section === 'calendar') {
+                return false;
+            }
+            return true;
+        }
+        // Mobile view: strictly show only the active tab (home, projects, approvals, scopes, calendar)
+        return this.isTabActive(section);
+    }
+
+    async selectProjectForScopes(projectId) {
+        if (!projectId) return;
+        this.state.selectedProjectId = projectId;
+        this.state.activeCategoryFilter = 'all';
+        this.state.activeStatusFilter = 'all';
+        this.state.selectedScopeName = null;
+        this.state.searchQuery = "";
+        await this.loadProjectScopes(projectId);
+    }
+
+    openProjectScopesTab(projectId, ev) {
+        if (ev) ev.stopPropagation();
+        this.setActiveTab('scopes');
+        this.selectProjectForScopes(projectId);
+    }
+
+    setProjectStatusFilter(filter) {
+        this.state.projectStatusFilter = filter;
+    }
+
+    get filteredProjects() {
+        let projs = (this.state.data && this.state.data.projects) || [];
+        if (this.state.selectedTeamId) {
+            if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
+                const leadId = parseInt(this.state.selectedTeamId.replace('lead_', ''), 10);
+                projs = projs.filter(p => p.team_lead_id === leadId);
+            } else {
+                const tId = parseInt(this.state.selectedTeamId, 10);
+                projs = projs.filter(p => p.team_id === tId);
+            }
+        }
+        if (this.state.projectStatusFilter && this.state.projectStatusFilter !== 'all') {
+            if (this.state.projectStatusFilter === 'high_risk') {
+                projs = projs.filter(p => p.risk_level === 'high');
+            } else {
+                projs = projs.filter(p => p.running_status === this.state.projectStatusFilter);
+            }
+        }
+        return projs;
+    }
+
     // ==================== CALENDAR VIEW METHODS & GETTERS ====================
     setMainView(view) {
-        this.state.activeMainView = view;
+        this.setActiveTab(view);
     }
 
     setCalendarTimeFilter(filter) {
@@ -616,9 +711,9 @@ export class ProjectManageDashboard extends Component {
     openCalendarItem(item, ev) {
         if (ev) ev.stopPropagation();
         if (item.type === 'project' && item.record_id) {
-            this.openProject(item.record_id);
+            this.openProjectScopesTab(item.record_id, ev);
         } else if (item.type === 'task' && item.record_id) {
-            this.openScopeForm(item.record_id, ev);
+            this.openScope(item.record_id);
         }
     }
 
@@ -1681,75 +1776,45 @@ export class ProjectManageDashboard extends Component {
     }
 
     viewAllProjects(domain = [], name = "Projects") {
-        const fullDomain = Array.isArray(domain) ? [...domain] : [];
-        const actionTitle = typeof name === "string" ? name : "Projects";
-        if (this.state.selectedTeamId) {
-            if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
-                const leadId = parseInt(this.state.selectedTeamId.replace('lead_', ''), 10);
-                if (!isNaN(leadId) && leadId > 0) {
-                    fullDomain.push(["team_lead_id", "=", leadId]);
-                }
-            } else {
-                const teamId = parseInt(this.state.selectedTeamId, 10);
-                if (!isNaN(teamId) && teamId > 0) {
-                    fullDomain.push(["team_id", "=", teamId]);
-                }
-            }
+        this.state.projectStatusFilter = 'all';
+        if (this.state.isMobile) {
+            this.setActiveTab('projects');
+        } else if (typeof document !== 'undefined') {
+            const el = document.querySelector(".pm-table-section");
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
         }
-        this.actionService.doAction({
-            name: actionTitle,
-            type: "ir.actions.act_window",
-            res_model: "project.manage",
-            views: [[false, "list"], [false, "kanban"], [false, "form"]],
-            domain: fullDomain,
-            target: "current",
-        });
     }
 
     viewRunningProjects() {
-        this.viewAllProjects([["running_status", "=", "running"]], "Running Projects");
+        this.state.projectStatusFilter = 'running';
+        this.setActiveTab('projects');
     }
 
     viewHighRiskProjects() {
-        this.viewProjectsByRisk("high");
+        this.state.projectStatusFilter = 'high_risk';
+        this.setActiveTab('projects');
     }
 
     viewProjectsByRisk(level, ev) {
         if (ev) ev.stopPropagation();
-        const titles = {
-            low: "Low-Risk Projects",
-            medium: "Medium-Risk Projects",
-            high: "High-Risk Projects",
-        };
-        const domain = level && level !== "all" ? [["risk_level", "=", level]] : [];
-        const title = titles[level] || "Projects by Risk";
-        this.viewAllProjects(domain, title);
+        if (level === 'high') {
+            this.state.projectStatusFilter = 'high_risk';
+        } else {
+            this.state.projectStatusFilter = 'all';
+        }
+        this.setActiveTab('projects');
     }
 
     viewProjectsByRunningStatus(status, ev) {
         if (ev) ev.stopPropagation();
-        const titles = {
-            running: "Running Projects",
-            completed: "Completed Projects",
-            on_hold: "On Hold Projects",
-            not_started: "Not Started Projects",
-        };
-        const domain = status && status !== "all" ? [["running_status", "=", status]] : [];
-        const title = titles[status] || "Projects by Running Status";
-        this.viewAllProjects(domain, title);
+        this.state.projectStatusFilter = status || 'all';
+        this.setActiveTab('projects');
     }
 
     viewProjectsByCondition(condition, ev) {
         if (ev) ev.stopPropagation();
-        const titles = {
-            ahead: "Ahead Projects",
-            on_plan: "On Plan Projects",
-            behind: "Behind Projects",
-            overdue: "Overdue Projects",
-        };
-        const domain = condition && condition !== "all" ? [["condition", "=", condition]] : [];
-        const title = titles[condition] || "Projects by Condition";
-        this.viewAllProjects(domain, title);
+        this.state.projectStatusFilter = 'all';
+        this.setActiveTab('projects');
     }
 
     async approveTask(taskId) {
@@ -1797,40 +1862,104 @@ export class ProjectManageDashboard extends Component {
         }
     }
 
-    openScope(scopeId) {
+    async openScope(scopeId) {
         if (!scopeId) return;
         const numericId = parseInt(scopeId, 10);
         if (isNaN(numericId) || numericId <= 0) return;
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "project.manage.scope",
-            res_id: numericId,
-            views: [[false, "form"]],
-            target: "current",
-        });
+
+        this.state.scopeDetailWizardOpen = true;
+        this.state.scopeDetailLoading = true;
+        this.state.scopeDetailData = null;
+        try {
+            const data = await this.orm.call("project.manage.scope", "get_scope_details_dashboard", [numericId]);
+            if (data && !data.error) {
+                this.state.scopeDetailData = data;
+            } else {
+                if (this.notification) this.notification.add(data.error || "Could not load task details.", { type: "danger" });
+                this.state.scopeDetailWizardOpen = false;
+            }
+        } catch (err) {
+            console.error("Failed to load task details:", err);
+            if (this.notification) this.notification.add("Could not load task details.", { type: "danger" });
+            this.state.scopeDetailWizardOpen = false;
+        } finally {
+            this.state.scopeDetailLoading = false;
+        }
+    }
+
+    closeScopeDetailWizard() {
+        this.state.scopeDetailWizardOpen = false;
+        this.state.scopeDetailData = null;
+    }
+
+    async approveTaskFromModal(scopeId) {
+        if (!scopeId) return;
+        try {
+            await this.orm.call("project.manage", "action_dashboard_approve_scope", [scopeId]);
+            if (this.notification) {
+                this.notification.add("Deliverable approved successfully!", { type: "success" });
+            }
+            this.closeScopeDetailWizard();
+            await this.loadData();
+            if (this.state.selectedProjectId) {
+                await this.loadProjectScopes(this.state.selectedProjectId);
+            }
+        } catch (err) {
+            console.error("Failed to approve task:", err);
+            if (this.notification) this.notification.add("Failed to approve deliverable.", { type: "danger" });
+        }
+    }
+
+    async rejectTaskFromModal(scopeId) {
+        if (!scopeId) return;
+        this.closeScopeDetailWizard();
+        this.openRejectWizard(scopeId);
+    }
+
+    async onModalDocumentUpload(ev, scopeId) {
+        const file = ev.target.files && ev.target.files[0];
+        if (!file || !scopeId) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const res = await this.orm.call("project.manage.scope", "upload_document_to_scope_dashboard", [
+                    scopeId,
+                    e.target.result,
+                    file.name,
+                    "deliverable"
+                ]);
+                if (res && !res.error) {
+                    this.state.scopeDetailData = res;
+                    if (this.notification) {
+                        this.notification.add(`Document "${file.name}" uploaded successfully.`, { type: "success" });
+                    }
+                    await this.loadData();
+                }
+            } catch (err) {
+                console.error("Failed to upload document:", err);
+                if (this.notification) this.notification.add("Failed to upload document.", { type: "danger" });
+            }
+        };
+        reader.readAsDataURL(file);
+    }
+
+    getFileIcon(filename) {
+        if (!filename) return "fa-file-o";
+        const f = filename.toLowerCase();
+        if (f.endsWith(".pdf")) return "fa-file-pdf-o text-danger";
+        if (f.endsWith(".xlsx") || f.endsWith(".xls") || f.endsWith(".csv")) return "fa-file-excel-o text-success";
+        if (f.endsWith(".docx") || f.endsWith(".doc")) return "fa-file-word-o text-primary";
+        if (f.endsWith(".png") || f.endsWith(".jpg") || f.endsWith(".jpeg") || f.endsWith(".webp")) return "fa-file-image-o text-warning";
+        if (f.endsWith(".zip") || f.endsWith(".rar") || f.endsWith(".7z")) return "fa-file-archive-o text-secondary";
+        return "fa-file-text-o text-info";
     }
 
     viewAllApprovals() {
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "project.manage.scope",
-            name: "Approval Requests",
-            views: [[false, "list"], [false, "kanban"], [false, "form"]],
-            domain: [["approval_state", "in", ["pending_tl", "pending_pm", "pending_vp", "pending_ceo"]]],
-            context: { search_default_filter_waiting_my_approval: 1 },
-            target: "current",
-        });
+        this.setActiveTab('approvals');
     }
 
     viewMyTasks() {
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "project.manage.scope",
-            name: "My Assigned Tasks",
-            views: [[false, "list"], [false, "kanban"], [false, "form"]],
-            domain: [["is_my_task", "=", true]],
-            target: "current",
-        });
+        this.setActiveTab('scopes');
     }
 
     async refresh() {

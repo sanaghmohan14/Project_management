@@ -115,7 +115,9 @@
 
             <div class="pm-dashboard-content">
 
-                <!-- ==================== EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
+                <!-- ==================== 1. EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
+                <t t-if="this.isSectionVisible('home')">
+<!-- ==================== EXECUTIVE & MANAGEMENT OVERVIEW ==================== -->
                 <!-- Active Project Filter Banner -->
                 <t t-if="state.selectedProjectId and state.data.selected_project_name">
                         <div class="pm-active-filter-banner">
@@ -705,10 +707,11 @@
                         </div>
                     </section>
                 </t>
+                </t>
 
-                <!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
+<!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
                 <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
-                <t t-if="!state.data.user_info.is_consultant">
+                <t t-if="this.isSectionVisible('projects') and !state.data.user_info.is_consultant">
                     <section class="pm-table-section">
                     <div class="pm-table-header">
                         <div class="pm-table-title-box">
@@ -1195,9 +1198,9 @@
                                                                                         </span>
                                                                                         <div class="pm-row-hover-actions">
                                                                                             <button class="btn btn-sm pm-btn-row-view"
-                                                                                                    title="View backend details"
+                                                                                                    title="View details &amp; documents in dashboard"
                                                                                                     t-on-click="(ev) => { ev.stopPropagation(); this.openScope(item.id); }">
-                                                                                                <i class="fa fa-external-link"></i>
+                                                                                                <i class="fa fa-eye"></i>
                                                                                             </button>
                                                                                         </div>
                                                                                     </div>
@@ -1220,9 +1223,10 @@
                 </section>
                 </t>
 
-                <!-- ==================== URGENT: APPROVALS PENDING ACTION ==================== -->
-                <t t-if="state.data.approvals_summary.pending_my_approval_count > 0">
-                    <section class="pm-approval-section" id="pm-approval-section">
+                <!-- ==================== 3. APPROVALS PENDING ACTION ==================== -->
+                <t t-if="this.isSectionVisible('approvals')">
+                    <t t-if="state.data.approvals_summary and state.data.approvals_summary.pending_my_approval_count > 0">
+                        <section class="pm-approval-section" id="pm-approval-section">
                         <div class="pm-approval-header">
                             <div class="d-flex align-items-center gap-2">
                                 <span class="pm-pulse-badge">
@@ -1268,17 +1272,130 @@
                                         <button class="pm-btn pm-btn-reject" t-on-click="() => this.openRejectWizard(item.id)">
                                             <i class="fa fa-times me-1"></i> Reject / Re-Work
                                         </button>
-                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(item.id)" title="View Details">
-                                            <i class="fa fa-external-link"></i>
+                                        <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(item.id)" title="View Details &amp; Documents in Dashboard">
+                                            <i class="fa fa-eye"></i>
                                         </button>
                                     </div>
                                 </div>
                             </t>
                         </div>
                     </section>
+                    </t>
+                    <t t-elif="state.isMobile">
+                        <section class="pm-approval-section">
+                            <div class="pm-empty-approvals-card">
+                                <div class="pm-empty-icon-wrap">
+                                    <i class="fa fa-check-circle text-success"></i>
+                                </div>
+                                <h3 class="pm-empty-title">All Caught Up!</h3>
+                                <p class="pm-empty-desc">There are currently no deliverables waiting for your approval in the hierarchy.</p>
+                                <button class="pm-action-btn" t-on-click="() => this.setActiveTab('home')">
+                                    <i class="fa fa-home me-1"></i> Return to Dashboard
+                                </button>
+                            </div>
+                        </section>
+                    </t>
                 </t>
 
-                <!-- ==================== TASKS HUB: PENDING & COMPLETED DELIVERABLES ==================== -->
+
+                <!-- ==================== 4. SCOPE & TASKS HUB ==================== -->
+                <t t-if="this.isSectionVisible('scopes')">
+                    <!-- Mobile Scope Checklist & Project Selector (Mobile only) -->
+                    <t t-if="state.isMobile">
+                        <div class="pm-mobile-scope-header p-3 rounded-3 mb-3" style="background: var(--pm-bg-card); border: 1px solid var(--pm-border);">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <span class="fw-bold small text-muted"><i class="fa fa-folder-open text-primary me-1"></i> Project:</span>
+                                <select class="form-select form-select-sm"
+                                        t-on-change="onProjectSelectChange"
+                                        t-att-value="state.selectedProjectId || ''">
+                                    <option value="">-- Choose Project --</option>
+                                    <t t-foreach="state.data.all_projects_filter || []" t-as="p" t-key="p.id">
+                                        <option t-att-value="p.id" t-att-selected="state.selectedProjectId == p.id ? 'selected' : undefined">
+                                            <t t-esc="p.name"/> (<t t-esc="p.progress"/>% · <t t-esc="p.health"/>)
+                                        </option>
+                                    </t>
+                                </select>
+                            </div>
+
+                            <!-- Scope filter dropdown for mobile -->
+                            <t t-if="state.projectScopesData and state.projectScopesData.unique_scopes and state.projectScopesData.unique_scopes.length > 0">
+                                <div class="pm-scope-select-wrap mb-2">
+                                    <select class="pm-scope-filter-select form-select form-select-sm"
+                                            t-on-change="onScopeDropdownChange"
+                                            t-att-value="state.selectedScopeName || ''">
+                                        <option value="">📁 All Scopes (<t t-esc="state.projectScopesData.stats.total_items"/> tasks across <t t-esc="state.projectScopesData.unique_scopes.length"/> scopes)</option>
+                                        <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
+                                            <option t-att-value="sc.name" t-att-selected="state.selectedScopeName == sc.name ? 'selected' : undefined">
+                                                <t t-esc="sc.name"/> (<t t-esc="sc.done"/>/<t t-esc="sc.total"/> done)
+                                            </option>
+                                        </t>
+                                    </select>
+                                </div>
+                            </t>
+
+                            <!-- Mobile Quick Action Buttons -->
+                            <div class="d-flex gap-2 flex-wrap" t-if="state.selectedProjectId">
+                                <button class="btn btn-sm pm-btn-add-scope flex-grow-1"
+                                        t-on-click="(ev) => this.openScopeWizard(null, ev)">
+                                    <i class="fa fa-plus me-1"></i> Add Scope
+                                </button>
+                                <button class="btn btn-sm pm-btn-outline-primary"
+                                        t-on-click="(ev) => this.openImportWizardForProject(state.selectedProjectId, ev)"
+                                        title="Import Scopes">
+                                    <i class="fa fa-upload me-1"></i> Import
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Mobile Tasks List if project selected -->
+                        <t t-if="state.selectedProjectId and filteredScopes and filteredScopes.length > 0">
+                            <div class="pm-mobile-tasks-list mb-4">
+                                <t t-foreach="filteredScopes" t-as="item" t-key="item.id">
+                                    <div class="pm-mobile-task-card">
+                                        <div class="pm-mtask-header">
+                                            <span class="pm-task-code" t-if="item.code"><t t-esc="item.code"/></span>
+                                            <span class="pm-cat-tag" t-att-class="item.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-impl'">
+                                                <t t-esc="item.category"/>
+                                            </span>
+                                            <span class="pm-status-pill ms-auto" t-att-class="'pm-status-' + item.state">
+                                                <t t-esc="item.state_label || item.state"/>
+                                            </span>
+                                        </div>
+                                        <div class="pm-mtask-body" t-on-click="(ev) => this.openScope(item.id, ev)">
+                                            <h4 class="pm-mtask-title"><t t-esc="item.name"/></h4>
+                                            <div class="pm-mtask-scope-name text-muted">
+                                                <i class="fa fa-folder-o me-1"></i><t t-esc="item.scope_name"/>
+                                            </div>
+                                            <div class="pm-mtask-meta">
+                                                <div class="pm-mtask-meta-item" t-if="item.responsible">
+                                                    <i class="fa fa-user-circle me-1 text-primary"></i>
+                                                    <t t-esc="item.responsible"/>
+                                                </div>
+                                                <div class="pm-mtask-meta-item" t-if="item.end_date">
+                                                    <i class="fa fa-calendar-o me-1" t-att-class="item.is_overdue ? 'text-danger' : 'text-muted'"></i>
+                                                    <span t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''"><t t-esc="item.end_date"/></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="pm-mtask-actions">
+                                            <button type="button" class="btn btn-sm btn-outline-info flex-grow-1"
+                                                    t-on-click="(ev) => this.openScope(item.id, ev)">
+                                                <i class="fa fa-eye me-1"></i> Details &amp; Documents
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                    t-on-click="(ev) => this.openScopeWizard(item, ev)"
+                                                    title="Edit in wizard">
+                                                <i class="fa fa-pencil"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                        </t>
+                    </t>
+
+                    <!-- Standard Tasks Hub Section (Available on both desktop & mobile) -->
+                    <!-- ==================== TASKS HUB: PENDING & COMPLETED DELIVERABLES ==================== -->
                 <!-- Available for ALL users (Consultants, Team Leads, Project Managers, VPs, CEOs, Admins) -->
                 <section class="pm-tasks-hub-section" id="pm-tasks-hub">
                     <div class="pm-section-head-row">
@@ -1555,8 +1672,8 @@
                                                             <i class="fa fa-paper-plane me-1"></i> Submit
                                                         </button>
                                                     </t>
-                                                    <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(tsk.id)" title="View Details">
-                                                        View
+                                                    <button class="pm-btn pm-btn-view" t-on-click="() => this.openScope(tsk.id)" title="View Details &amp; Documents in Dashboard">
+                                                        <i class="fa fa-eye me-1"></i> View
                                                     </button>
                                                 </div>
                                             </td>
@@ -1569,7 +1686,165 @@
                 </section>
 
                 <!-- ======================================================== -->
-                <!-- DASHBOARD MODAL WIZARD: FILL / ADD / EDIT SCOPE TASK     -->
+                </t>
+
+
+                <!-- ==================== 5. CALENDAR VIEW (MOBILE SCHEDULE) ==================== -->
+                <t t-if="this.isSectionVisible('calendar')">
+                    <section class="pm-calendar-section">
+                        <!-- Calendar Toolbar -->
+                        <div class="pm-calendar-toolbar">
+                            <div class="pm-cal-time-filters">
+                                <button type="button" class="pm-cal-filter-btn"
+                                        t-att-class="state.calendarTimeFilter === 'today' ? 'active' : ''"
+                                        t-on-click="() => this.setCalendarTimeFilter('today')">
+                                    Today
+                                </button>
+                                <button type="button" class="pm-cal-filter-btn"
+                                        t-att-class="state.calendarTimeFilter === 'tomorrow' ? 'active' : ''"
+                                        t-on-click="() => this.setCalendarTimeFilter('tomorrow')">
+                                    Tomorrow
+                                </button>
+                                <button type="button" class="pm-cal-filter-btn"
+                                        t-att-class="state.calendarTimeFilter === 'week' ? 'active' : ''"
+                                        t-on-click="() => this.setCalendarTimeFilter('week')">
+                                    Week
+                                </button>
+                                <button type="button" class="pm-cal-filter-btn"
+                                        t-att-class="state.calendarTimeFilter === 'month' ? 'active' : ''"
+                                        t-on-click="() => this.setCalendarTimeFilter('month')">
+                                    Month
+                                </button>
+                                <button type="button" class="pm-cal-filter-btn"
+                                        t-att-class="state.calendarTimeFilter === 'all' ? 'active' : ''"
+                                        t-on-click="() => this.setCalendarTimeFilter('all')">
+                                    All
+                                </button>
+                            </div>
+
+                            <div class="pm-cal-nav-box">
+                                <button type="button" class="pm-cal-nav-btn" t-on-click="calendarPrev" title="Previous">
+                                    <i class="fa fa-chevron-left"></i>
+                                </button>
+                                <h3 class="pm-cal-period-heading" t-esc="this.calendarPeriodTitle"/>
+                                <button type="button" class="pm-cal-nav-btn" t-on-click="calendarNext" title="Next">
+                                    <i class="fa fa-chevron-right"></i>
+                                </button>
+                                <button type="button" class="pm-cal-today-btn" t-on-click="calendarToday">
+                                    Today
+                                </button>
+                            </div>
+
+                            <div class="pm-cal-right-controls">
+                                <div class="pm-cal-btn-group">
+                                    <button type="button" class="pm-cal-mode-btn"
+                                            t-att-class="state.calendarViewMode === 'month' ? 'active' : ''"
+                                            t-on-click="() => this.setCalendarViewMode('month')">
+                                        <i class="fa fa-calendar"></i> Month
+                                    </button>
+                                    <button type="button" class="pm-cal-mode-btn"
+                                            t-att-class="state.calendarViewMode === 'agenda' ? 'active' : ''"
+                                            t-on-click="() => this.setCalendarViewMode('agenda')">
+                                        <i class="fa fa-list"></i> Agenda
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Month Grid -->
+                        <t t-if="state.calendarViewMode === 'month'">
+                            <div class="pm-cal-month-container">
+                                <div class="pm-cal-grid-header">
+                                    <div class="pm-cal-header-cell">Mon</div>
+                                    <div class="pm-cal-header-cell">Tue</div>
+                                    <div class="pm-cal-header-cell">Wed</div>
+                                    <div class="pm-cal-header-cell">Thu</div>
+                                    <div class="pm-cal-header-cell">Fri</div>
+                                    <div class="pm-cal-header-cell pm-weekend">Sat</div>
+                                    <div class="pm-cal-header-cell pm-weekend">Sun</div>
+                                </div>
+                                <div class="pm-cal-grid-body">
+                                    <t t-foreach="this.calendarMonthGrid" t-as="cell" t-key="cell.key">
+                                        <div class="pm-cal-cell"
+                                             t-att-class="(cell.isCurrentMonth ? '' : 'pm-other-month') + (cell.isToday ? ' pm-today' : '')">
+                                            <div class="pm-cal-cell-header">
+                                                <span class="pm-cal-day-num"><t t-esc="cell.dayNum"/></span>
+                                                <span class="pm-cal-today-badge" t-if="cell.isToday">Today</span>
+                                            </div>
+                                            <div class="pm-cal-cell-events">
+                                                <t t-foreach="cell.visibleEvents" t-as="evt" t-key="evt.id">
+                                                    <div class="pm-cal-event-pill"
+                                                         t-att-class="'pm-evt-' + evt.status + (evt.is_overdue ? ' pm-evt-overdue' : '')"
+                                                         t-on-click="(ev) => this.openCalendarItem(evt, ev)"
+                                                         t-att-title="evt.title + ' (' + evt.project_name + ')'">
+                                                        <span class="pm-evt-code" t-if="evt.code"><t t-esc="evt.code"/></span>
+                                                        <span class="pm-evt-title"><t t-esc="evt.title"/></span>
+                                                    </div>
+                                                </t>
+                                                <div class="pm-cal-more-chip" t-if="cell.moreCount > 0">
+                                                    +<t t-esc="cell.moreCount"/> more
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </t>
+
+                        <!-- Agenda View -->
+                        <t t-else="">
+                            <div class="pm-cal-agenda-container">
+                                <t t-if="!this.calendarAgendaDays or this.calendarAgendaDays.length === 0">
+                                    <div class="pm-empty-agenda text-center py-5">
+                                        <i class="fa fa-calendar-check-o text-muted mb-2" style="font-size: 2.5rem; opacity: 0.5;"></i>
+                                        <h4>No Scheduled Tasks</h4>
+                                        <p class="text-muted">No deliverables match the selected date filter.</p>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <div class="pm-agenda-day-group" t-foreach="this.calendarAgendaDays" t-as="grp" t-key="grp.dateIso">
+                                        <div class="pm-agenda-day-header" t-att-class="grp.isToday ? 'pm-agenda-today' : ''">
+                                            <i class="fa fa-calendar-day me-2"></i>
+                                            <span t-esc="grp.label"/>
+                                            <span class="badge rounded-pill bg-primary ms-2"><t t-esc="grp.events.length"/> tasks</span>
+                                        </div>
+                                        <div class="pm-agenda-cards-list">
+                                            <div class="pm-agenda-task-card" t-foreach="grp.events" t-as="evt" t-key="evt.id"
+                                                 t-on-click="(ev) => this.openCalendarItem(evt, ev)">
+                                                <div class="pm-agenda-card-left">
+                                                    <span class="pm-scope-badge" t-if="evt.code"><t t-esc="evt.code"/></span>
+                                                    <span class="pm-cat-tag" t-att-class="evt.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-impl'">
+                                                        <t t-esc="evt.category"/>
+                                                    </span>
+                                                </div>
+                                                <div class="pm-agenda-card-mid">
+                                                    <div class="pm-agenda-task-title"><t t-esc="evt.title"/></div>
+                                                    <div class="pm-agenda-task-meta">
+                                                        <span><i class="fa fa-folder-o me-1 text-primary"></i><t t-esc="evt.project_name"/></span>
+                                                        <span class="mx-2">·</span>
+                                                        <span t-if="evt.responsible_name"><i class="fa fa-user-circle me-1 text-info"></i><t t-esc="evt.responsible_name"/></span>
+                                                    </div>
+                                                </div>
+                                                <div class="pm-agenda-card-right">
+                                                    <span class="pm-status-pill" t-att-class="'pm-status-' + evt.status">
+                                                        <t t-esc="evt.status_label"/>
+                                                    </span>
+                                                    <button type="button" class="btn btn-sm btn-outline-info ms-2"
+                                                            t-on-click="(ev) => this.openCalendarItem(evt, ev)"
+                                                            title="View Details &amp; Documents">
+                                                        <i class="fa fa-eye"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                        </t>
+                    </section>
+                </t>
+
+<!-- DASHBOARD MODAL WIZARD: FILL / ADD / EDIT SCOPE TASK     -->
                 <!-- ======================================================== -->
                 <t t-if="state.scopeWizardOpen">
                     <div class="pm-modal-backdrop" t-on-click="closeScopeWizard">
@@ -1589,9 +1864,9 @@
                                     <div class="d-flex align-items-center gap-2">
                                         <t t-if="state.wizardData.id">
                                             <button type="button" class="btn btn-sm btn-outline-primary pm-btn-modal-view-details"
-                                                    title="View full scope details in Odoo backend form"
+                                                    title="View details, documents and proof in dashboard modal"
                                                     t-on-click="() => this.openScope(state.wizardData.id)">
-                                                <i class="fa fa-external-link me-1"></i> View Details
+                                                <i class="fa fa-eye me-1"></i> View Details &amp; Documents
                                             </button>
                                         </t>
                                         <button type="button" class="btn-close pm-modal-close" t-on-click="closeScopeWizard" aria-label="Close"></button>
@@ -1826,9 +2101,9 @@
                                     <div>
                                         <t t-if="state.wizardData.id">
                                             <button type="button" class="btn btn-sm btn-outline-info pm-btn-footer-view-details"
-                                                    title="Open full scope details in Odoo backend form"
+                                                    title="View details, documents and proof in dashboard modal"
                                                     t-on-click="() => this.openScope(state.wizardData.id)">
-                                                <i class="fa fa-external-link me-1"></i> View Backend Details
+                                                <i class="fa fa-eye me-1"></i> View Details &amp; Documents
                                             </button>
                                         </t>
                                     </div>
@@ -2322,7 +2597,265 @@
                         </div>
                     </div>
                 </t>
+
+                <!-- DASHBOARD MODAL WIZARD: VIEW TASK DETAILS & UPLOADED DOCUMENTS -->
+                <t t-if="state.scopeDetailWizardOpen">
+                    <div class="pm-modal-backdrop" t-on-click="closeScopeDetailWizard">
+                        <div class="pm-modal-dialog pm-modal-dialog-lg pm-modal-lg pm-modal-detail-wizard" t-on-click="(ev) => ev.stopPropagation()">
+                            <div class="pm-modal-content">
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0" style="min-width: 0;">
+                                        <span class="badge bg-secondary flex-shrink-0" t-esc="state.scopeDetailData and state.scopeDetailData.code"/>
+                                        <h5 class="fw-bold m-0 text-truncate" style="color: var(--pm-text-heading);" t-att-title="state.scopeDetailData and state.scopeDetailData.name" t-esc="state.scopeDetailData and state.scopeDetailData.name"/>
+                                        <span class="badge flex-shrink-0 ms-1"
+                                              t-att-class="'pm-badge-' + (state.scopeDetailData and state.scopeDetailData.approval_state)"
+                                              t-esc="state.scopeDetailData and state.scopeDetailData.approval_label"/>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close flex-shrink-0" t-on-click="closeScopeDetailWizard" aria-label="Close"></button>
+                                </div>
+
+                                <div class="pm-modal-body">
+                                    <t t-if="state.scopeDetailLoading">
+                                        <div class="text-center py-5">
+                                            <i class="fa fa-spinner fa-spin text-primary fa-2x mb-2"></i>
+                                            <div class="text-muted small">Loading task &amp; document details...</div>
+                                        </div>
+                                    </t>
+                                    <t t-elif="state.scopeDetailData">
+                                        <!-- Overview Section (Two Clean Columns) -->
+                                        <div class="row g-3 mb-4">
+                                            <div class="col-md-6">
+                                                <div class="p-3 rounded h-100" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                                    <div class="text-muted small mb-1">Project &amp; Client</div>
+                                                    <div class="fw-bold text-truncate" style="color: var(--pm-text-heading);">
+                                                        <i class="fa fa-folder-open text-primary me-1"></i>
+                                                        <t t-esc="state.scopeDetailData.project_name"/>
+                                                        <span class="text-muted fw-normal" t-if="state.scopeDetailData.client_name"> · <t t-esc="state.scopeDetailData.client_name"/></span>
+                                                    </div>
+
+                                                    <div class="text-muted small mt-3 mb-1">Scope Area</div>
+                                                    <div class="fw-semibold small" style="color: var(--pm-text-body);">
+                                                        <t t-esc="state.scopeDetailData.scope_name"/>
+                                                    </div>
+
+                                                    <div class="text-muted small mt-3 mb-1">Category &amp; Type</div>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="badge bg-light text-dark border">
+                                                            <t t-esc="state.scopeDetailData.category"/>
+                                                        </span>
+                                                        <span class="small text-muted" t-if="state.scopeDetailData.item_type">
+                                                            <t t-esc="state.scopeDetailData.item_type"/>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <div class="p-3 rounded h-100" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                                    <div class="text-muted small mb-1">Assigned Consultant(s)</div>
+                                                    <div class="fw-bold" style="color: var(--pm-text-heading);">
+                                                        <i class="fa fa-user text-info me-1"></i>
+                                                        <t t-esc="state.scopeDetailData.responsible"/>
+                                                    </div>
+
+                                                    <div class="text-muted small mt-3 mb-1">Submission Details</div>
+                                                    <div class="small" style="color: var(--pm-text-body);">
+                                                        <t t-if="state.scopeDetailData.submitted_by_name">
+                                                            Submitted by <strong><t t-esc="state.scopeDetailData.submitted_by_name"/></strong>
+                                                            <span class="text-muted" t-if="state.scopeDetailData.submission_date_str"> on <t t-esc="state.scopeDetailData.submission_date_str"/></span>
+                                                        </t>
+                                                        <t t-else="">
+                                                            <span class="text-muted">Not submitted for review yet</span>
+                                                        </t>
+                                                    </div>
+
+                                                    <div class="text-muted small mt-3 mb-1">Timeline &amp; Final Approver</div>
+                                                    <div class="small d-flex align-items-center gap-2">
+                                                        <span t-att-class="state.scopeDetailData.is_overdue ? 'text-danger fw-bold' : 'text-muted'">
+                                                            <t t-esc="state.scopeDetailData.start_date || 'Not set'"/> → <t t-esc="state.scopeDetailData.end_date || 'Not set'"/>
+                                                        </span>
+                                                        <span class="badge bg-info-subtle text-info border">
+                                                            Approver: <t t-esc="state.scopeDetailData.approval_authority_label"/>
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Evidence / Submission Notes -->
+                                        <div class="mb-4" t-if="state.scopeDetailData.submission_notes">
+                                            <div class="text-muted small fw-bold mb-1">EVIDENCE / PROOF NOTES</div>
+                                            <div class="p-3 rounded" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border); color: var(--pm-text-body);">
+                                                <t t-esc="state.scopeDetailData.submission_notes"/>
+                                            </div>
+                                        </div>
+
+                                        <!-- Uploaded Deliverables & Documents -->
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <div class="fw-bold small" style="color: var(--pm-text-heading);">
+                                                    UPLOADED DOCUMENTS &amp; DELIVERABLES (<t t-esc="state.scopeDetailData.doc_count || 0"/>)
+                                                    <div class="text-muted small fw-normal">Files uploaded as proof of deliverable with uploader and upload timestamp</div>
+                                                </div>
+                                                <div>
+                                                    <label class="btn btn-sm btn-outline-primary px-3 py-1 rounded-pill cursor-pointer m-0">
+                                                        <i class="fa fa-upload me-1"></i> Upload File
+                                                        <input type="file" class="d-none" t-on-change="(ev) => this.onModalDocumentUpload(ev, state.scopeDetailData.id)"/>
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <t t-if="state.scopeDetailData.documents and state.scopeDetailData.documents.length > 0">
+                                                <div class="table-responsive rounded border" style="border-color: var(--pm-border) !important;">
+                                                    <table class="table table-sm table-hover mb-0" style="color: var(--pm-text-body);">
+                                                        <thead style="background: var(--pm-tile-bg, #f1f5f9); font-size: 0.75rem;">
+                                                            <tr>
+                                                                <th class="ps-3">DOCUMENT NAME</th>
+                                                                <th>SIZE</th>
+                                                                <th>UPLOADED BY</th>
+                                                                <th>UPLOAD DATE &amp; TIME</th>
+                                                                <th class="text-end pe-3">ACTION</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody style="font-size: 0.82rem;">
+                                                            <t t-foreach="state.scopeDetailData.documents" t-as="doc" t-key="doc.id">
+                                                                <tr>
+                                                                    <td class="ps-3">
+                                                                        <div class="d-flex align-items-center gap-2">
+                                                                            <i class="fa fa-2x" t-att-class="this.getFileIcon(doc.filename)"></i>
+                                                                            <div>
+                                                                                <div class="fw-semibold text-truncate" style="max-width: 380px;" t-att-title="doc.filename" t-esc="doc.filename"/>
+                                                                                <span class="badge bg-secondary-subtle text-secondary small" t-esc="doc.doc_type_label"/>
+                                                                            </div>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td class="text-muted" t-esc="doc.file_size_display"/>
+                                                                    <td>
+                                                                        <span class="fw-semibold">
+                                                                            <i class="fa fa-user-circle me-1 text-muted"></i>
+                                                                            <strong t-esc="doc.uploaded_by_name"/>
+                                                                        </span>
+                                                                    </td>
+                                                                    <td class="text-muted">
+                                                                        <i class="fa fa-clock-o me-1"></i>
+                                                                        <t t-esc="doc.upload_date_str"/>
+                                                                    </td>
+                                                                    <td class="text-end pe-3">
+                                                                        <a t-att-href="doc.download_url"
+                                                                           target="_blank"
+                                                                           class="btn btn-sm btn-outline-info py-1 px-3 rounded-pill"
+                                                                           title="Download document"
+                                                                           style="font-size: 0.75rem;">
+                                                                            <i class="fa fa-download me-1"></i> Download
+                                                                        </a>
+                                                                    </td>
+                                                                </tr>
+                                                            </t>
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </t>
+                                            <t t-else="">
+                                                <div class="text-center py-4 rounded bg-light" style="background: var(--pm-tile-bg, #f8fafc) !important; border: 1px dashed var(--pm-border);">
+                                                    <i class="fa fa-file-text-o text-muted mb-2" style="font-size: 1.8rem; opacity: 0.4;"></i>
+                                                    <div class="text-muted small">No documents or proofs uploaded yet for this task.</div>
+                                                    <div class="text-muted small mt-1" style="font-size: 0.74rem;">Click "Upload File" above to attach deliverable files directly from here.</div>
+                                                </div>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Modal Footer: Approve, Reject, Close -->
+                                <div class="pm-modal-footer d-flex justify-content-between align-items-center">
+                                    <div class="text-muted small d-flex align-items-center" style="font-size: 0.82rem; color: var(--pm-text-muted, #94a3b8);">
+                                        <i class="fa fa-shield text-primary me-1"></i> Managed directly in dashboard
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <t t-if="state.scopeDetailData and state.scopeDetailData.can_approve and ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'].includes(state.scopeDetailData.approval_state)">
+                                            <button type="button" class="btn btn-sm btn-success fw-semibold px-3 py-1 rounded-pill"
+                                                    t-on-click="() => this.approveTaskFromModal(state.scopeDetailData.id)">
+                                                <i class="fa fa-check me-1"></i> Approve
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger fw-semibold px-3 py-1 rounded-pill"
+                                                    t-on-click="() => this.rejectTaskFromModal(state.scopeDetailData.id)">
+                                                <i class="fa fa-times me-1"></i> Reject / Re-Work
+                                            </button>
+                                        </t>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary pm-btn-modal-cancel pm-modal-btn-close px-4 py-1 rounded-pill fw-semibold"
+                                                t-on-click="closeScopeDetailWizard">
+                                            Close
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
             </div>
+
+            <!-- Mobile 5-Button Bottom Navigation Bar (Strictly for mobile view) -->
+            <nav class="pm-mobile-nav-bar">
+                <!-- 1. Home -->
+                <button type="button" class="pm-mobile-nav-item"
+                        t-att-class="this.isTabActive('home') ? 'active' : ''"
+                        t-on-click="() => this.setActiveTab('home')">
+                    <div class="pm-mobile-nav-icon-wrap">
+                        <i class="fa fa-home"></i>
+                    </div>
+                    <span class="pm-mobile-nav-label">Home</span>
+                </button>
+
+                <!-- 2. Projects -->
+                <button type="button" class="pm-mobile-nav-item"
+                        t-att-class="this.isTabActive('projects') ? 'active' : ''"
+                        t-on-click="() => this.setActiveTab('projects')">
+                    <div class="pm-mobile-nav-icon-wrap">
+                        <i class="fa fa-folder-open"></i>
+                        <span class="pm-mobile-nav-badge" t-if="state.data.projects and state.data.projects.length">
+                            <t t-esc="state.data.projects.length"/>
+                        </span>
+                    </div>
+                    <span class="pm-mobile-nav-label">Projects</span>
+                </button>
+
+                <!-- 3. Approvals -->
+                <button type="button" class="pm-mobile-nav-item"
+                        t-att-class="this.isTabActive('approvals') ? 'active' : ''"
+                        t-on-click="() => this.setActiveTab('approvals')">
+                    <div class="pm-mobile-nav-icon-wrap">
+                        <i class="fa fa-check-circle"></i>
+                        <span class="pm-mobile-nav-badge pm-badge-red" t-if="state.data.approvals_summary and state.data.approvals_summary.pending_my_approval_count > 0">
+                            <t t-esc="state.data.approvals_summary.pending_my_approval_count"/>
+                        </span>
+                    </div>
+                    <span class="pm-mobile-nav-label">Approvals</span>
+                </button>
+
+                <!-- 4. Scope & Tasks -->
+                <button type="button" class="pm-mobile-nav-item"
+                        t-att-class="this.isTabActive('scopes') ? 'active' : ''"
+                        t-on-click="() => this.setActiveTab('scopes')">
+                    <div class="pm-mobile-nav-icon-wrap">
+                        <i class="fa fa-tasks"></i>
+                        <span class="pm-mobile-nav-badge" t-if="state.data.tasks_hub and state.data.tasks_hub.pending_count > 0">
+                            <t t-esc="state.data.tasks_hub.pending_count"/>
+                        </span>
+                    </div>
+                    <span class="pm-mobile-nav-label">Scope &amp; Tasks</span>
+                </button>
+
+                <!-- 5. Calendar -->
+                <button type="button" class="pm-mobile-nav-item"
+                        t-att-class="this.isTabActive('calendar') ? 'active' : ''"
+                        t-on-click="() => this.setActiveTab('calendar')">
+                    <div class="pm-mobile-nav-icon-wrap">
+                        <i class="fa fa-calendar-alt"></i>
+                    </div>
+                    <span class="pm-mobile-nav-label">Calendar</span>
+                </button>
+            </nav>
+
         </div>
     </t>
 </templates>

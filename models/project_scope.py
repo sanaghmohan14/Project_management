@@ -200,6 +200,10 @@ class ProjectManageScope(models.Model):
                 rec.can_user_approve = False
                 continue
 
+            if is_admin:
+                rec.can_user_approve = True
+                continue
+
             proj = rec.project_id
             is_proj_pm = bool(
                 proj and (
@@ -583,6 +587,18 @@ class ProjectManageScope(models.Model):
                 if default_proj:
                     vals['project_id'] = default_proj
 
+            # Ensure valid non-duplicate scope_no
+            proj_id = vals.get('project_id') or default_proj
+            scope_val = (vals.get('scope') or '').strip()
+            if (vals.get('scope_no') is None or vals.get('scope_no') == 0) and scope_val:
+                is_init = any(k in scope_val.lower() for k in ('initiation', 'governance'))
+                if not is_init and proj_id:
+                    proj = self.env['project.manage'].browse(proj_id)
+                    if proj.exists():
+                        vals['scope_no'] = proj._assign_next_scope_no(scope_val)
+                        if not vals.get('code'):
+                            vals['code'] = f"S{vals['scope_no']:02d}"
+
             if not vals.get('approval_authority'):
                 auth = get_default_approval_authority(
                     item_id=vals.get('item_id'),
@@ -634,6 +650,17 @@ class ProjectManageScope(models.Model):
                 acc_emp = self.env['hr.employee'].sudo().search([('name', 'ilike', str(acc_txt).strip())], limit=1)
             if acc_emp:
                 vals['accountable_id'] = acc_emp.id
+
+        if 'scope' in vals and 'scope_no' not in vals:
+            raw_scope = (vals.get('scope') or '').strip()
+            if raw_scope:
+                for rec in self:
+                    if rec.project_id:
+                        is_init = any(k in raw_scope.lower() for k in ('initiation', 'governance'))
+                        if not is_init:
+                            vals['scope_no'] = rec.project_id._assign_next_scope_no(raw_scope)
+                            vals['code'] = f"S{vals['scope_no']:02d}"
+                            break
 
         user = self.env.user
         is_privileged = bool(
@@ -947,6 +974,130 @@ class ProjectManageScope(models.Model):
     def action_cancel(self):
         for rec in self:
             rec.state = 'cancelled'
+
+    @api.model
+    def get_scope_details_dashboard(self, scope_id):
+        """Return full details, approval status, and uploaded documents with uploader details for in-dashboard view."""
+        scope = self.browse(int(scope_id))
+        if not scope.exists():
+            return {'error': _("Task not found.")}
+
+        # Sync attachments to documents
+        scope._sync_attachments_to_documents()
+
+        user = self.env.user
+        today = fields.Date.context_today(self)
+
+        docs = []
+        existing_filenames = set()
+        for doc in scope.document_ids:
+            fname = doc.filename or doc.name or 'document'
+            existing_filenames.add(fname)
+            uploader_name = doc.uploaded_by.name if doc.uploaded_by else (doc.create_uid.name if doc.create_uid else 'System')
+            upload_dt = doc.upload_date or doc.create_date
+            upload_dt_str = upload_dt.strftime('%d %b %Y, %I:%M %p') if upload_dt else ''
+            docs.append({
+                'id': doc.id,
+                'name': doc.name or fname,
+                'filename': fname,
+                'file_size_display': doc.file_size_display or '0 B',
+                'doc_type': doc.doc_type or 'deliverable',
+                'doc_type_label': dict(doc._fields['doc_type'].selection).get(doc.doc_type, 'Deliverable'),
+                'uploaded_by_name': uploader_name,
+                'upload_date_str': upload_dt_str,
+                'notes': doc.notes or '',
+                'download_url': f"/web/content?model=project.manage.scope.document&id={doc.id}&field=file&download=true&filename={fname}",
+            })
+
+        for att in (scope.attachment_ids | self.env['ir.attachment'].sudo().search([('res_model', '=', 'project.manage.scope'), ('res_id', '=', scope.id)])):
+            fname = att.name or 'attachment'
+            if fname not in existing_filenames:
+                existing_filenames.add(fname)
+                uploader_name = att.create_uid.name if att.create_uid else 'System'
+                upload_dt = att.create_date
+                upload_dt_str = upload_dt.strftime('%d %b %Y, %I:%M %p') if upload_dt else ''
+                f_size_kb = (att.file_size or 0) / 1024.0
+                size_str = f"{f_size_kb:.1f} KB" if f_size_kb < 1024 else f"{(f_size_kb / 1024.0):.1f} MB"
+                docs.append({
+                    'id': att.id,
+                    'name': fname,
+                    'filename': fname,
+                    'file_size_display': size_str,
+                    'doc_type': 'deliverable',
+                    'doc_type_label': 'Attachment',
+                    'uploaded_by_name': uploader_name,
+                    'upload_date_str': upload_dt_str,
+                    'notes': '',
+                    'download_url': f"/web/content/{att.id}?download=true",
+                })
+
+        resp_names = ', '.join(scope.responsible_ids.sudo().mapped('name')) if scope.responsible_ids else (scope.responsible_id.sudo().name if scope.responsible_id else (scope.responsible or 'Unassigned'))
+        is_late = bool(scope.end_date and today > scope.end_date and scope.state != 'done')
+
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
+        can_approve = bool(scope.can_user_approve or is_admin)
+
+        return {
+            'id': scope.id,
+            'name': scope.name or scope.item_id or 'Untitled Task',
+            'code': scope.code or (f"S{scope.scope_no:02d}" if scope.scope_no is not None else '') or scope.item_id or '',
+            'scope_name': scope.scope or f"Scope {scope.scope_no or 0}",
+            'category': scope.category or 'Documentation',
+            'item_type': scope.item_type or 'One-time',
+            'project_id': scope.project_id.id if scope.project_id else False,
+            'project_name': scope.project_id.name if scope.project_id else '',
+            'client_name': scope.project_id.partner_id.name if (scope.project_id and scope.project_id.partner_id) else 'No Client',
+            'team_name': scope.project_id.team_id.name if (scope.project_id and scope.project_id.team_id) else (f"Team {scope.project_id.team_lead_id.name}" if (scope.project_id and scope.project_id.team_lead_id) else ''),
+            'responsible': resp_names,
+            'start_date': scope.start_date.strftime('%d %b %Y') if scope.start_date else '',
+            'end_date': scope.end_date.strftime('%d %b %Y') if scope.end_date else '',
+            'is_overdue': is_late,
+            'state': scope.state or 'todo',
+            'state_label': dict(scope._fields['state'].selection).get(scope.state, 'To Do'),
+            'approval_state': scope.approval_state or 'draft',
+            'approval_label': dict(scope._fields['approval_state'].selection).get(scope.approval_state, 'Draft'),
+            'submitted_by_name': scope.submitted_by_id.name if scope.submitted_by_id else '',
+            'submission_date_str': scope.submitted_date.strftime('%d %b %Y, %I:%M %p') if scope.submitted_date else '',
+            'submission_notes': scope.evidence_proof or scope.notes or '',
+            'approval_authority': scope.approval_authority or 'tl',
+            'approval_authority_label': dict(scope._fields['approval_authority'].selection).get(scope.approval_authority, 'Team Lead'),
+            'can_approve': can_approve,
+            'documents': docs,
+            'doc_count': len(docs),
+        }
+
+    @api.model
+    def upload_document_to_scope_dashboard(self, scope_id, file_data, filename, doc_type='deliverable', notes=''):
+        """Upload a file directly to project.manage.scope.document and sync to ir.attachment."""
+        scope = self.browse(int(scope_id))
+        if not scope.exists():
+            return {'error': _("Task not found.")}
+
+        clean_file = file_data
+        if isinstance(clean_file, str) and ',' in clean_file and ';base64' in clean_file.split(',')[0]:
+            clean_file = clean_file.split(',', 1)[1]
+
+        doc = self.env['project.manage.scope.document'].sudo().create({
+            'scope_id': scope.id,
+            'name': filename,
+            'file': clean_file,
+            'filename': filename,
+            'doc_type': doc_type or 'deliverable',
+            'notes': notes or '',
+            'uploaded_by': self.env.user.id,
+            'upload_date': fields.Datetime.now(),
+        })
+        return self.get_scope_details_dashboard(scope.id)
+
+    @api.model
+    def upload_document_to_scope(self, scope_id, file_data, filename, doc_type='deliverable', notes=''):
+        return self.upload_document_to_scope_dashboard(scope_id, file_data, filename, doc_type, notes)
 
 
 class ProjectManageScopeDocument(models.Model):

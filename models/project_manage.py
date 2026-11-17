@@ -1,8 +1,10 @@
 import base64
 import datetime
+import re
 import uuid
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError, AccessError
+from .scope_master_data import get_default_approval_authority
 
 
 class ProjectManageTag(models.Model):
@@ -444,11 +446,141 @@ class ProjectManage(models.Model):
             }
         }
 
+    def _heal_project_scope_numbers(self):
+        """Ensure no duplicate scope numbers exist and non-governance scopes are never 0."""
+        for project in self:
+            scopes = self.env['project.manage.scope'].sudo().search(
+                [('project_id', '=', project.id)],
+                order='scope_no asc, id asc'
+            )
+            if not scopes:
+                continue
+
+            # 1. Identify non-governance scopes that erroneously have scope_no == 0 or False
+            invalid_zeros = scopes.filtered(
+                lambda s: (s.scope_no == 0 or not s.scope_no) and s.scope and not any(
+                    k in s.scope.lower() for k in ('initiation', 'governance')
+                )
+            )
+            if invalid_zeros:
+                valid_scopes = scopes - invalid_zeros
+                curr_max = max([s.scope_no for s in valid_scopes if s.scope_no is not None] or [0])
+                reassigned = {}
+                for sc in invalid_zeros:
+                    clean_name = re.sub(r'^(?:Scope|S)\s*0\s*[-:]?\s*', '', (sc.scope or '').strip(), flags=re.IGNORECASE).strip()
+                    if not clean_name:
+                        clean_name = sc.scope or 'Custom Scope'
+                    clean_key = clean_name.lower()
+                    if clean_key not in reassigned:
+                        curr_max += 1
+                        reassigned[clean_key] = (curr_max, clean_name)
+                    new_no, target_name = reassigned[clean_key]
+                    new_code = f"S{new_no:02d}"
+                    vals_to_write = {
+                        'scope': target_name,
+                        'scope_no': new_no,
+                        'code': new_code,
+                    }
+                    if sc.item_id and sc.item_id.upper().startswith('S00-'):
+                        vals_to_write['item_id'] = f"{new_code}-{sc.item_id[4:]}"
+                    elif not sc.item_id:
+                        cat_letter = 'I' if 'imp' in (sc.category or '').lower() else 'D'
+                        vals_to_write['item_id'] = f"{new_code}-{cat_letter}-{sc.item_no or 1:03d}"
+                    sc.sudo().write(vals_to_write)
+
+            # 2. Check for duplicate scope_no assigned to different functional scopes (excluding Scope 0 governance)
+            refreshed_scopes = self.env['project.manage.scope'].sudo().search(
+                [('project_id', '=', project.id)],
+                order='scope_no asc, id asc'
+            )
+            scope_no_to_name = {}
+            max_num = max([s.scope_no for s in refreshed_scopes if s.scope_no is not None] or [0])
+            for sc in refreshed_scopes:
+                if sc.scope_no is None:
+                    continue
+                clean_name = (sc.scope or '').strip().lower()
+                # Skip checking Scope 0 if it's governance
+                if sc.scope_no == 0 and any(k in clean_name for k in ('initiation', 'governance')):
+                    scope_no_to_name[0] = clean_name
+                    continue
+                if sc.scope_no in scope_no_to_name and scope_no_to_name[sc.scope_no] != clean_name:
+                    max_num += 1
+                    new_no = max_num
+                    new_code = f"S{new_no:02d}"
+                    conflict_recs = refreshed_scopes.filtered(
+                        lambda s: (s.scope or '').strip().lower() == clean_name and s.scope_no == sc.scope_no
+                    )
+                    for cr in conflict_recs:
+                        c_vals = {'scope_no': new_no, 'code': new_code}
+                        if cr.item_id and cr.item_id.upper().startswith(f"S{cr.scope_no:02d}-"):
+                            c_vals['item_id'] = f"{new_code}-{cr.item_id[4:]}"
+                        cr.sudo().write(c_vals)
+                    scope_no_to_name[new_no] = clean_name
+                else:
+                    scope_no_to_name[sc.scope_no] = clean_name
+
+    def _assign_next_scope_no(self, scope_name, preferred_no=None):
+        """Allocate next sequential scope number for a new scope in this project,
+        ensuring NO duplicates. If scope already exists in this project, reuses its scope_no.
+        """
+        self.ensure_one()
+        clean_name = (scope_name or '').strip()
+        if not clean_name:
+            clean_name = 'General Scope'
+
+        cand_no = preferred_no
+        match = re.match(r'^(?:Scope|S)?\s*(\d+)\s*[-:]?\s*(.*)$', clean_name, re.IGNORECASE)
+        if match:
+            num_part = int(match.group(1))
+            title_part = match.group(2).strip()
+            if cand_no is None:
+                cand_no = num_part
+            if title_part and not any(k in clean_name.lower() for k in ('initiation', 'governance')):
+                clean_name = title_part
+
+        # 1. If this exact scope already exists in project, reuse its scope_no
+        existing = self.env['project.manage.scope'].sudo().search([
+            ('project_id', '=', self.id),
+            ('scope', '=ilike', clean_name)
+        ], limit=1)
+        if existing and existing.scope_no is not None:
+            name_lower = clean_name.lower()
+            is_init = any(k in name_lower for k in ('initiation', 'governance'))
+            if not (existing.scope_no == 0 and not is_init):
+                return existing.scope_no
+
+        # 2. Check if clean_name represents standard Scope 0 Initiation & Governance
+        name_lower = clean_name.lower()
+        if any(k in name_lower for k in ('initiation', 'governance')):
+            return 0
+
+        # 3. Check existing scope numbers currently in this project
+        project_scopes = self.env['project.manage.scope'].sudo().search([
+            ('project_id', '=', self.id)
+        ])
+        used_numbers = set()
+        for s in project_scopes:
+            if s.scope_no is not None:
+                s_lower = (s.scope or '').lower()
+                if s.scope_no == 0 and not any(k in s_lower for k in ('initiation', 'governance')):
+                    continue
+                used_numbers.add(s.scope_no)
+
+        # 4. If preferred or parsed cand_no is valid and unused (> 0, not in used_numbers)
+        if cand_no is not None and cand_no > 0 and cand_no not in used_numbers:
+            return cand_no
+
+        # 5. Otherwise allocate next sequential number (max + 1, minimum 1)
+        if used_numbers:
+            return max(max(used_numbers) + 1, 1)
+        return 1
+
     def action_sync_imported_scopes(self):
         """Sync and merge any unlinked scopes (project_id=False, e.g. from generic Excel import)
         or duplicate scopes into this project, transferring responsible employees, accountable, and dates.
         """
         for project in self:
+            project._heal_project_scope_numbers()
             today = fields.Date.context_today(project)
 
             # 1. Consolidate internal duplicates within this project
@@ -612,6 +744,7 @@ class ProjectManage(models.Model):
         try:
             projects = self.search([])
             if projects:
+                projects._heal_project_scope_numbers()
                 projects._compute_metrics()
         except Exception:
             pass
@@ -1159,7 +1292,7 @@ class ProjectManage(models.Model):
             pending_items.append({
                 'id': s.id,
                 'name': s.name,
-                'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no else '') or s.item_id or '',
+                'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no is not None else '') or s.item_id or '',
                 'scope': s.scope or '',
                 'project_id': s.project_id.id if s.project_id else False,
                 'project_name': s.project_id.name if s.project_id else 'General Project',
@@ -1173,13 +1306,17 @@ class ProjectManage(models.Model):
 
         # ---- Universal Role-Based Tasks Hub (Pending & Completed Tasks) ----
         # Requirement:
-        # - Pending tasks = assigned to employee + date issued (start_date or end_date) + not completed (state != 'done')
+        # - Pending tasks = all active tasks assigned to employee not completed (state != 'done' and state != 'cancelled')
         # - Completed tasks = state == 'done'
         # - Consultant: only their assigned tasks (completed and pending)
         # - Team Lead: all consultants in his team / projects (pending and completed)
         # - Project Manager: all tasks under his projects (pending and completed)
         # - Executive (VP, CEO, Admin): all tasks across portfolio / selected team
         current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+        if not current_emp and user.email:
+            current_emp = self.env['hr.employee'].sudo().search([('work_email', '=ilike', user.email.strip())], limit=1)
+        if not current_emp and user.name:
+            current_emp = self.env['hr.employee'].sudo().search([('name', '=ilike', user.name.strip())], limit=1)
         emp_ids = current_emp.ids if current_emp else []
 
         tl_projects = self.search([
@@ -1259,11 +1396,12 @@ class ProjectManage(models.Model):
         all_hub_scopes = Scope.search(hub_domain, order='end_date asc, id desc')
 
         # Filter strictly by definition:
-        # Pending: assigned to employee AND date issued (start or end date set) AND not completed (state != 'done' and state != 'cancelled')
+        # Pending: active tasks not completed (state != 'done' and state != 'cancelled' and approval_state != 'approved')
+        # All assigned tasks appear in pending tasks regardless of whether dates have been issued yet.
+        completed_scopes = all_hub_scopes.filtered(lambda s: s.state == 'done' or s.approval_state == 'approved')
         pending_scopes = all_hub_scopes.filtered(
-            lambda s: bool(s.responsible_ids or s.responsible_id) and bool(s.start_date or s.end_date) and s.state not in ('done', 'cancelled')
+            lambda s: s.state not in ('done', 'cancelled') and s.approval_state != 'approved'
         )
-        completed_scopes = all_hub_scopes.filtered(lambda s: s.state == 'done')
         overdue_scopes = pending_scopes.filtered(lambda s: s.end_date and today > s.end_date)
         waiting_approval_scopes = all_hub_scopes.filtered(
             lambda s: s.approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')
@@ -1282,16 +1420,17 @@ class ProjectManage(models.Model):
         available_projects = [{'id': pid, 'name': pname} for pid, pname in sorted(projects_map.items(), key=lambda x: x[1])]
 
         def _serialize_task(s):
-            is_late = bool(s.end_date and today > s.end_date and s.state != 'done')
-            is_pending = bool((s.responsible_ids or s.responsible_id) and (s.start_date or s.end_date) and s.state not in ('done', 'cancelled'))
-            is_completed = (s.state == 'done')
+            is_completed = bool(s.state == 'done' or s.approval_state == 'approved')
+            is_late = bool(s.end_date and today > s.end_date and not is_completed)
+            is_pending = bool(s.state not in ('done', 'cancelled') and not is_completed)
             is_assigned_to_user = bool(
                 (user in s.responsible_ids.mapped('user_id')) or
                 (current_emp and current_emp in s.responsible_ids) or
                 (s.responsible_id and (
                     (s.responsible_id.user_id == user) or
                     (current_emp and s.responsible_id == current_emp)
-                ))
+                )) or
+                (user.name and any(r.name and r.name.lower() == user.name.lower() for r in (s.responsible_ids | s.responsible_id)))
             )
             is_eligible_to_complete = bool(is_assigned_to_user or is_actual_admin)
             can_submit = bool(
@@ -1303,7 +1442,7 @@ class ProjectManage(models.Model):
             return {
                 'id': s.id,
                 'name': s.name,
-                'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no else '') or s.item_id or '',
+                'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no is not None else '') or s.item_id or '',
                 'scope': s.scope or '',
                 'project_id': s.project_id.id if s.project_id else False,
                 'project_name': s.project_id.name if s.project_id else 'General Project',
@@ -1335,19 +1474,24 @@ class ProjectManage(models.Model):
         def _task_sort_key(s):
             pri_weight = -(int(s.priority or 0))
             is_late = bool(s.end_date and today > s.end_date and s.state != 'done')
-            is_pend = bool((s.responsible_ids or s.responsible_id) and (s.start_date or s.end_date) and s.state not in ('done', 'cancelled'))
+            is_pend = bool(s.state not in ('done', 'cancelled') and s.approval_state != 'approved')
             if is_pend and is_late:
                 return (pri_weight, 0, s.end_date or fields.Date.today())
             if is_pend:
                 return (pri_weight, 1, s.end_date or fields.Date.from_string('2099-12-31'))
             if s.approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 return (pri_weight, 2, s.end_date or fields.Date.from_string('2099-12-31'))
-            if s.state == 'done':
+            if s.state == 'done' or s.approval_state == 'approved':
                 return (pri_weight, 3, s.end_date or fields.Date.from_string('2000-01-01'))
             return (pri_weight, 4, s.end_date or fields.Date.from_string('2099-12-31'))
 
-        sorted_scopes = sorted(all_hub_scopes, key=_task_sort_key)
-        tasks_list = [_serialize_task(s) for s in sorted_scopes[:150]]
+        # Ensure completed, waiting approval, and overdue tasks are NEVER truncated,
+        # plus serialize all hub scopes up to 5000 to easily cover large enterprise projects.
+        critical_scopes = completed_scopes | waiting_approval_scopes | overdue_scopes
+        other_scopes = all_hub_scopes - critical_scopes
+        combined_scopes = list(critical_scopes) + list(other_scopes[:max(0, 5000 - len(critical_scopes))])
+        sorted_scopes = sorted(combined_scopes, key=_task_sort_key)
+        tasks_list = [_serialize_task(s) for s in sorted_scopes]
 
         if selected_project_id and selected_proj:
             if role_code == 'consultant':
@@ -1360,7 +1504,7 @@ class ProjectManage(models.Model):
                 hub_role_label = "Project Tasks"
         elif role_code == 'consultant':
             hub_title = "My Tasks Workspace"
-            hub_subtitle = "Track your assigned pending tasks with issued dates and completed deliverables"
+            hub_subtitle = "Track your assigned pending tasks and completed deliverables"
             hub_role_label = "My Tasks"
         elif role_code == 'team_lead':
             hub_title = "Team Lead Tasks Hub"
@@ -1543,7 +1687,7 @@ class ProjectManage(models.Model):
                         'model': 'project.manage.scope',
                         'type': 'task',
                         'title': s.name,
-                        'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no else '') or s.item_id or '',
+                        'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no is not None else '') or s.item_id or '',
                         'category': s.category or 'Documentation',
                         'item_type': s.item_type or '',
                         'responsible_name': ', '.join(s.responsible_ids.sudo().mapped('name')) if s.responsible_ids else (s.responsible_id.sudo().name if s.responsible_id else (s.responsible or 'Unassigned')),
@@ -1696,6 +1840,7 @@ class ProjectManage(models.Model):
         )
 
         # Auto-sync and consolidate any imported or unlinked scopes into this project
+        project._heal_project_scope_numbers()
         project.action_sync_imported_scopes()
 
         scopes_data = []
@@ -1771,11 +1916,11 @@ class ProjectManage(models.Model):
                 cat_badge_class = 'pm-cat-scope'
                 cat_icon = 'fa-folder-o'
 
-            scope_name = s.scope or f"Scope {s.scope_no or 0}"
+            scope_name = s.scope or f"Scope {s.scope_no if s.scope_no is not None else 0}"
             if scope_name not in scope_map:
                 scope_map[scope_name] = {
                     'name': scope_name,
-                    'scope_no': s.scope_no or 0,
+                    'scope_no': s.scope_no if s.scope_no is not None else 0,
                     'total': 0,
                     'done': 0,
                 }
@@ -1789,7 +1934,8 @@ class ProjectManage(models.Model):
                 'priority': s.priority or '0',
                 'priority_int': int(s.priority or 0),
                 'item_id': s.item_id or f"ITEM-{s.id}",
-                'scope_no': s.scope_no or 0,
+                'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no is not None else '') or s.item_id or '',
+                'scope_no': s.scope_no if s.scope_no is not None else 0,
                 'scope': s.scope or '',
                 'scope_name': scope_name,
                 'name': s.name or s.item_id or 'Untitled Task',
@@ -1858,6 +2004,12 @@ class ProjectManage(models.Model):
         combo_emps = proj_emps | all_active_emps
         available_employees = [{'id': e.id, 'name': e.name} for e in combo_emps]
 
+        # Sort unique scopes strictly by scope_no ascending
+        unique_scopes.sort(key=lambda x: (
+            0 if x.get('scope_no') == 0 else (x.get('scope_no') or 99999),
+            x.get('name', '')
+        ))
+
         return {
             'project': {
                 'id': project.id,
@@ -1879,7 +2031,7 @@ class ProjectManage(models.Model):
             'scopes': scopes_data,
             'unique_scopes': unique_scopes,
             'available_employees': available_employees,
-            'available_scopes': list(scope_map.keys()),
+            'available_scopes': [s['name'] for s in unique_scopes],
             'stats': {
                 'total_items': total_count,
                 'total_scopes': len(unique_scopes),
@@ -1904,7 +2056,16 @@ class ProjectManage(models.Model):
 
         write_vals = {}
         if 'scope' in vals:
-            write_vals['scope'] = vals['scope']
+            raw_new = (vals['scope'] or '').strip()
+            match = re.match(r'^(?:Scope|S)?\s*(\d+)\s*[-:]?\s*(.+)$', raw_new, re.IGNORECASE)
+            new_scope = raw_new
+            if match and not any(k in raw_new.lower() for k in ('initiation', 'governance')):
+                new_scope = match.group(2).strip() or raw_new
+            write_vals['scope'] = new_scope
+            if new_scope and scope.project_id:
+                new_no = scope.project_id._assign_next_scope_no(new_scope)
+                write_vals['scope_no'] = new_no
+                write_vals['code'] = f"S{new_no:02d}"
         if 'category' in vals and vals['category'] in ('Documentation', 'Implementation'):
             write_vals['category'] = vals['category']
         if 'name' in vals and vals['name']:
@@ -1966,13 +2127,35 @@ class ProjectManage(models.Model):
         if not project.exists():
             return {'error': _("Project not found")}
 
-        scope_str = (vals.get('scope') or '').strip()
-        scope_no = 0
-        if scope_str:
-            existing = self.env['project.manage.scope'].search(
-                [('project_id', '=', project.id), ('scope', '=ilike', scope_str)], limit=1)
-            if existing:
-                scope_no = existing.scope_no
+        # Heal existing numbers first to prevent anomalies
+        project._heal_project_scope_numbers()
+
+        raw_scope = (vals.get('scope') or '').strip()
+        scope_str = raw_scope
+        match = re.match(r'^(?:Scope|S)?\s*(\d+)\s*[-:]?\s*(.+)$', raw_scope, re.IGNORECASE)
+        if match:
+            cand_title = match.group(2).strip()
+            if not any(k in raw_scope.lower() for k in ('initiation', 'governance')):
+                scope_str = cand_title or raw_scope
+
+        if not scope_str:
+            scope_str = 'General Scope'
+
+        scope_no = project._assign_next_scope_no(scope_str)
+
+        cat_val = vals.get('category') or 'Documentation'
+        cat_letter = 'I' if 'imp' in str(cat_val).lower() else 'D'
+
+        existing_in_cat = self.env['project.manage.scope'].sudo().search([
+            ('project_id', '=', project.id),
+            ('scope_no', '=', scope_no),
+            ('category', '=', cat_val),
+        ])
+        max_item = max([s.item_no for s in existing_in_cat if s.item_no] or [0])
+        item_no = max_item + 1
+
+        item_id = vals.get('item_id') or f"S{scope_no:02d}-{cat_letter}-{item_no:03d}"
+        code = f"S{scope_no:02d}"
 
         raw_ids = vals.get('responsible_ids') or []
         emp_ids = [int(i) for i in raw_ids if str(i).isdigit()]
@@ -1989,13 +2172,25 @@ class ProjectManage(models.Model):
         state_val = vals.get('state') or 'todo'
         appr_state = 'approved' if state_val == 'done' else ('in_progress' if state_val == 'in_progress' else 'draft')
 
+        auth_val = vals.get('approval_authority') or get_default_approval_authority(
+            item_id=item_id,
+            scope_no=scope_no,
+            category=cat_val,
+            item_no=item_no,
+            name=vals.get('name'),
+        ) or 'TL'
+
         create_vals = {
             'project_id': project.id,
-            'scope': scope_str or 'General Scope',
+            'scope': scope_str,
             'scope_no': scope_no,
-            'category': vals.get('category') or 'Documentation',
+            'code': code,
+            'item_id': item_id,
+            'item_no': item_no,
+            'category': cat_val,
             'name': vals.get('name') or 'Untitled Task',
             'item_type': vals.get('item_type') or '',
+            'approval_authority': auth_val,
             'responsible_id': emp_ids[0] if emp_ids else False,
             'responsible_ids': [(6, 0, emp_ids)] if emp_ids else False,
             'responsible': emp_name,

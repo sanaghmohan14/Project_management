@@ -245,6 +245,11 @@ class ProjectScopeImportWizard(models.TransientModel):
                     else:
                         scope_str = f"Scope {scope_no}"
 
+                if (scope_no == 0 or scope_no is None) and scope_str:
+                    is_init = any(k in scope_str.lower() for k in ('initiation', 'governance'))
+                    if not is_init and self.project_id:
+                        scope_no = self.project_id._assign_next_scope_no(scope_str)
+
                 cand_key = (scope_str.strip().lower(), cand_name.strip().lower(), cat_val)
 
                 # Check if this item already exists in this project
