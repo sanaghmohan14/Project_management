@@ -39,6 +39,20 @@
                 <div class="pm-header-right">
                     <div class="pm-date-badge" t-esc="state.data.current_date_str"/>
 
+                    <!-- Dashboard / Calendar View Switcher Buttons -->
+                    <t t-if="state.activeMainView === 'calendar'">
+                        <button class="pm-nav-pill-btn pm-back-dash-pill-btn" t-on-click="() => this.setActiveTab('home')" title="Back to Project Dashboard Overview">
+                            <i class="fa fa-th-large me-1 text-primary"></i>
+                            <span>Dashboard Overview</span>
+                        </button>
+                    </t>
+                    <t t-else="">
+                        <button class="pm-nav-pill-btn pm-cal-pill-btn" t-on-click="() => this.setActiveTab('calendar')" title="View Tasks Calendar">
+                            <i class="fa fa-calendar me-1 text-primary"></i>
+                            <span>Calendar</span>
+                        </button>
+                    </t>
+
                     <!-- Approvals Shortcut Button -->
                     <t t-if="!state.data.user_info.is_consultant and state.data.user_info.can_approve">
                         <button class="pm-nav-pill-btn pm-approvals-pill-btn" t-on-click="scrollToApprovals" title="View Approval Requests">
@@ -907,21 +921,23 @@
 
                                                             <!-- Top Action Buttons -->
                                                             <div class="pm-scope-header-actions">
-                                                                <button class="btn btn-sm pm-btn-add-scope"
-                                                                        t-on-click="(ev) => this.openScopeWizard(null, ev)"
-                                                                        title="Fill or add a scope task with the dashboard wizard">
-                                                                    <i class="fa fa-plus me-1"></i> Fill / Add Scope
-                                                                </button>
-                                                                <button class="btn btn-sm pm-btn-bulk-fill"
-                                                                        t-on-click="(ev) => this.openBulkFillWizard(ev)"
-                                                                        title="Bulk assign Responsible, End Date, or Status across scopes">
-                                                                    <i class="fa fa-bolt me-1"></i> Bulk Fill
-                                                                </button>
-                                                                <button class="btn btn-sm pm-btn-outline-primary"
-                                                                        t-on-click="(ev) => this.openImportWizardForProject(proj.id, ev)"
-                                                                        title="Import tasks from Benac Excel tracker">
-                                                                    <i class="fa fa-upload me-1"></i> Import Scopes
-                                                                </button>
+                                                                <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
+                                                                    <button class="btn btn-sm pm-btn-add-scope"
+                                                                            t-on-click="(ev) => this.openScopeWizard(null, ev)"
+                                                                            title="Fill or add a scope task with the dashboard wizard">
+                                                                        <i class="fa fa-plus me-1"></i> Fill / Add Scope
+                                                                    </button>
+                                                                    <button class="btn btn-sm pm-btn-bulk-fill"
+                                                                            t-on-click="(ev) => this.openBulkFillWizard(ev)"
+                                                                            title="Bulk assign Responsible, End Date, or Status across scopes">
+                                                                        <i class="fa fa-bolt me-1"></i> Bulk Fill
+                                                                    </button>
+                                                                    <button class="btn btn-sm pm-btn-outline-primary"
+                                                                            t-on-click="(ev) => this.openImportWizardForProject(proj.id, ev)"
+                                                                            title="Import tasks from Benac Excel tracker">
+                                                                        <i class="fa fa-upload me-1"></i> Import Scopes
+                                                                    </button>
+                                                                </t>
                                                                 <button class="btn btn-sm pm-btn-outline-success"
                                                                         t-on-click="(ev) => this.syncProjectImportedScopes(proj.id, ev)"
                                                                         title="Sync tasks imported via Excel / list view into this project">
@@ -1250,6 +1266,9 @@
                                     <div class="pm-approval-card-top">
                                         <div class="pm-approval-code-box">
                                             <span class="pm-task-code" t-esc="item.code"/>
+                                            <t t-if="item.is_creation_approval">
+                                                <span class="badge bg-warning text-dark me-1" style="font-size: 0.72rem;"><i class="fa fa-plus-circle me-1"></i>New Scope</span>
+                                            </t>
                                             <span class="pm-approval-badge" t-att-class="'pm-badge-' + item.approval_state" t-esc="item.approval_stage_label"/>
                                         </div>
                                         <span class="pm-approval-date" t-esc="item.submitted_date"/>
@@ -1335,15 +1354,17 @@
 
                             <!-- Mobile Quick Action Buttons -->
                             <div class="d-flex gap-2 flex-wrap" t-if="state.selectedProjectId">
-                                <button class="btn btn-sm pm-btn-add-scope flex-grow-1"
-                                        t-on-click="(ev) => this.openScopeWizard(null, ev)">
-                                    <i class="fa fa-plus me-1"></i> Add Scope
-                                </button>
-                                <button class="btn btn-sm pm-btn-outline-primary"
-                                        t-on-click="(ev) => this.openImportWizardForProject(state.selectedProjectId, ev)"
-                                        title="Import Scopes">
-                                    <i class="fa fa-upload me-1"></i> Import
-                                </button>
+                                <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
+                                    <button class="btn btn-sm pm-btn-add-scope flex-grow-1"
+                                            t-on-click="(ev) => this.openScopeWizard(null, ev)">
+                                        <i class="fa fa-plus me-1"></i> Add Scope
+                                    </button>
+                                    <button class="btn btn-sm pm-btn-outline-primary"
+                                            t-on-click="(ev) => this.openImportWizardForProject(state.selectedProjectId, ev)"
+                                            title="Import Scopes">
+                                        <i class="fa fa-upload me-1"></i> Import
+                                    </button>
+                                </t>
                             </div>
                         </div>
 
@@ -1682,70 +1703,294 @@
                 </t>
 
 
-                <!-- ==================== 5. CALENDAR VIEW (MOBILE SCHEDULE) ==================== -->
+                <!-- ==================== 5. CALENDAR VIEW (DASHBOARD SCHEDULE) ==================== -->
                 <t t-if="this.isSectionVisible('calendar')">
                     <section class="pm-calendar-section">
-                        <!-- Calendar Toolbar -->
-                        <div class="pm-calendar-toolbar">
-                            <div class="pm-cal-time-filters">
-                                <button type="button" class="pm-cal-filter-btn"
-                                        t-att-class="state.calendarTimeFilter === 'today' ? 'active' : ''"
-                                        t-on-click="() => this.setCalendarTimeFilter('today')">
-                                    Today
-                                </button>
-                                <button type="button" class="pm-cal-filter-btn"
-                                        t-att-class="state.calendarTimeFilter === 'tomorrow' ? 'active' : ''"
-                                        t-on-click="() => this.setCalendarTimeFilter('tomorrow')">
-                                    Tomorrow
-                                </button>
-                                <button type="button" class="pm-cal-filter-btn"
-                                        t-att-class="state.calendarTimeFilter === 'week' ? 'active' : ''"
-                                        t-on-click="() => this.setCalendarTimeFilter('week')">
-                                    Week
-                                </button>
-                                <button type="button" class="pm-cal-filter-btn"
-                                        t-att-class="state.calendarTimeFilter === 'month' ? 'active' : ''"
-                                        t-on-click="() => this.setCalendarTimeFilter('month')">
-                                    Month
-                                </button>
-                                <button type="button" class="pm-cal-filter-btn"
-                                        t-att-class="state.calendarTimeFilter === 'all' ? 'active' : ''"
-                                        t-on-click="() => this.setCalendarTimeFilter('all')">
-                                    All
-                                </button>
+                        <!-- Top Header Bar (Matching Image 2 + Extra Controls) -->
+                        <div class="pm-cal-header-bar">
+                            <div class="pm-cal-header-left">
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <h2 class="pm-cal-title-header"><t t-esc="this.calendarSelectedDateTitle"/></h2>
+                                    <span class="pm-cal-today-pill-indicator" t-if="this.calendarIsSelectedDateToday">Today</span>
+                                </div>
+                                <div class="pm-cal-full-date-sub text-muted small">
+                                    <t t-esc="this.calendarSelectedDateFullTitle"/>
+                                </div>
                             </div>
 
-                            <div class="pm-cal-nav-box">
-                                <button type="button" class="pm-cal-nav-btn" t-on-click="calendarPrev" title="Previous">
-                                    <i class="fa fa-chevron-left"></i>
-                                </button>
-                                <h3 class="pm-cal-period-heading" t-esc="this.calendarPeriodTitle"/>
-                                <button type="button" class="pm-cal-nav-btn" t-on-click="calendarNext" title="Next">
-                                    <i class="fa fa-chevron-right"></i>
-                                </button>
-                                <button type="button" class="pm-cal-today-btn" t-on-click="calendarToday">
-                                    Today
-                                </button>
-                            </div>
-
-                            <div class="pm-cal-right-controls">
-                                <div class="pm-cal-btn-group">
-                                    <button type="button" class="pm-cal-mode-btn"
-                                            t-att-class="state.calendarViewMode === 'month' ? 'active' : ''"
-                                            t-on-click="() => this.setCalendarViewMode('month')">
-                                        <i class="fa fa-calendar"></i> Month
+                            <div class="pm-cal-header-center">
+                                <div class="pm-cal-nav-controls">
+                                    <button type="button" class="pm-cal-circle-btn" t-on-click="calendarPrevDay" title="Previous Day">
+                                        <i class="fa fa-chevron-left"></i>
                                     </button>
-                                    <button type="button" class="pm-cal-mode-btn"
-                                            t-att-class="state.calendarViewMode === 'agenda' ? 'active' : ''"
-                                            t-on-click="() => this.setCalendarViewMode('agenda')">
-                                        <i class="fa fa-list"></i> Agenda
+                                    <button type="button" class="pm-cal-today-pill-btn" t-on-click="calendarToday" title="Jump to Today">
+                                        Today <i class="fa fa-caret-down ms-1"></i>
+                                    </button>
+                                    <button type="button" class="pm-cal-circle-btn" t-on-click="calendarNextDay" title="Next Day">
+                                        <i class="fa fa-chevron-right"></i>
                                     </button>
                                 </div>
                             </div>
+
+                            <div class="pm-cal-header-right">
+                                <!-- View Mode Selector -->
+                                <div class="pm-cal-view-modes">
+                                    <button type="button" class="pm-cal-mode-btn"
+                                            t-att-class="state.calendarViewMode === 'week_strip' ? 'active' : ''"
+                                            t-on-click="() => this.setCalendarViewMode('week_strip')"
+                                            title="Weekly Strip &amp; Tasks (Dashboard Style)">
+                                        <i class="fa fa-columns"></i> Week Strip
+                                    </button>
+                                    <button type="button" class="pm-cal-mode-btn"
+                                            t-att-class="state.calendarViewMode === 'month' ? 'active' : ''"
+                                            t-on-click="() => this.setCalendarViewMode('month')"
+                                            title="Full Month Calendar Grid">
+                                        <i class="fa fa-calendar"></i> Month Grid
+                                    </button>
+                                    <button type="button" class="pm-cal-mode-btn"
+                                            t-att-class="state.calendarViewMode === 'agenda' ? 'active' : ''"
+                                            t-on-click="() => this.setCalendarViewMode('agenda')"
+                                            title="Timeline Agenda">
+                                        <i class="fa fa-list"></i> Agenda
+                                    </button>
+                                </div>
+
+                                <!-- Quick Task Add Button (Only for Project Managers & Above) -->
+                                <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
+                                    <button type="button" class="pm-cal-add-task-btn" t-on-click="createNewTaskForSelectedDate">
+                                        <i class="fa fa-plus me-1"></i> Schedule Task
+                                    </button>
+                                </t>
+
+                                <!-- Standard Calendar Shortcut Button -->
+                                <button type="button" class="pm-cal-switch-standard-btn" t-on-click="openStandardCalendarView" title="Open Standard Odoo Calendar Grid">
+                                    <i class="fa fa-table me-1"></i> Standard View
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Month Grid -->
-                        <t t-if="state.calendarViewMode === 'month'">
+                        <!-- ==================== 1. WEEK STRIP MODE (IMAGE 2 UI) ==================== -->
+                        <t t-if="state.calendarViewMode === 'week_strip'">
+                            <!-- Top Week Strip Card (Image 2) -->
+                            <div class="pm-cal-week-strip-card">
+                                <div class="pm-cal-week-strip-grid">
+                                    <t t-foreach="this.calendarWeekStripDays" t-as="day" t-key="day.dateIso">
+                                        <div class="pm-cal-week-day-col"
+                                             t-att-class="(day.isSelected ? 'pm-day-col-selected ' : '') + (day.isToday ? 'pm-day-col-today ' : '')"
+                                             t-on-click="() => this.selectCalendarDate(day)">
+                                            <div class="pm-cal-day-name"><t t-esc="day.dayName"/></div>
+                                            <div class="pm-cal-day-circle" t-att-class="day.isSelected ? 'pm-day-circle-selected' : ''">
+                                                <t t-esc="day.dayNum"/>
+                                            </div>
+                                            <div class="pm-cal-day-indicators">
+                                                <t t-if="day.taskCount > 0">
+                                                    <div class="pm-cal-dots-wrap">
+                                                        <span class="pm-cal-dot dot-overdue" t-if="day.hasOverdue" title="Overdue tasks"></span>
+                                                        <span class="pm-cal-dot dot-progress" t-if="day.hasInProgress" title="In Progress"></span>
+                                                        <span class="pm-cal-dot dot-done" t-if="day.hasCompleted" title="Completed"></span>
+                                                        <span class="pm-cal-task-count-chip"><t t-esc="day.taskCount"/></span>
+                                                    </div>
+                                                </t>
+                                                <t t-else="">
+                                                    <span class="pm-cal-dot dot-empty"></span>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+
+                            <!-- Subheader Row Below Week Strip (Image 2) -->
+                            <div class="pm-cal-subheader-row">
+                                <div class="d-flex align-items-center gap-3 flex-wrap">
+                                    <h3 class="pm-cal-sub-date-title"><t t-esc="this.calendarSelectedDateTitle"/></h3>
+                                    <span class="pm-cal-badge-scheduled"><t t-esc="this.calendarScheduledCountLabel"/></span>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-2 flex-wrap">
+                                    <!-- Scope Filter Tabs -->
+                                    <div class="pm-cal-scope-tabs">
+                                        <button type="button" class="pm-cal-scope-tab"
+                                                t-att-class="state.calendarTaskFilterScope === 'day' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarTaskScope('day')">
+                                            Selected Day
+                                        </button>
+                                        <button type="button" class="pm-cal-scope-tab"
+                                                t-att-class="state.calendarTaskFilterScope === 'week' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarTaskScope('week')">
+                                            Week Tasks
+                                        </button>
+                                        <button type="button" class="pm-cal-scope-tab"
+                                                t-att-class="state.calendarTaskFilterScope === 'month' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarTaskScope('month')">
+                                            Month Tasks
+                                        </button>
+                                        <button type="button" class="pm-cal-scope-tab pm-tab-overdue"
+                                                t-att-class="state.calendarTaskFilterScope === 'overdue' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarTaskScope('overdue')">
+                                            Overdue
+                                        </button>
+                                    </div>
+
+                                    <!-- Category Filter -->
+                                    <div class="btn-group btn-group-sm">
+                                        <button type="button" class="btn btn-outline-secondary pm-cal-filter-btn"
+                                                t-att-class="state.calendarCategoryFilter === 'all' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarCategoryFilter('all')">
+                                            All
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary pm-cal-filter-btn"
+                                                t-att-class="state.calendarCategoryFilter === 'documentation' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarCategoryFilter('documentation')">
+                                            Docs
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary pm-cal-filter-btn"
+                                                t-att-class="state.calendarCategoryFilter === 'implementation' ? 'active' : ''"
+                                                t-on-click="() => this.setCalendarCategoryFilter('implementation')">
+                                            Impl
+                                        </button>
+                                    </div>
+
+                                    <!-- Status Filter -->
+                                    <select class="form-select form-select-sm pm-cal-select-filter"
+                                            t-on-change="(ev) => this.setCalendarStatusFilter(ev.target.value)"
+                                            t-att-value="state.calendarStatusFilter">
+                                        <option value="all">⚡ All Statuses</option>
+                                        <option value="in_progress">🔵 In Progress</option>
+                                        <option value="under_review">🟠 Under Review</option>
+                                        <option value="done">🟢 Completed</option>
+                                        <option value="todo">⚪ To Do</option>
+                                        <option value="overdue">🔴 Overdue</option>
+                                    </select>
+
+                                    <!-- Search Input -->
+                                    <div class="pm-cal-search-wrap">
+                                        <i class="fa fa-search pm-cal-search-icon"></i>
+                                        <input type="text" class="form-control form-control-sm pm-cal-search-input"
+                                               placeholder="Search tasks..."
+                                               t-att-value="state.calendarSearchQuery"
+                                               t-on-input="onCalendarSearchChange"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Content Below Subheader -->
+                            <div class="pm-cal-content-area">
+                                <!-- Empty State Card (Image 2 Design) -->
+                                <t t-if="!this.calendarSelectedDayTasks or this.calendarSelectedDayTasks.length === 0">
+                                    <div class="pm-cal-empty-card">
+                                        <div class="pm-cal-empty-icon-wrap">
+                                            <i class="fa fa-calendar-check-o"></i>
+                                        </div>
+                                        <h4 class="pm-cal-empty-heading">
+                                            <t t-if="state.calendarTaskFilterScope === 'day' and this.calendarIsSelectedDateToday">No tasks scheduled for today</t>
+                                            <t t-elif="state.calendarTaskFilterScope === 'day'">No tasks scheduled for this day</t>
+                                            <t t-else="">No tasks match your criteria</t>
+                                        </h4>
+                                        <p class="pm-cal-empty-sub">
+                                            <t t-if="state.calendarTaskFilterScope === 'day' and this.calendarIsSelectedDateToday">No deliverables due today. Tap + to create one.</t>
+                                            <t t-elif="state.calendarTaskFilterScope === 'day'">No deliverables due on <t t-esc="this.calendarSelectedDateTitle"/>. Click below to schedule a task.</t>
+                                            <t t-else="">Try adjusting your search query or filter criteria.</t>
+                                        </p>
+                                        <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
+                                            <button type="button" class="pm-btn-cal-empty-create" t-on-click="createNewTaskForSelectedDate">
+                                                <i class="fa fa-plus me-1"></i> + Create Task
+                                            </button>
+                                        </t>
+                                    </div>
+                                </t>
+
+                                <!-- Task Cards List (When Tasks Exist) -->
+                                <t t-else="">
+                                    <div class="pm-cal-task-cards-list">
+                                        <t t-foreach="this.calendarSelectedDayTasks" t-as="evt" t-key="evt.id">
+                                            <div class="pm-cal-task-card"
+                                                 t-att-class="'pm-task-card-' + evt.status + (evt.is_overdue ? ' pm-card-overdue' : '')"
+                                                 t-on-click="(ev) => this.openCalendarItem(evt, ev)">
+                                                <div class="pm-cal-card-indicator" t-att-class="'pm-indicator-' + evt.status + (evt.is_overdue ? ' pm-indicator-overdue' : '')"></div>
+                                                <div class="pm-cal-card-inner">
+                                                    <div class="pm-cal-card-header">
+                                                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                            <span class="pm-cal-task-code" t-if="evt.code"><t t-esc="evt.code"/></span>
+                                                            <span class="pm-cat-tag" t-att-class="evt.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-impl'">
+                                                                <i class="fa me-1" t-att-class="evt.category === 'Documentation' ? 'fa-file-text-o' : 'fa-cogs'"></i>
+                                                                <t t-esc="evt.category"/>
+                                                            </span>
+                                                            <t t-if="evt.is_overdue">
+                                                                <span class="badge bg-danger rounded-pill"><i class="fa fa-exclamation-circle me-1"></i>LATE</span>
+                                                            </t>
+                                                        </div>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <span class="pm-status-pill" t-att-class="'pm-status-' + evt.status">
+                                                                <t t-esc="evt.status_label"/>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="pm-cal-card-body">
+                                                        <h4 class="pm-cal-task-title"><t t-esc="evt.title"/></h4>
+                                                        <div class="pm-cal-task-details">
+                                                            <span class="pm-cal-detail-item text-primary" t-att-title="evt.project_name">
+                                                                <i class="fa fa-folder-open-o me-1"></i>
+                                                                <span class="pm-truncate-text"><t t-esc="evt.project_name"/></span>
+                                                            </span>
+                                                            <span class="pm-cal-detail-sep">·</span>
+                                                            <span class="pm-cal-detail-item" t-if="evt.responsible_name">
+                                                                <span class="pm-cal-avatar"><t t-esc="evt.responsible_name[0]"/></span>
+                                                                <span class="pm-truncate-text"><t t-esc="evt.responsible_name"/></span>
+                                                            </span>
+                                                            <span class="pm-cal-detail-sep" t-if="evt.team_name">·</span>
+                                                            <span class="pm-cal-detail-item text-muted" t-if="evt.team_name">
+                                                                <i class="fa fa-users me-1"></i>
+                                                                <span class="pm-truncate-text"><t t-esc="evt.team_name"/></span>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="pm-cal-card-footer">
+                                                        <div class="pm-cal-timeline-info">
+                                                            <i class="fa fa-calendar me-1" t-att-class="evt.is_overdue ? 'text-danger' : 'text-primary'"></i>
+                                                            <t t-if="evt.start_date and evt.start_date !== evt.end_date">
+                                                                <span><t t-esc="evt.start_date"/> → <strong><t t-esc="evt.date_str"/></strong></span>
+                                                            </t>
+                                                            <t t-else="">
+                                                                <span>Due: <strong><t t-esc="evt.date_str"/></strong></span>
+                                                            </t>
+                                                            <t t-if="evt.is_overdue">
+                                                                <span class="text-danger fw-bold ms-2">
+                                                                    (Overdue by <t t-esc="Math.abs(evt.days_remaining)"/>d)
+                                                                </span>
+                                                            </t>
+                                                            <t t-elif="evt.days_remaining === 0">
+                                                                <span class="badge bg-primary ms-2">Due Today</span>
+                                                            </t>
+                                                            <t t-elif="evt.days_remaining > 0">
+                                                                <span class="text-muted ms-2">(<t t-esc="evt.days_remaining"/>d remaining)</span>
+                                                            </t>
+                                                        </div>
+                                                        <div class="pm-cal-actions-group">
+                                                            <button type="button" class="btn btn-sm btn-outline-info pm-btn-card-action"
+                                                                    t-on-click.stop="(ev) => this.openCalendarItem(evt, ev)"
+                                                                    title="View Details, Documents &amp; Proof">
+                                                                <i class="fa fa-eye me-1"></i> Details
+                                                            </button>
+                                                            <button type="button" class="btn btn-sm btn-outline-secondary pm-btn-card-action"
+                                                                    t-on-click.stop="(ev) => this.openScopeForm(evt.record_id, ev)"
+                                                                    title="Open in Odoo Form">
+                                                                <i class="fa fa-external-link"></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </t>
+                            </div>
+                        </t>
+
+                        <!-- ==================== 2. MONTH GRID MODE ==================== -->
+                        <t t-elif="state.calendarViewMode === 'month'">
                             <div class="pm-cal-month-container">
                                 <div class="pm-cal-grid-header">
                                     <div class="pm-cal-header-cell">Mon</div>
@@ -1759,7 +2004,8 @@
                                 <div class="pm-cal-grid-body">
                                     <t t-foreach="this.calendarMonthGrid" t-as="cell" t-key="cell.key">
                                         <div class="pm-cal-cell"
-                                             t-att-class="(cell.isCurrentMonth ? '' : 'pm-other-month') + (cell.isToday ? ' pm-today' : '')">
+                                             t-att-class="(cell.isCurrentMonth ? '' : 'pm-other-month') + (cell.isToday ? ' pm-today' : '')"
+                                             t-on-click="() => { this.state.calendarDate = cell.dayNum; this.state.calendarViewMode = 'week_strip'; }">
                                             <div class="pm-cal-cell-header">
                                                 <span class="pm-cal-day-num"><t t-esc="cell.dayNum"/></span>
                                                 <span class="pm-cal-today-badge" t-if="cell.isToday">Today</span>
@@ -1768,7 +2014,7 @@
                                                 <t t-foreach="cell.visibleEvents" t-as="evt" t-key="evt.id">
                                                     <div class="pm-cal-event-pill"
                                                          t-att-class="'pm-evt-' + evt.status + (evt.is_overdue ? ' pm-evt-overdue' : '')"
-                                                         t-on-click="(ev) => this.openCalendarItem(evt, ev)"
+                                                         t-on-click.stop="(ev) => this.openCalendarItem(evt, ev)"
                                                          t-att-title="evt.title + ' (' + evt.project_name + ')'">
                                                         <span class="pm-evt-code" t-if="evt.code"><t t-esc="evt.code"/></span>
                                                         <span class="pm-evt-title"><t t-esc="evt.title"/></span>
@@ -1784,7 +2030,7 @@
                             </div>
                         </t>
 
-                        <!-- Agenda View -->
+                        <!-- ==================== 3. AGENDA MODE ==================== -->
                         <t t-else="">
                             <div class="pm-cal-agenda-container">
                                 <t t-if="!this.calendarAgendaDays or this.calendarAgendaDays.length === 0">
@@ -1899,6 +2145,14 @@
 
                                     <!-- WHEN CREATING NEW: Scope, Category, and Task Name inputs -->
                                     <t t-else="">
+                                        <!-- Scope Creation Workflow Info Banner -->
+                                        <div class="alert alert-info py-2 px-3 small mb-3 d-flex align-items-center gap-2">
+                                            <i class="fa fa-info-circle text-primary fs-5"></i>
+                                            <div>
+                                                <strong>Scope Creation Workflow:</strong> Submitting this scope will send an approval request to the <strong>Vice President (VP)</strong>, then advance to the <strong>CEO</strong>. Once approved by the CEO, the scope task is automatically created and activated.
+                                            </div>
+                                        </div>
+
                                         <!-- Scope Selection -->
                                         <div class="mb-3">
                                             <label class="form-label fw-bold small text-uppercase text-muted">Scope (Functional Area) <span class="text-danger">*</span></label>

@@ -3,10 +3,11 @@ import base64
 import csv
 import io
 import logging
-from datetime import datetime
+from datetime import datetime, date
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
 from .scope_master_data import get_default_approval_authority
+from .project_scope import robust_parse_date
 
 _logger = logging.getLogger(__name__)
 
@@ -48,17 +49,8 @@ class ProjectScopeImportWizard(models.TransientModel):
         return False
 
     def _parse_date(self, val):
-        if not val:
-            return False
-        if isinstance(val, datetime):
-            return val.date()
-        s = str(val).strip()
-        for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%m/%d/%Y', '%d.%m.%Y'):
-            try:
-                return datetime.strptime(s, fmt).date()
-            except ValueError:
-                continue
-        return False
+        """Robust date parsing for Excel dates, serials, and date strings."""
+        return robust_parse_date(val)
 
     def action_import(self):
         self.ensure_one()
@@ -69,6 +61,8 @@ class ProjectScopeImportWizard(models.TransientModel):
         rows = []
         filename = (self.filename or '').lower()
         excel_auth_map = {}
+        excel_date_map = {}
+        excel_resp_map = {}
 
         is_excel = filename.endswith(('.xlsx', '.xlsm', '.xltx')) or data[:4] == b'PK\x03\x04'
 
@@ -77,32 +71,65 @@ class ProjectScopeImportWizard(models.TransientModel):
                 raise UserError(_('openpyxl python library is required to read Excel files.'))
             wb = openpyxl.load_workbook(io.BytesIO(data), data_only=True)
 
-            # If workbook contains 'Scope_Task_List', extract the exact Final Approval Authority mapping
+            # If workbook contains 'Scope_Task_List', extract exact Authority, Dates, and Responsible mappings
             if 'Scope_Task_List' in wb.sheetnames:
                 ws_st = wb['Scope_Task_List']
                 for r in ws_st.iter_rows(values_only=True):
                     if len(r) >= 6 and r[0] is not None and str(r[0]).strip().isdigit():
                         s_no = int(str(r[0]).strip())
-                        # Documentation approval authority (col index 5)
-                        if len(r) > 5 and r[2] is not None and str(r[2]).strip().isdigit() and r[5]:
+                        # Documentation (cols 2..9): doc_no, name, type, auth, acc, resp, start, end
+                        if len(r) > 2 and r[2] is not None and str(r[2]).strip().isdigit():
                             d_no = int(str(r[2]).strip())
-                            d_auth = self._clean_authority(r[5])
-                            if d_auth:
-                                excel_auth_map[f'S{s_no:02d}-D-{d_no:03d}'] = d_auth
-                                excel_auth_map[(s_no, 'Documentation', d_no)] = d_auth
-                        # Implementation approval authority (col index 15)
-                        if len(r) > 15 and r[11] is not None and str(r[11]).strip().isdigit() and r[15]:
+                            d_item_id = f'S{s_no:02d}-D-{d_no:03d}'
+                            if len(r) > 5 and r[5]:
+                                d_auth = self._clean_authority(r[5])
+                                if d_auth:
+                                    excel_auth_map[d_item_id] = d_auth
+                                    excel_auth_map[(s_no, 'Documentation', d_no)] = d_auth
+                            d_acc = str(r[6]).strip() if len(r) > 6 and r[6] else ''
+                            d_resp = str(r[7]).strip() if len(r) > 7 and r[7] else ''
+                            d_start = r[8] if len(r) > 8 else None
+                            d_end = r[9] if len(r) > 9 else None
+                            if d_start or d_end:
+                                excel_date_map[d_item_id] = (d_start, d_end)
+                                excel_date_map[(s_no, 'Documentation', d_no)] = (d_start, d_end)
+                            if d_acc or d_resp:
+                                excel_resp_map[d_item_id] = (d_acc, d_resp)
+                                excel_resp_map[(s_no, 'Documentation', d_no)] = (d_acc, d_resp)
+
+                        # Implementation (cols 11..19): act_no, name, type, proof, auth, acc, resp, start, end
+                        if len(r) > 11 and r[11] is not None and str(r[11]).strip().isdigit():
                             a_no = int(str(r[11]).strip())
-                            a_auth = self._clean_authority(r[15])
-                            if a_auth:
-                                excel_auth_map[f'S{s_no:02d}-I-{a_no:03d}'] = a_auth
-                                excel_auth_map[(s_no, 'Implementation', a_no)] = a_auth
+                            a_item_id = f'S{s_no:02d}-I-{a_no:03d}'
+                            if len(r) > 15 and r[15]:
+                                a_auth = self._clean_authority(r[15])
+                                if a_auth:
+                                    excel_auth_map[a_item_id] = a_auth
+                                    excel_auth_map[(s_no, 'Implementation', a_no)] = a_auth
+                            a_acc = str(r[16]).strip() if len(r) > 16 and r[16] else ''
+                            a_resp = str(r[17]).strip() if len(r) > 17 and r[17] else ''
+                            a_start = r[18] if len(r) > 18 else None
+                            a_end = r[19] if len(r) > 19 else None
+                            if a_start or a_end:
+                                excel_date_map[a_item_id] = (a_start, a_end)
+                                excel_date_map[(s_no, 'Implementation', a_no)] = (a_start, a_end)
+                            if a_acc or a_resp:
+                                excel_resp_map[a_item_id] = (a_acc, a_resp)
+                                excel_resp_map[(s_no, 'Implementation', a_no)] = (a_acc, a_resp)
 
             # Prefer sheet named 'Upload_Data', otherwise first active sheet
             ws = wb['Upload_Data'] if 'Upload_Data' in wb.sheetnames else wb.active
             for row in ws.iter_rows(values_only=True):
                 if any(v is not None and str(v).strip() for v in row):
-                    rows.append([str(v).strip() if v is not None else '' for v in row])
+                    row_vals = []
+                    for v in row:
+                        if v is None:
+                            row_vals.append('')
+                        elif isinstance(v, (datetime, date)):
+                            row_vals.append(v.strftime('%Y-%m-%d'))
+                        else:
+                            row_vals.append(str(v).strip())
+                    rows.append(row_vals)
         else:
             # CSV parsing
             text = None
@@ -125,7 +152,12 @@ class ProjectScopeImportWizard(models.TransientModel):
         if self.import_mode == 'replace':
             self.project_id.scope_ids.unlink()
 
-        scopes_created, tasks_created = self._process_rows(rows, excel_auth_map=excel_auth_map)
+        scopes_created, tasks_created = self._process_rows(
+            rows,
+            excel_auth_map=excel_auth_map,
+            excel_date_map=excel_date_map,
+            excel_resp_map=excel_resp_map
+        )
 
         # Guarantee all scopes in the target project have approval_authority pre-filled automatically
         missing_scopes = self.project_id.scope_ids.filtered(lambda s: not s.approval_authority)
@@ -137,7 +169,7 @@ class ProjectScopeImportWizard(models.TransientModel):
             'tag': 'display_notification',
             'params': {
                 'title': _('Import Successful'),
-                'message': _('Successfully imported %s scopes and %s tasks into project "%s" with final approver roles pre-filled.',
+                'message': _('Successfully imported %s scopes and %s tasks into project "%s" with dates, team members, and approver roles.',
                              scopes_created, tasks_created, self.project_id.name),
                 'sticky': False,
                 'next': {
@@ -149,10 +181,12 @@ class ProjectScopeImportWizard(models.TransientModel):
             }
         }
 
-    def _process_rows(self, rows, excel_auth_map=None):
-        Scope = self.env['project.manage.scope'].sudo()
+    def _process_rows(self, rows, excel_auth_map=None, excel_date_map=None, excel_resp_map=None):
+        Scope = self.env['project.manage.scope'].sudo().with_context(import_file=True, bypass_creation_approval=True)
         Employee = self.env['hr.employee'].sudo()
         excel_auth_map = excel_auth_map or {}
+        excel_date_map = excel_date_map or {}
+        excel_resp_map = excel_resp_map or {}
 
         # Cache existing scopes for this project to prevent duplicate creation
         existing_by_item_id = {}
@@ -282,6 +316,30 @@ class ProjectScopeImportWizard(models.TransientModel):
                     )
                 auth_val = auth_val or 'TL'
 
+                # Fallback to date_map if not found in Upload_Data
+                if (not start_d or not end_d) and excel_date_map:
+                    dm = excel_date_map.get(item_id.strip().upper() if item_id else None) or excel_date_map.get((scope_no, cat_val, item_no))
+                    if dm:
+                        if not start_d and dm[0]:
+                            start_d = self._parse_date(dm[0])
+                        if not end_d and dm[1]:
+                            end_d = self._parse_date(dm[1])
+
+                # Sync if only one date is present
+                if start_d and not end_d:
+                    end_d = start_d
+                elif end_d and not start_d:
+                    start_d = end_d
+
+                # Fallback to resp_map if not found in Upload_Data
+                if (not acc_str or not resp_str) and excel_resp_map:
+                    rm = excel_resp_map.get(item_id.strip().upper() if item_id else None) or excel_resp_map.get((scope_no, cat_val, item_no))
+                    if rm:
+                        if not acc_str and rm[0]:
+                            acc_str = rm[0]
+                        if not resp_str and rm[1]:
+                            resp_str = rm[1]
+
                 scope_vals = {
                     'item_id': item_id,
                     'scope_no': scope_no,
@@ -299,6 +357,8 @@ class ProjectScopeImportWizard(models.TransientModel):
 
                 if acc_str:
                     matched_acc = self.env['hr.employee'].sudo().search([('name', '=ilike', str(acc_str).strip())], limit=1)
+                    if not matched_acc:
+                        matched_acc = self.env['hr.employee'].sudo().search([('name', 'ilike', str(acc_str).strip())], limit=1)
                     if matched_acc:
                         scope_vals['accountable_id'] = matched_acc.id
 
@@ -390,6 +450,10 @@ class ProjectScopeImportWizard(models.TransientModel):
                     doc_resp = r[7] if len(r) > 7 else ''
                     doc_start = self._parse_date(r[8] if len(r) > 8 else '')
                     doc_end = self._parse_date(r[9] if len(r) > 9 else '')
+                    if doc_start and not doc_end:
+                        doc_end = doc_start
+                    elif doc_end and not doc_start:
+                        doc_start = doc_end
 
                     if doc_name:
                         try:
@@ -420,13 +484,31 @@ class ProjectScopeImportWizard(models.TransientModel):
                             'scope': scope_name,
                             'project_id': self.project_id.id,
                         }
+                        if doc_acc:
+                            m_acc = Employee.search([('name', '=ilike', str(doc_acc).strip())], limit=1)
+                            if not m_acc:
+                                m_acc = Employee.search([('name', 'ilike', str(doc_acc).strip())], limit=1)
+                            if m_acc:
+                                doc_vals['accountable_id'] = m_acc.id
+                        if doc_resp:
+                            m_emps = []
+                            for rn in str(doc_resp).split(','):
+                                if rn.strip():
+                                    me = Employee.search([('name', '=ilike', rn.strip())], limit=1)
+                                    if not me:
+                                        me = Employee.search([('name', 'ilike', rn.strip())], limit=1)
+                                    if me and me.id not in m_emps:
+                                        m_emps.append(me.id)
+                            if m_emps:
+                                doc_vals['responsible_ids'] = [(6, 0, m_emps)]
+                                doc_vals['responsible_id'] = m_emps[0]
 
                         existing_doc = existing_by_item_id.get(doc_item_id) or existing_by_key.get(
                             (scope_name.strip().lower(), doc_name.strip().lower(), 'Documentation'))
                         if existing_doc:
                             up = {}
                             for fn, fv in doc_vals.items():
-                                if fv and not getattr(existing_doc, fn, None):
+                                if fv and (not getattr(existing_doc, fn, None) or fn in ('start_date', 'end_date', 'accountable_id', 'responsible_ids')):
                                     up[fn] = fv
                             if not existing_doc.approval_authority and doc_auth_val:
                                 up['approval_authority'] = doc_auth_val
@@ -449,6 +531,10 @@ class ProjectScopeImportWizard(models.TransientModel):
                         act_resp = r[17] if len(r) > 17 else ''
                         act_start = self._parse_date(r[18] if len(r) > 18 else '')
                         act_end = self._parse_date(r[19] if len(r) > 19 else '')
+                        if act_start and not act_end:
+                            act_end = act_start
+                        elif act_end and not act_start:
+                            act_start = act_end
 
                         if act_name:
                             try:
@@ -480,13 +566,31 @@ class ProjectScopeImportWizard(models.TransientModel):
                                 'scope': scope_name,
                                 'project_id': self.project_id.id,
                             }
+                            if act_acc:
+                                m_acc = Employee.search([('name', '=ilike', str(act_acc).strip())], limit=1)
+                                if not m_acc:
+                                    m_acc = Employee.search([('name', 'ilike', str(act_acc).strip())], limit=1)
+                                if m_acc:
+                                    act_vals['accountable_id'] = m_acc.id
+                            if act_resp:
+                                m_emps = []
+                                for rn in str(act_resp).split(','):
+                                    if rn.strip():
+                                        me = Employee.search([('name', '=ilike', rn.strip())], limit=1)
+                                        if not me:
+                                            me = Employee.search([('name', 'ilike', rn.strip())], limit=1)
+                                        if me and me.id not in m_emps:
+                                            m_emps.append(me.id)
+                                if m_emps:
+                                    act_vals['responsible_ids'] = [(6, 0, m_emps)]
+                                    act_vals['responsible_id'] = m_emps[0]
 
                             existing_act = existing_by_item_id.get(act_item_id) or existing_by_key.get(
                                 (scope_name.strip().lower(), act_name.strip().lower(), 'Implementation'))
                             if existing_act:
                                 up = {}
                                 for fn, fv in act_vals.items():
-                                    if fv and not getattr(existing_act, fn, None):
+                                    if fv and (not getattr(existing_act, fn, None) or fn in ('start_date', 'end_date', 'accountable_id', 'responsible_ids')):
                                         up[fn] = fv
                                 if not existing_act.approval_authority and act_auth_val:
                                     up['approval_authority'] = act_auth_val
@@ -499,3 +603,4 @@ class ProjectScopeImportWizard(models.TransientModel):
                                 tasks_count += 1
 
         return scopes_count, tasks_count
+

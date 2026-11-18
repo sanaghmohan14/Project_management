@@ -6,4 +6,13 @@
         <field name="tag">project_manage_dashboard</field>
         <field name="target">current</field>
     </record>
+
+    <!-- Project Management Tasks Calendar Dashboard Client Action -->
+    <record id="action_project_manage_calendar_dashboard" model="ir.actions.client">
+        <field name="name">Tasks Calendar</field>
+        <field name="tag">project_manage_dashboard</field>
+        <field name="target">current</field>
+        <field name="context">{'default_main_view': 'calendar'}</field>
+        <field name="params">{'default_main_view': 'calendar'}</field>
+    </record>
 </odoo>

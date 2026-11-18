@@ -387,6 +387,7 @@
         <field name="name">Scopes</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,calendar,form</field>
+        <field name="domain">[('is_creation_approval', '=', False), ('state', '!=', 'draft')]</field>
         <field name="view_id" ref="view_project_manage_scope_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
@@ -401,6 +402,7 @@
         <field name="name">Tasks Calendar</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">calendar,list,kanban,form</field>
+        <field name="domain">[('is_creation_approval', '=', False), ('state', '!=', 'draft')]</field>
         <field name="view_id" ref="view_project_manage_scope_calendar"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
         <field name="help" type="html">
@@ -446,7 +448,7 @@
         <field name="name">Documentation Tasks</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,calendar,form</field>
-        <field name="domain">[('category', '=', 'Documentation')]</field>
+        <field name="domain">[('category', '=', 'Documentation'), ('is_creation_approval', '=', False), ('state', '!=', 'draft')]</field>
         <field name="context">{'default_category': 'Documentation', 'search_default_f_doc': 1}</field>
         <field name="view_id" ref="view_project_manage_scope_doc_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
@@ -490,7 +492,7 @@
         <field name="name">Implementation Tasks</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,calendar,form</field>
-        <field name="domain">[('category', '=', 'Implementation')]</field>
+        <field name="domain">[('category', '=', 'Implementation'), ('is_creation_approval', '=', False), ('state', '!=', 'draft')]</field>
         <field name="context">{'default_category': 'Implementation', 'search_default_f_imp': 1}</field>
         <field name="view_id" ref="view_project_manage_scope_imp_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>
@@ -534,7 +536,7 @@
         <field name="name">Documentation (All Documents)</field>
         <field name="res_model">project.manage.scope</field>
         <field name="view_mode">list,kanban,form</field>
-        <field name="domain">[('category', '=', 'Documentation')]</field>
+        <field name="domain">[('category', '=', 'Documentation'), ('is_creation_approval', '=', False), ('state', '!=', 'draft')]</field>
         <field name="context">{'default_category': 'Documentation'}</field>
         <field name="view_id" ref="view_project_manage_scope_doc_list"/>
         <field name="search_view_id" ref="view_project_manage_scope_search"/>

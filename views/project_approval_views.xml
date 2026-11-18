@@ -35,6 +35,10 @@
                 <field name="scope" string="Scope" optional="show"/>
                 <field name="name" string="Task / Item"/>
                 <field name="project_id" string="Project"/>
+                <field name="request_type" string="Request Type" widget="badge"
+                       decoration-warning="request_type == 'scope_creation'"
+                       decoration-info="request_type == 'deliverable'"
+                       optional="show"/>
                 <field name="category" string="Category" optional="show"/>
                 <field name="responsible_ids" string="Assigned To" widget="many2many_tags"/>
                 <field name="submitted_by_id" string="Submitted By" optional="show"/>
@@ -70,6 +74,9 @@
                 <field name="submitted_by_id" string="Submitted By"/>
 
                 <filter string="Starred / High Priority" name="filter_starred" domain="[('priority', 'in', ('2', '3'))]"/>
+                <separator/>
+                <filter string="New Scope Requests" name="filter_scope_creation" domain="[('is_creation_approval', '=', True)]"/>
+                <filter string="Deliverable Sign-Offs" name="filter_deliverables" domain="[('is_creation_approval', '=', False)]"/>
                 <separator/>
                 <filter string="Waiting My Approval" name="filter_waiting_my_approval" domain="[('can_user_approve', '=', True)]"/>
                 <filter string="Submitted by Me" name="filter_submitted_by_me" domain="[('submitted_by_id', '=', uid)]"/>

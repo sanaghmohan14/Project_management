@@ -122,17 +122,18 @@ class ProjectManage(models.Model):
             if missing_auth_scopes:
                 missing_auth_scopes.action_populate_approval_authority()
 
-            # 1. Scope & Task Completion Metrics
-            total_tasks = len(rec.scope_ids)
-            done_tasks = len(rec.scope_ids.filtered(lambda s: s.state == 'done'))
-            review_tasks = len(rec.scope_ids.filtered(
+            # 1. Scope & Task Completion Metrics (excluding pending scope creation requests)
+            active_scopes = rec.scope_ids.filtered(lambda s: not s.is_creation_approval)
+            total_tasks = len(active_scopes)
+            done_tasks = len(active_scopes.filtered(lambda s: s.state == 'done'))
+            review_tasks = len(active_scopes.filtered(
                 lambda s: s.state == 'under_review' or (s.approval_state and s.approval_state.startswith('pending'))
             ))
-            in_prog_tasks = len(rec.scope_ids.filtered(lambda s: s.state == 'in_progress'))
-            overdue_tasks = len(rec.scope_ids.filtered(
+            in_prog_tasks = len(active_scopes.filtered(lambda s: s.state == 'in_progress'))
+            overdue_tasks = len(active_scopes.filtered(
                 lambda s: s.end_date and today > s.end_date and s.state != 'done'
             ))
-            rejected_tasks = len(rec.scope_ids.filtered(
+            rejected_tasks = len(active_scopes.filtered(
                 lambda s: s.approval_state == 'rejected'
             ))
 
@@ -281,9 +282,10 @@ class ProjectManage(models.Model):
 
     def _compute_counts(self):
         for rec in self:
-            rec.scope_count = len(set(rec.scope_ids.mapped('scope_no'))) if rec.scope_ids else 0
-            rec.doc_count = len(rec.scope_ids.filtered(lambda s: s.category == 'Documentation'))
-            rec.imp_count = len(rec.scope_ids.filtered(lambda s: s.category == 'Implementation'))
+            approved_scopes = rec.scope_ids.filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
+            rec.scope_count = len(set(approved_scopes.mapped('scope_no'))) if approved_scopes else 0
+            rec.doc_count = len(approved_scopes.filtered(lambda s: s.category == 'Documentation'))
+            rec.imp_count = len(approved_scopes.filtered(lambda s: s.category == 'Implementation'))
 
     def action_view_scopes(self):
         self.ensure_one()
@@ -293,7 +295,7 @@ class ProjectManage(models.Model):
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
             'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
-            'domain': [('project_id', '=', self.id)],
+            'domain': [('project_id', '=', self.id), ('is_creation_approval', '=', False), ('state', '!=', 'draft')],
             'context': {'default_project_id': self.id},
         }
 
@@ -305,7 +307,7 @@ class ProjectManage(models.Model):
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
             'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
-            'domain': [('project_id', '=', self.id), ('category', '=', 'Documentation')],
+            'domain': [('project_id', '=', self.id), ('category', '=', 'Documentation'), ('is_creation_approval', '=', False), ('state', '!=', 'draft')],
             'context': {'default_project_id': self.id, 'default_category': 'Documentation'},
         }
 
@@ -317,7 +319,7 @@ class ProjectManage(models.Model):
             'res_model': 'project.manage.scope',
             'view_mode': 'kanban,list,form',
             'views': [(False, 'kanban'), (False, 'list'), (False, 'form')],
-            'domain': [('project_id', '=', self.id), ('category', '=', 'Implementation')],
+            'domain': [('project_id', '=', self.id), ('category', '=', 'Implementation'), ('is_creation_approval', '=', False), ('state', '!=', 'draft')],
             'context': {'default_project_id': self.id, 'default_category': 'Implementation'},
         }
 
@@ -490,7 +492,7 @@ class ProjectManage(models.Model):
 
             # 2. Check for duplicate scope_no assigned to different functional scopes (excluding Scope 0 governance)
             refreshed_scopes = self.env['project.manage.scope'].sudo().search(
-                [('project_id', '=', project.id)],
+                [('project_id', '=', project.id), ('is_creation_approval', '=', False), ('state', '!=', 'draft')],
                 order='scope_no asc, id asc'
             )
             scope_no_to_name = {}
@@ -541,6 +543,8 @@ class ProjectManage(models.Model):
         # 1. If this exact scope already exists in project, reuse its scope_no
         existing = self.env['project.manage.scope'].sudo().search([
             ('project_id', '=', self.id),
+            ('is_creation_approval', '=', False),
+            ('state', '!=', 'draft'),
             ('scope', '=ilike', clean_name)
         ], limit=1)
         if existing and existing.scope_no is not None:
@@ -556,7 +560,9 @@ class ProjectManage(models.Model):
 
         # 3. Check existing scope numbers currently in this project
         project_scopes = self.env['project.manage.scope'].sudo().search([
-            ('project_id', '=', self.id)
+            ('project_id', '=', self.id),
+            ('is_creation_approval', '=', False),
+            ('state', '!=', 'draft'),
         ])
         used_numbers = set()
         for s in project_scopes:
@@ -670,6 +676,13 @@ class ProjectManage(models.Model):
                 if to_unlink:
                     to_unlink.unlink()
 
+            # 3. Synchronize single dates across all project tasks for calendar display
+            for sc in project.scope_ids:
+                if sc.start_date and not sc.end_date:
+                    sc.write({'end_date': sc.start_date})
+                elif sc.end_date and not sc.start_date:
+                    sc.write({'start_date': sc.end_date})
+
         return {
             'type': 'ir.actions.client',
             'tag': 'display_notification',
@@ -753,6 +766,26 @@ class ProjectManage(models.Model):
     def get_dashboard_data(self, team_id=None, project_id=None, view_as_role=None, **kwargs):
         today = fields.Date.today()
         user = self.env.user
+
+        # Enforce Scopes menu access strictly for Project Managers only (self-heal in DB)
+        try:
+            tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
+            cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
+            mgr_grp = self.env.ref('project_manage.group_project_manage_manager', raise_if_not_found=False)
+            if mgr_grp:
+                for xid in (
+                    'project_manage.menu_project_manage_scopes_menu',
+                    'project_manage.menu_project_manage_scopes_calendar',
+                    'project_manage.menu_project_manage_scopes',
+                    'project_manage.menu_project_manage_documentation',
+                    'project_manage.menu_project_manage_implementation',
+                ):
+                    m_rec = self.env.ref(xid, raise_if_not_found=False)
+                    if m_rec and (tl_grp in m_rec.group_ids or cons_grp in m_rec.group_ids or mgr_grp not in m_rec.group_ids):
+                        m_rec.sudo().write({'group_ids': [(6, 0, [mgr_grp.id])]})
+                        self.env.registry.clear_cache()
+        except Exception:
+            pass
 
         # ---- User Role Identification & Privileges ----
         is_actual_admin = (
@@ -1302,6 +1335,8 @@ class ProjectManage(models.Model):
                 'approval_state': s.approval_state,
                 'approval_stage_label': dict(s._fields['approval_state'].selection).get(s.approval_state, ''),
                 'can_approve': bool(s.can_user_approve),
+                'is_creation_approval': bool(s.is_creation_approval),
+                'request_type_label': 'New Scope Request' if s.is_creation_approval else 'Deliverable Approval',
             })
 
         # ---- Universal Role-Based Tasks Hub (Pending & Completed Tasks) ----
@@ -1394,6 +1429,7 @@ class ProjectManage(models.Model):
                 target_proj.action_sync_imported_scopes()
 
         all_hub_scopes = Scope.search(hub_domain, order='end_date asc, id desc')
+        all_hub_scopes = all_hub_scopes.filtered(lambda s: not s.is_creation_approval)
 
         # Filter strictly by definition:
         # Pending: active tasks not completed (state != 'done' and state != 'cancelled' and approval_state != 'approved')
@@ -1673,6 +1709,8 @@ class ProjectManage(models.Model):
         calendar_events = []
         for p in projects:
             for s in p.scope_ids:
+                if s.is_creation_approval:
+                    continue
                 task_date = s.end_date
                 if task_date:
                     is_task_late = bool(s.end_date and today > s.end_date and s.state != 'done')
@@ -1722,6 +1760,7 @@ class ProjectManage(models.Model):
                 'is_executive': is_actual_admin or is_actual_ceo or role_code in ('admin', 'ceo', 'vp'),
                 'can_approve': True if (is_actual_admin or is_actual_ceo) else role_code in ('vp', 'manager', 'team_lead'),
                 'can_create_project': can_create_project,
+                'can_create_scope': is_actual_admin or role_code in ('admin', 'ceo', 'vp', 'manager'),
                 'can_see_all_teams': can_see_all_teams,
                 'can_switch_roles': False,
                 'active_view_mode': role_code,
@@ -1793,16 +1832,22 @@ class ProjectManage(models.Model):
         return False
 
     @api.model
-    def action_dashboard_approve_scope(self, scope_id, note=None):
-        scope = self.env['project.manage.scope'].browse(scope_id)
+    def action_dashboard_approve_scope(self, scope_id=None, note=None, **kwargs):
+        sid = scope_id or kwargs.get('scope_id')
+        if not sid:
+            return False
+        scope = self.env['project.manage.scope'].browse(int(sid))
         if scope.exists():
             scope.action_approve_level(note=note)
             return True
         return False
 
     @api.model
-    def action_dashboard_reject_scope(self, scope_id, reason=None):
-        scope = self.env['project.manage.scope'].browse(scope_id)
+    def action_dashboard_reject_scope(self, scope_id=None, reason=None, **kwargs):
+        sid = scope_id or kwargs.get('scope_id')
+        if not sid:
+            return False
+        scope = self.env['project.manage.scope'].browse(int(sid))
         if scope.exists():
             scope.action_reject_level(reason=reason)
             return True
@@ -1843,9 +1888,24 @@ class ProjectManage(models.Model):
         project._heal_project_scope_numbers()
         project.action_sync_imported_scopes()
 
+        # Heal any unapproved scope creation requests so they are strictly marked is_creation_approval = True
+        unapproved_pending = self.env['project.manage.scope'].sudo().search([
+            ('project_id', '=', project.id),
+            ('approval_state', 'in', ('pending_vp', 'pending_ceo')),
+            ('state', 'in', ('draft', 'todo')),
+            ('approval_authority', '=', 'CEO'),
+        ])
+        for sc in unapproved_pending:
+            if not sc.evidence_proof and not sc.document_ids and not sc.is_creation_approval:
+                sc.sudo().write({'is_creation_approval': True, 'state': 'draft'})
+
         scopes_data = []
         scopes = self.env['project.manage.scope'].sudo().search(
-            [('project_id', '=', project.id)],
+            [
+                ('project_id', '=', project.id),
+                ('is_creation_approval', '=', False),
+                ('state', '!=', 'draft'),
+            ],
             order='scope_no asc, category asc, item_no asc, id asc'
         )
 
@@ -1862,7 +1922,22 @@ class ProjectManage(models.Model):
             # - Red: Overdue / Cancelled / Rejected
             # - Slate: To Do / Draft
             status_full_label = ''
-            if s.state == 'done':
+            if s.is_creation_approval:
+                status_color = 'amber'
+                if s.approval_state == 'pending_vp':
+                    status_label = 'Waiting VP'
+                    status_full_label = 'Scope Creation Request (Waiting VP Approval)'
+                elif s.approval_state == 'pending_ceo':
+                    status_label = 'Waiting CEO'
+                    status_full_label = 'Scope Creation Request (Waiting CEO Approval)'
+                elif s.approval_state == 'rejected':
+                    status_color = 'red'
+                    status_label = 'Scope Rejected'
+                    status_full_label = 'Scope Creation Request Rejected'
+                else:
+                    status_label = 'Pending Scope'
+                    status_full_label = 'Scope Creation Request'
+            elif s.state == 'done':
                 status_color = 'green'
                 status_label = 'Completed'
                 status_full_label = 'Completed'
@@ -1950,6 +2025,7 @@ class ProjectManage(models.Model):
                 'status_color': status_color,
                 'status_label': status_label,
                 'status_full_label': status_full_label,
+                'is_creation_approval': bool(s.is_creation_approval),
                 'approval_state': s.approval_state or 'draft',
                 'responsible_id': s.responsible_id.id if s.responsible_id else (s.responsible_ids[:1].id if s.responsible_ids else False),
                 'responsible_ids': s.responsible_ids.ids if s.responsible_ids else ([s.responsible_id.id] if s.responsible_id else []),
@@ -2123,6 +2199,33 @@ class ProjectManage(models.Model):
     @api.model
     def create_scope_from_dashboard(self, project_id, vals):
         """Create a new scope record directly from the dashboard wizard and return refreshed data."""
+        user = self.env.user
+        is_admin_or_ceo = bool(
+            self.env.is_superuser() or
+            self.env.su or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo')
+        )
+        is_vp = bool(user.has_group('project_manage.group_project_manage_vp'))
+        is_manager = is_admin_or_ceo or is_vp or user.has_group('project_manage.group_project_manage_manager')
+        if not is_manager:
+            return {'error': _("Access Denied: Only Project Managers can create new scopes or tasks.")}
+
+        requires_approval = not is_admin_or_ceo
+        if requires_approval:
+            initial_approval_stage = 'pending_ceo' if is_vp else 'pending_vp'
+            valid_states = dict(self.env['project.manage.scope']._fields['state'].selection)
+            create_state = 'draft' if 'draft' in valid_states else 'todo'
+            is_creation_approval = True
+            notification_msg = _("Scope creation request submitted to Vice President (VP) for approval. Once approved by VP and CEO, it will be automatically activated.") if not is_vp else _("Scope creation request submitted to CEO for final approval.")
+        else:
+            create_state = vals.get('state') or 'todo'
+            initial_approval_stage = 'approved' if create_state == 'done' else ('in_progress' if create_state == 'in_progress' else 'draft')
+            is_creation_approval = False
+            notification_msg = _("New scope task created successfully.")
+
         project = self.browse(project_id)
         if not project.exists():
             return {'error': _("Project not found")}
@@ -2190,19 +2293,42 @@ class ProjectManage(models.Model):
             'category': cat_val,
             'name': vals.get('name') or 'Untitled Task',
             'item_type': vals.get('item_type') or '',
-            'approval_authority': auth_val,
+            'approval_authority': 'CEO' if requires_approval else auth_val,
             'responsible_id': emp_ids[0] if emp_ids else False,
             'responsible_ids': [(6, 0, emp_ids)] if emp_ids else False,
             'responsible': emp_name,
             'start_date': vals.get('start_date') or False,
             'end_date': vals.get('end_date') or False,
-            'state': state_val,
-            'approval_state': appr_state,
+            'state': create_state,
+            'approval_state': initial_approval_stage,
+            'is_creation_approval': is_creation_approval,
+            'submitted_by_id': user.id if requires_approval else False,
+            'submitted_date': fields.Datetime.now() if requires_approval else False,
             'priority': str(vals.get('priority') or '0'),
         }
-        self.env['project.manage.scope'].create(create_vals)
+        scope = self.env['project.manage.scope'].with_context(bypass_creation_approval=True).create(create_vals)
+
+        if is_creation_approval:
+            role_label = 'Vice President (VP)' if is_vp else 'Project Manager'
+            next_label = 'CEO' if is_vp else 'Vice President (VP)'
+            self.env['project.manage.scope.approval.log'].sudo().create({
+                'scope_id': scope.id,
+                'user_id': user.id,
+                'role_name': role_label,
+                'action': 'submit',
+                'from_state': 'draft',
+                'to_state': initial_approval_stage,
+                'note': _('Scope creation request submitted by %s (%s). Awaiting %s approval.') % (user.name, role_label, next_label),
+            })
+            scope.message_post(body=_(
+                "New scope task creation request submitted by %s (%s). Sent to %s for approval (Final Authority: CEO)."
+            ) % (user.name, role_label, next_label))
+
         project._compute_metrics()
-        return self.get_project_scopes_dashboard(project.id)
+        res = self.get_project_scopes_dashboard(project.id)
+        res['message'] = notification_msg
+        res['is_creation_approval'] = is_creation_approval
+        return res
 
     @api.model
     def bulk_fill_scopes(self, project_id, scope_ids, vals):
@@ -2686,3 +2812,39 @@ class ProjectManage(models.Model):
             'state': project.state,
             'running_status': project.running_status,
         }
+
+
+class IrUiMenu(models.Model):
+    _inherit = 'ir.ui.menu'
+
+    def _filter_visible_menus(self):
+        """Strictly hide Scopes and Tasks management menus from Team Leads and Consultants."""
+        res = super()._filter_visible_menus()
+        user = self.env.user
+        is_manager = bool(
+            self.env.is_superuser() or
+            self.env.su or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager')
+        )
+        if not is_manager:
+            scope_menu_xmlids = (
+                'project_manage.menu_project_manage_scopes_menu',
+                'project_manage.menu_project_manage_scopes_calendar',
+                'project_manage.menu_project_manage_scopes',
+                'project_manage.menu_project_manage_documentation',
+                'project_manage.menu_project_manage_implementation',
+            )
+            hidden_ids = set()
+            for xid in scope_menu_xmlids:
+                m = self.env.ref(xid, raise_if_not_found=False)
+                if m:
+                    hidden_ids.add(m.id)
+            if hidden_ids:
+                res = res.filtered(lambda menu: menu.id not in hidden_ids)
+        return res
+

@@ -1,9 +1,52 @@
 import base64
+from datetime import datetime, date, timedelta
 from odoo import api, fields, models, _
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, AccessError
 from odoo.fields import Domain
 from .scope_master_data import get_default_approval_authority
 
+try:
+    import dateutil.parser
+except ImportError:
+    dateutil = None
+
+
+def robust_parse_date(val):
+    """Robustly parse date from diverse formats (ISO, dd-mmm-yyyy, serial, timestamps)."""
+    if not val:
+        return False
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    if isinstance(val, (int, float)):
+        try:
+            return (datetime(1899, 12, 30) + timedelta(days=float(val))).date()
+        except Exception:
+            return False
+    s = str(val).strip()
+    if not s or s.lower() in ('false', 'none', 'null', 'nan', 'nat', '-', ''):
+        return False
+    first_part = s.split(' ')[0].split('T')[0].strip()
+    for fmt in (
+        '%Y-%m-%d', '%d-%b-%Y', '%d-%B-%Y', '%d-%b-%y', '%d/%b/%Y', '%d %b %Y', '%d %B %Y',
+        '%d/%m/%Y', '%d-%m-%Y', '%m/%d/%Y', '%d.%m.%Y', '%Y/%m/%d', '%b-%d-%Y', '%b %d, %Y',
+        '%Y-%m-%d %H:%M:%S', '%d-%b-%Y %H:%M:%S', '%d/%m/%Y %H:%M:%S'
+    ):
+        try:
+            return datetime.strptime(first_part, fmt).date()
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    if dateutil:
+        try:
+            return dateutil.parser.parse(s).date()
+        except Exception:
+            pass
+    return False
 
 
 class ProjectManageScope(models.Model):
@@ -115,6 +158,7 @@ class ProjectManageScope(models.Model):
         'project.manage', string='Project', ondelete='cascade', index=True)
 
     state = fields.Selection([
+        ('draft', 'Draft'),
         ('todo', 'To Do'),
         ('in_progress', 'In Progress'),
         ('under_review', 'Under Review'),
@@ -133,6 +177,23 @@ class ProjectManageScope(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected / Re-Work Needed'),
     ], string='Approval Stage', default='draft', tracking=True)
+
+    is_creation_approval = fields.Boolean(
+        string='Scope Creation Request',
+        default=False,
+        index=True,
+        tracking=True,
+        help='Indicates this scope was created by a Project Manager and requires VP & CEO approval before activation.'
+    )
+    request_type = fields.Selection([
+        ('deliverable', 'Deliverable Sign-Off'),
+        ('scope_creation', 'New Scope Request'),
+    ], string='Request Type', compute='_compute_request_type', store=True)
+
+    @api.depends('is_creation_approval')
+    def _compute_request_type(self):
+        for rec in self:
+            rec.request_type = 'scope_creation' if rec.is_creation_approval else 'deliverable'
 
     current_approver_role = fields.Selection([
         ('tl', 'Team Lead (TL)'),
@@ -521,29 +582,137 @@ class ProjectManageScope(models.Model):
                 self.responsible_ids = [(6, 0, emps.ids)]
                 self.responsible_id = emps[0]
 
-    @api.model_create_multi
+    def _is_manager_or_above(self):
+        user = self.env.user
+        return bool(
+            self.env.is_superuser() or
+            self.env.su or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager')
+        )
+
     @api.model
     def check_access(self, operation, raise_exception=True):
-        if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
+        if self._is_manager_or_above():
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
+        if operation == 'create':
+            if raise_exception:
+                raise AccessError(_("Access Denied: Only Project Managers can create new scopes or tasks. Team Leads and Consultants cannot create scopes or tasks."))
+            return False
+        if operation in ('read', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access(operation, raise_exception=raise_exception)
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
-        if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
+        if self._is_manager_or_above():
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
+        if operation == 'create':
+            if raise_exception:
+                raise AccessError(_("Access Denied: Only Project Managers can create new scopes or tasks. Team Leads and Consultants cannot create scopes or tasks."))
+            return False
+        if operation in ('read', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
             return True
         return super().check_access_rights(operation, raise_exception=raise_exception)
 
+    @api.model
+    def load(self, fields, data):
+        """Pre-process date strings and employee names before standard Odoo native import."""
+        clean_fields = [f.strip().lower().replace(' ', '_') if isinstance(f, str) else '' for f in fields]
+        start_indices = [i for i, f in enumerate(clean_fields) if f in ('start_date', 'date_start', 'start')]
+        end_indices = [i for i, f in enumerate(clean_fields) if f in ('end_date', 'date_end', 'end')]
+
+        for row in data:
+            s_val = None
+            e_val = None
+            for idx in start_indices:
+                if idx < len(row) and row[idx]:
+                    d = robust_parse_date(row[idx])
+                    if d:
+                        row[idx] = d.strftime('%Y-%m-%d')
+                        s_val = row[idx]
+            for idx in end_indices:
+                if idx < len(row) and row[idx]:
+                    d = robust_parse_date(row[idx])
+                    if d:
+                        row[idx] = d.strftime('%Y-%m-%d')
+                        e_val = row[idx]
+            # If one is present and the other is empty in the row, sync them
+            if s_val and not e_val:
+                for idx in end_indices:
+                    if idx < len(row) and not row[idx]:
+                        row[idx] = s_val
+            elif e_val and not s_val:
+                for idx in start_indices:
+                    if idx < len(row) and not row[idx]:
+                        row[idx] = e_val
+        return super().load(fields, data)
+
     @api.model_create_multi
     def create(self, vals_list):
+        user = self.env.user
+        is_admin_or_ceo = bool(
+            self.env.is_superuser() or
+            self.env.su or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo')
+        )
+        is_vp = bool(user.has_group('project_manage.group_project_manage_vp'))
+
+        require_creation_approval = (
+            not is_admin_or_ceo and
+            not self.env.su and
+            not self.env.context.get('install_mode') and
+            not self.env.context.get('import_file') and
+            not self.env.context.get('bypass_creation_approval')
+        )
+
+        if not self.env.su and not self.env.context.get('install_mode') and not self.env.context.get('import_file'):
+            if not self._is_manager_or_above():
+                raise AccessError(_("Access Denied: Only Project Managers can create new scopes or tasks. Team Leads and Consultants cannot create scopes or tasks."))
         records_vals = [vals_list] if isinstance(vals_list, dict) else (vals_list or [])
         for vals in records_vals:
             if not isinstance(vals, dict):
                 continue
+
+            if require_creation_approval:
+                vals['is_creation_approval'] = True
+                valid_states = dict(self._fields['state'].selection)
+                vals['state'] = 'draft' if 'draft' in valid_states else 'todo'
+                vals['approval_state'] = 'pending_ceo' if is_vp else 'pending_vp'
+                vals['approval_authority'] = 'CEO'
+                vals['submitted_by_id'] = user.id
+                vals['submitted_date'] = fields.Datetime.now()
+
+            # Normalize field names if passed with alternate keys
+            for alt_s in ('Start_Date', 'Start Date', 'date_start', 'Start'):
+                if alt_s in vals and 'start_date' not in vals:
+                    vals['start_date'] = vals.pop(alt_s)
+            for alt_e in ('End_Date', 'End Date', 'date_end', 'End'):
+                if alt_e in vals and 'end_date' not in vals:
+                    vals['end_date'] = vals.pop(alt_e)
+
+            # Handle dates
+            if vals.get('start_date'):
+                d = robust_parse_date(vals['start_date'])
+                if d:
+                    vals['start_date'] = d
+            if vals.get('end_date'):
+                d = robust_parse_date(vals['end_date'])
+                if d:
+                    vals['end_date'] = d
+            # Ensure both start_date and end_date for calendar view
+            if vals.get('start_date') and not vals.get('end_date'):
+                vals['end_date'] = vals['start_date']
+            elif vals.get('end_date') and not vals.get('start_date'):
+                vals['start_date'] = vals['end_date']
+
             # Handle responsible text if present and IDs not set
             resp_txt = vals.pop('responsible', None)
             if resp_txt and not vals.get('responsible_ids') and not vals.get('responsible_id'):
@@ -616,9 +785,47 @@ class ProjectManageScope(models.Model):
             elif vals.get('end_date') and not vals.get('start_date'):
                 vals['start_date'] = vals['end_date']
 
-        return super().create(vals_list)
+        created_records = super().create(vals_list)
+        if require_creation_approval:
+            role_label = 'Vice President (VP)' if is_vp else 'Project Manager'
+            next_label = 'CEO' if is_vp else 'Vice President (VP)'
+            for rec in created_records:
+                if rec.is_creation_approval:
+                    self.env['project.manage.scope.approval.log'].sudo().create({
+                        'scope_id': rec.id,
+                        'user_id': user.id,
+                        'role_name': role_label,
+                        'action': 'submit',
+                        'from_state': 'draft',
+                        'to_state': rec.approval_state,
+                        'note': _('Scope creation request submitted by %s (%s). Awaiting %s approval.') % (user.name, role_label, next_label),
+                    })
+                    rec.message_post(body=_("New scope task creation request submitted by %s (%s). Sent to %s for approval (Final Authority: CEO).") % (user.name, role_label, next_label))
+        return created_records
 
     def write(self, vals):
+        # Normalize field names if passed with alternate keys
+        for alt_s in ('Start_Date', 'Start Date', 'date_start', 'Start'):
+            if alt_s in vals and 'start_date' not in vals:
+                vals['start_date'] = vals.pop(alt_s)
+        for alt_e in ('End_Date', 'End Date', 'date_end', 'End'):
+            if alt_e in vals and 'end_date' not in vals:
+                vals['end_date'] = vals.pop(alt_e)
+
+        # Robustly parse dates
+        if vals.get('start_date'):
+            d = robust_parse_date(vals['start_date'])
+            if d:
+                vals['start_date'] = d
+        if vals.get('end_date'):
+            d = robust_parse_date(vals['end_date'])
+            if d:
+                vals['end_date'] = d
+        if vals.get('start_date') and not vals.get('end_date'):
+            vals['end_date'] = vals['start_date']
+        elif vals.get('end_date') and not vals.get('start_date'):
+            vals['start_date'] = vals['end_date']
+
         # Handle responsible text if present and IDs not set
         resp_txt = vals.pop('responsible', None)
         if resp_txt and not vals.get('responsible_ids') and not vals.get('responsible_id'):
@@ -665,6 +872,9 @@ class ProjectManageScope(models.Model):
         user = self.env.user
         is_privileged = bool(
             self.env.is_superuser() or
+            self.env.su or
+            self.env.context.get('import_file') or
+            self.env.context.get('install_mode') or
             user.id in (1, 2) or
             user.has_group('base.group_system') or
             user.has_group('project_manage.group_project_manage_administrator') or
@@ -844,7 +1054,10 @@ class ProjectManageScope(models.Model):
 
             elif cur == 'pending_vp':
                 role_label = 'Vice President (VP)'
-                if final_auth == 'VP':
+                if rec.is_creation_approval:
+                    next_stage = 'pending_ceo'
+                    next_label = 'CEO'
+                elif final_auth == 'VP':
                     next_stage = 'approved'
                     next_label = 'Done'
                 else:
@@ -873,10 +1086,26 @@ class ProjectManageScope(models.Model):
                 'approval_state': next_stage,
                 'last_approval_date': fields.Datetime.now(),
             }
-            if next_stage == 'approved':
+            if rec.is_creation_approval and (cur == 'pending_ceo' or next_stage == 'approved'):
+                # Final CEO approval for scope creation: officially activate scope!
+                vals['is_creation_approval'] = False
+                vals['state'] = 'todo'
+                vals['approval_state'] = 'draft'
+                log_note = note or (_('Final scope creation approval granted by %s (%s). Scope task is now officially created and active in the project.') % (user.name, role_label))
+                chatter_msg = _("Scope creation officially approved by %s (%s). The scope task '%s' is now active in project '%s'.") % (user.name, role_label, rec.name, rec.project_id.name if rec.project_id else '')
+            elif next_stage == 'approved':
                 vals['state'] = 'done'
                 if not rec.end_date:
                     vals['end_date'] = fields.Date.context_today(rec)
+                log_note = note or (_('Final approval granted by %s (%s). Task officially completed.') % (user.name, role_label))
+                chatter_msg = _("Task officially approved and marked Done by %s (Final Authority: %s).") % (user.name, final_auth)
+            else:
+                if rec.is_creation_approval:
+                    log_note = note or (_('Scope creation approved by %s (%s). Forwarded to %s for final approval.') % (user.name, role_label, next_label))
+                    chatter_msg = _("Scope creation approved by %s (%s). Forwarded to %s for final approval.") % (user.name, role_label, next_label)
+                else:
+                    log_note = note or (_('Approved by %s (%s). Forwarded to %s for next review.') % (user.name, role_label, next_label))
+                    chatter_msg = _("Approved by %s (%s). Forwarded to %s for review (Final Authority: %s).") % (user.name, role_label, next_label, final_auth)
 
             rec.write(vals)
 
@@ -886,18 +1115,12 @@ class ProjectManageScope(models.Model):
                 'role_name': role_label,
                 'action': 'approve',
                 'from_state': cur,
-                'to_state': next_stage,
-                'note': note or (
-                    _('Approved by %s (%s). Forwarded to %s for next review.') % (user.name, role_label, next_label)
-                    if next_stage != 'approved'
-                    else _('Final approval granted by %s (%s). Task officially completed.', user.name, role_label)
-                ),
+                'to_state': vals.get('approval_state', next_stage),
+                'note': log_note,
             })
-
-            if next_stage == 'approved':
-                rec.message_post(body=_("Task officially approved and marked Done by %s (Final Authority: %s).", user.name, final_auth))
-            else:
-                rec.message_post(body=_("Approved by %s (%s). Forwarded to %s for review (Final Authority: %s).", user.name, role_label, next_label, final_auth))
+            rec.message_post(body=chatter_msg)
+            if rec.project_id:
+                rec.project_id._compute_metrics()
 
     def action_populate_approval_authority(self):
         """Mass action to populate/pre-fill final approval authority from master data."""
@@ -929,21 +1152,38 @@ class ProjectManageScope(models.Model):
         user = self.env.user
         for rec in self:
             prev = rec.approval_state
-            rec.write({
-                'approval_state': 'rejected',
-                'state': 'in_progress',
-                'rejection_reason': reason or _('Re-work requested by %s.', user.name),
-            })
-            rec.env['project.manage.scope.approval.log'].sudo().create({
-                'scope_id': rec.id,
-                'user_id': user.id,
-                'role_name': user.name,
-                'action': 'reject',
-                'from_state': prev,
-                'to_state': 'rejected',
-                'note': reason or _('Rejected by %s. Re-work required.', user.name),
-            })
-            rec.message_post(body=_("Task rejected by %s. Reason: %s", user.name, reason or _('Re-work required.')))
+            if rec.is_creation_approval:
+                rec.write({
+                    'approval_state': 'rejected',
+                    'state': 'cancelled',
+                    'rejection_reason': reason or _('Scope creation request rejected by %s.', user.name),
+                })
+                rec.env['project.manage.scope.approval.log'].sudo().create({
+                    'scope_id': rec.id,
+                    'user_id': user.id,
+                    'role_name': user.name,
+                    'action': 'reject',
+                    'from_state': prev,
+                    'to_state': 'rejected',
+                    'note': reason or _('Scope creation request rejected by %s.', user.name),
+                })
+                rec.message_post(body=_("Scope creation request rejected by %s. Reason: %s") % (user.name, reason or _('Scope creation rejected.')))
+            else:
+                rec.write({
+                    'approval_state': 'rejected',
+                    'state': 'in_progress',
+                    'rejection_reason': reason or _('Re-work requested by %s.', user.name),
+                })
+                rec.env['project.manage.scope.approval.log'].sudo().create({
+                    'scope_id': rec.id,
+                    'user_id': user.id,
+                    'role_name': user.name,
+                    'action': 'reject',
+                    'from_state': prev,
+                    'to_state': 'rejected',
+                    'note': reason or _('Rejected by %s. Re-work required.', user.name),
+                })
+                rec.message_post(body=_("Task rejected by %s. Reason: %s") % (user.name, reason or _('Re-work required.')))
 
     def action_open_reject_wizard(self):
         self.ensure_one()
@@ -1062,6 +1302,8 @@ class ProjectManageScope(models.Model):
             'state_label': dict(scope._fields['state'].selection).get(scope.state, 'To Do'),
             'approval_state': scope.approval_state or 'draft',
             'approval_label': dict(scope._fields['approval_state'].selection).get(scope.approval_state, 'Draft'),
+            'is_creation_approval': bool(scope.is_creation_approval),
+            'request_type_label': 'Scope Creation Request' if scope.is_creation_approval else 'Deliverable Sign-Off',
             'submitted_by_name': scope.submitted_by_id.name if scope.submitted_by_id else '',
             'submission_date_str': scope.submitted_date.strftime('%d %b %Y, %I:%M %p') if scope.submitted_date else '',
             'submission_notes': scope.evidence_proof or scope.notes or '',

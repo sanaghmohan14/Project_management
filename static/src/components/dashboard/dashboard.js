@@ -1,6 +1,6 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillStart, onMounted, onWillUnmount, useRef } from "@odoo/owl";
+import { Component, useState, onWillStart, onMounted, onWillUnmount, onWillUpdateProps, useRef } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 
@@ -22,20 +22,35 @@ export class ProjectManageDashboard extends Component {
         );
         const initialDark = savedTheme !== null ? (savedTheme === "dark") : Boolean(isOdooDark);
 
+        const actionParams = this.props?.action?.params || {};
+        const actionContext = this.props?.action?.context || this.props?.context || {};
+        const defaultView = actionParams.default_main_view || actionContext.default_main_view || 'home';
+
+        onWillUpdateProps((nextProps) => {
+            const nextActionParams = nextProps?.action?.params || {};
+            const nextActionContext = nextProps?.action?.context || nextProps?.context || {};
+            const nextView = nextActionParams.default_main_view || nextActionContext.default_main_view;
+            if (nextView && nextView !== this.state.activeMainView) {
+                this.setActiveTab(nextView);
+            }
+        });
+
         this.state = useState({
             loading: true,
             darkMode: initialDark,
             isMobile: typeof window !== 'undefined' ? (window.innerWidth < 992) : false,
-            activeMainView: 'home',  // 'home', 'projects', 'approvals', 'scopes', 'calendar' (used on mobile only)
+            activeMainView: defaultView,  // 'home', 'projects', 'approvals', 'scopes', 'calendar'
             projectStatusFilter: 'all',  // 'all', 'running', 'on_hold', 'completed', 'high_risk'
-            calendarTimeFilter: 'month',  // 'today', 'tomorrow', 'week', 'month', 'all'
-            calendarViewMode: 'month',   // 'month', 'week', 'agenda'
+            calendarTimeFilter: 'today',  // 'today', 'tomorrow', 'week', 'month', 'all'
+            calendarViewMode: 'week_strip',   // 'week_strip', 'month', 'agenda'
             calendarCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
             calendarTypeFilter: 'task',  // strictly tasks only
             calendarStatusFilter: 'all', // 'all', 'overdue', 'in_progress', 'done'
             calendarYear: new Date().getFullYear(),
             calendarMonth: new Date().getMonth(), // 0-11
             calendarDate: new Date().getDate(),
+            calendarTaskFilterScope: 'day', // 'day' (selected date), 'week', 'month', 'overdue'
+            calendarSearchQuery: "",
             selectedTeamId: null,
             activeRoleView: null,
             selectedProjectId: null,
@@ -565,7 +580,10 @@ export class ProjectManageDashboard extends Component {
 
     isSectionVisible(section) {
         if (!this.state.isMobile) {
-            // Desktop view: ALWAYS show all sections continuously as before
+            // Desktop view:
+            if (this.state.activeMainView === 'calendar') {
+                return section === 'calendar';
+            }
             if (section === 'calendar') {
                 return false;
             }
@@ -663,7 +681,9 @@ export class ProjectManageDashboard extends Component {
     }
 
     calendarPrev() {
-        if (this.state.calendarViewMode === 'month') {
+        if (this.state.calendarViewMode === 'week_strip') {
+            this.calendarPrevDay();
+        } else if (this.state.calendarViewMode === 'month') {
             if (this.state.calendarMonth === 0) {
                 this.state.calendarMonth = 11;
                 this.state.calendarYear -= 1;
@@ -676,15 +696,14 @@ export class ProjectManageDashboard extends Component {
             this.state.calendarMonth = cur.getMonth();
             this.state.calendarDate = cur.getDate();
         } else {
-            const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate - 1);
-            this.state.calendarYear = cur.getFullYear();
-            this.state.calendarMonth = cur.getMonth();
-            this.state.calendarDate = cur.getDate();
+            this.calendarPrevDay();
         }
     }
 
     calendarNext() {
-        if (this.state.calendarViewMode === 'month') {
+        if (this.state.calendarViewMode === 'week_strip') {
+            this.calendarNextDay();
+        } else if (this.state.calendarViewMode === 'month') {
             if (this.state.calendarMonth === 11) {
                 this.state.calendarMonth = 0;
                 this.state.calendarYear += 1;
@@ -697,11 +716,36 @@ export class ProjectManageDashboard extends Component {
             this.state.calendarMonth = cur.getMonth();
             this.state.calendarDate = cur.getDate();
         } else {
-            const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate + 1);
-            this.state.calendarYear = cur.getFullYear();
-            this.state.calendarMonth = cur.getMonth();
-            this.state.calendarDate = cur.getDate();
+            this.calendarNextDay();
         }
+    }
+
+    calendarPrevDay() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate - 1);
+        this.state.calendarYear = cur.getFullYear();
+        this.state.calendarMonth = cur.getMonth();
+        this.state.calendarDate = cur.getDate();
+    }
+
+    calendarNextDay() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate + 1);
+        this.state.calendarYear = cur.getFullYear();
+        this.state.calendarMonth = cur.getMonth();
+        this.state.calendarDate = cur.getDate();
+    }
+
+    calendarPrevWeek() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate - 7);
+        this.state.calendarYear = cur.getFullYear();
+        this.state.calendarMonth = cur.getMonth();
+        this.state.calendarDate = cur.getDate();
+    }
+
+    calendarNextWeek() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate + 7);
+        this.state.calendarYear = cur.getFullYear();
+        this.state.calendarMonth = cur.getMonth();
+        this.state.calendarDate = cur.getDate();
     }
 
     calendarToday() {
@@ -709,7 +753,199 @@ export class ProjectManageDashboard extends Component {
         this.state.calendarYear = now.getFullYear();
         this.state.calendarMonth = now.getMonth();
         this.state.calendarDate = now.getDate();
+        this.state.calendarTaskFilterScope = 'day';
         this.state.calendarTimeFilter = 'today';
+    }
+
+    selectCalendarDate(day) {
+        if (!day) return;
+        this.state.calendarYear = day.year;
+        this.state.calendarMonth = day.month;
+        this.state.calendarDate = day.dayNum;
+        this.state.calendarTaskFilterScope = 'day';
+    }
+
+    get calendarSelectedDateIso() {
+        const pad = (n) => String(n).padStart(2, "0");
+        return `${this.state.calendarYear}-${pad(this.state.calendarMonth + 1)}-${pad(this.state.calendarDate)}`;
+    }
+
+    get calendarSelectedDateTitle() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        return `${dayNames[cur.getDay()]}, ${monthNames[cur.getMonth()]} ${cur.getDate()}`;
+    }
+
+    get calendarSelectedDateFullTitle() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        return `${dayNames[cur.getDay()]}, ${cur.getDate()} ${monthNames[cur.getMonth()]} ${cur.getFullYear()}`;
+    }
+
+    get calendarIsSelectedDateToday() {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        return this.calendarSelectedDateIso === todayIso;
+    }
+
+    get calendarWeekStripDays() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayOfWeek = cur.getDay(); // 0 is Sun, 1 is Mon...
+        const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        const monday = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + diffToMon);
+
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const selectedIso = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+
+        const dayNames = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
+        const allEvents = (this.state.data && this.state.data.calendar_events) ? 
+                          this.state.data.calendar_events.filter(e => e.type === 'task') : [];
+
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
+            const dateIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const dayEvents = allEvents.filter(e => e.date === dateIso);
+            const hasOverdue = dayEvents.some(e => e.is_overdue);
+            const hasCompleted = dayEvents.some(e => e.status === 'done');
+            const hasInProgress = dayEvents.some(e => e.status === 'in_progress');
+
+            days.push({
+                dayName: dayNames[i],
+                dayNum: d.getDate(),
+                year: d.getFullYear(),
+                month: d.getMonth(),
+                dateIso,
+                isToday: dateIso === todayIso,
+                isSelected: dateIso === selectedIso,
+                taskCount: dayEvents.length,
+                hasOverdue,
+                hasCompleted,
+                hasInProgress,
+                events: dayEvents,
+            });
+        }
+        return days;
+    }
+
+    get calendarSelectedDayTasks() {
+        let events = (this.state.data && this.state.data.calendar_events) ? 
+                     this.state.data.calendar_events.filter(e => e.type === 'task') : [];
+
+        // Project filter
+        if (this.state.selectedProjectId) {
+            events = events.filter(e => e.project_id === this.state.selectedProjectId);
+        }
+        // Team filter
+        if (this.state.selectedTeamId) {
+            if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
+                events = events.filter(e => e.team_id === this.state.selectedTeamId);
+            } else {
+                events = events.filter(e => e.team_id === this.state.selectedTeamId);
+            }
+        }
+        // Category filter
+        if (this.state.calendarCategoryFilter && this.state.calendarCategoryFilter !== 'all') {
+            const cat = this.state.calendarCategoryFilter.toLowerCase();
+            events = events.filter(e => (e.category || '').toLowerCase().includes(cat));
+        }
+        // Status filter
+        if (this.state.calendarStatusFilter && this.state.calendarStatusFilter !== 'all') {
+            if (this.state.calendarStatusFilter === 'overdue') {
+                events = events.filter(e => e.is_overdue);
+            } else if (this.state.calendarStatusFilter === 'in_progress') {
+                events = events.filter(e => e.status === 'in_progress');
+            } else if (this.state.calendarStatusFilter === 'under_review') {
+                events = events.filter(e => e.status === 'under_review' || e.approval_state === 'submitted');
+            } else if (this.state.calendarStatusFilter === 'done') {
+                events = events.filter(e => e.status === 'done');
+            } else if (this.state.calendarStatusFilter === 'todo') {
+                events = events.filter(e => e.status === 'todo');
+            }
+        }
+        // Search query
+        if (this.state.calendarSearchQuery && this.state.calendarSearchQuery.trim()) {
+            const q = this.state.calendarSearchQuery.trim().toLowerCase();
+            events = events.filter(e => 
+                (e.title || '').toLowerCase().includes(q) ||
+                (e.code || '').toLowerCase().includes(q) ||
+                (e.project_name || '').toLowerCase().includes(q) ||
+                (e.responsible_name || '').toLowerCase().includes(q)
+            );
+        }
+
+        // Scope filter:
+        const pad = (n) => String(n).padStart(2, "0");
+        const selIso = `${this.state.calendarYear}-${pad(this.state.calendarMonth + 1)}-${pad(this.state.calendarDate)}`;
+
+        if (this.state.calendarTaskFilterScope === 'day') {
+            events = events.filter(e => e.date === selIso);
+        } else if (this.state.calendarTaskFilterScope === 'week') {
+            const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+            const dayOfWeek = cur.getDay();
+            const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            const mon = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + diffToMon);
+            const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+            const monIso = `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
+            const sunIso = `${sun.getFullYear()}-${pad(sun.getMonth() + 1)}-${pad(sun.getDate())}`;
+            events = events.filter(e => e.date >= monIso && e.date <= sunIso);
+        } else if (this.state.calendarTaskFilterScope === 'month') {
+            const ym = `${this.state.calendarYear}-${pad(this.state.calendarMonth + 1)}`;
+            events = events.filter(e => e.date && e.date.startsWith(ym));
+        } else if (this.state.calendarTaskFilterScope === 'overdue') {
+            events = events.filter(e => e.is_overdue);
+        }
+
+        return events;
+    }
+
+    get calendarScheduledCountLabel() {
+        const count = this.calendarSelectedDayTasks.length;
+        return `${count} scheduled`;
+    }
+
+    setCalendarTaskScope(scope) {
+        this.state.calendarTaskFilterScope = scope;
+    }
+
+    onCalendarSearchChange(ev) {
+        this.state.calendarSearchQuery = ev.target.value || "";
+    }
+
+    openStandardCalendarView() {
+        this.actionService.doAction("project_manage.action_project_manage_scope_calendar");
+    }
+
+    createNewTaskForSelectedDate() {
+        if (!this.state.data?.user_info?.is_manager) {
+            if (this.notification) {
+                this.notification.add(_t("Only Project Managers can create new scopes or schedule tasks."), {
+                    type: "warning",
+                });
+            }
+            return;
+        }
+        const selIso = this.calendarSelectedDateIso;
+        this.actionService.doAction({
+            type: "ir.actions.act_window",
+            res_model: "project.manage.scope",
+            views: [[false, "form"]],
+            target: "new",
+            context: {
+                default_start_date: selIso,
+                default_end_date: selIso,
+                default_category: this.state.calendarCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation',
+            },
+        }, {
+            onClose: () => {
+                this.loadData();
+            }
+        });
     }
 
     openCalendarItem(item, ev) {
@@ -1043,6 +1279,14 @@ export class ProjectManageDashboard extends Component {
 
     openScopeWizard(item = null, ev) {
         if (ev) ev.stopPropagation();
+        if (!item && !this.state.data?.user_info?.is_manager) {
+            if (this.notification) {
+                this.notification.add(_t("Only Project Managers can create new scopes or tasks."), {
+                    type: "warning",
+                });
+            }
+            return;
+        }
         if (item) {
             let respIds = [];
             if (Array.isArray(item.responsible_ids) && item.responsible_ids.length > 0) {
@@ -1207,7 +1451,8 @@ export class ProjectManageDashboard extends Component {
             if (updated && !updated.error) {
                 this.state.projectScopesData = updated;
                 if (this.notification) {
-                    this.notification.add(this.state.wizardData.id ? "Scope task saved!" : "New scope task created!", { type: "success" });
+                    const msg = updated.message || (this.state.wizardData.id ? "Scope task saved!" : "New scope task created!");
+                    this.notification.add(msg, { type: "success" });
                 }
 
                 if (andNext && this.state.wizardData.id) {
@@ -1357,6 +1602,14 @@ export class ProjectManageDashboard extends Component {
 
     openImportWizardForProject(projectId, ev) {
         if (ev) ev.stopPropagation();
+        if (!this.state.data?.user_info?.is_manager) {
+            if (this.notification) {
+                this.notification.add(_t("Only Project Managers can import or create scopes."), {
+                    type: "warning",
+                });
+            }
+            return;
+        }
         const numericId = parseInt(projectId, 10);
         if (isNaN(numericId) || numericId <= 0) return;
         this.actionService.doAction({
