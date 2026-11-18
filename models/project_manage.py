@@ -2481,3 +2481,208 @@ class ProjectManage(models.Model):
             'filename': 'project_scope_template.csv',
             'file_content': base64.b64encode(data).decode('utf-8'),
         }
+
+    @api.model
+    def get_project_detail_dashboard(self, project_id):
+        """Return rich project details for the Dashboard Project Details Wizard."""
+        if not project_id:
+            return {'error': _('No project ID provided.')}
+        project = self.browse(project_id)
+        if not project.exists():
+            return {'error': _('Project not found.')}
+        try:
+            project.check_access('read')
+        except Exception:
+            return {'error': _('Access Denied.')}
+
+        today = fields.Date.context_today(self)
+        user = self.env.user
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
+        has_manage_access = is_admin or (
+            user.has_group('project_manage.group_project_manage_team_lead') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_ceo')
+        )
+
+        def _safe_field_val(rec, *field_names):
+            if not rec:
+                return ''
+            for fname in field_names:
+                if hasattr(rec, fname):
+                    val = getattr(rec, fname, '')
+                    if val:
+                        return str(val)
+            return ''
+
+        # Consultants under the project
+        consultants_data = []
+        for c in project.consultant_ids:
+            tasks_count = len(project.scope_ids.filtered(
+                lambda s: c in s.responsible_ids or s.responsible_id == c
+            ))
+            consultants_data.append({
+                'id': c.id,
+                'name': c.name,
+                'initials': ''.join([part[0].upper() for part in (c.name or '').split()[:2]]) or 'CO',
+                'job_title': _safe_field_val(c, 'job_title') or 'Consultant',
+                'work_email': _safe_field_val(c, 'work_email'),
+                'work_phone': _safe_field_val(c, 'work_phone', 'mobile_phone', 'phone'),
+                'tasks_count': tasks_count,
+            })
+
+        # Tags
+        tags_data = [{'id': t.id, 'name': t.name, 'color': t.color} for t in project.tag_ids]
+
+        # Scope tasks metrics
+        scopes = project.scope_ids
+        total_tasks = len(scopes)
+        done_tasks = len(scopes.filtered(lambda s: s.state == 'done'))
+        in_prog_tasks = len(scopes.filtered(lambda s: s.state == 'in_progress'))
+        review_tasks = len(scopes.filtered(
+            lambda s: s.state == 'under_review' or (s.approval_state and s.approval_state.startswith('pending'))
+        ))
+        todo_tasks = len(scopes.filtered(lambda s: s.state == 'todo'))
+        overdue_tasks = len(scopes.filtered(
+            lambda s: s.end_date and today > s.end_date and s.state != 'done'
+        ))
+
+        # Days remaining / overdue
+        days_remaining = None
+        if project.date_end:
+            days_remaining = (project.date_end - today).days
+
+        return {
+            'id': project.id,
+            'name': project.name,
+            'priority': project.priority or '0',
+            'state': project.state,
+            'state_label': dict(project._fields['state'].selection).get(project.state, 'To Do'),
+            'running_status': project.running_status or 'not_started',
+            'running_status_label': dict(project._fields['running_status'].selection).get(project.running_status, 'Not started'),
+            'can_start': bool(project.state == 'todo' and has_manage_access),
+            'is_running': bool(project.state == 'in_progress'),
+            'is_done': bool(project.state == 'done'),
+            'is_cancelled': bool(project.state == 'cancelled'),
+            'can_manage': bool(has_manage_access),
+
+            # Client details
+            'partner_id': project.partner_id.id if project.partner_id else False,
+            'client_name': project.partner_id.name or 'No Client',
+            'client_email': _safe_field_val(project.partner_id, 'email'),
+            'client_phone': _safe_field_val(project.partner_id, 'phone', 'mobile'),
+            'client_city': _safe_field_val(project.partner_id, 'city'),
+            'client_country': project.partner_id.country_id.name if project.partner_id and project.partner_id.country_id else '',
+
+            # Start and End Dates
+            'date_start': project.date_start.strftime('%d %b %Y') if project.date_start else 'Not set',
+            'date_start_raw': str(project.date_start) if project.date_start else '',
+            'date_end': project.date_end.strftime('%d %b %Y') if project.date_end else 'Not set',
+            'date_end_raw': str(project.date_end) if project.date_end else '',
+            'days_remaining': days_remaining,
+            'is_overdue': bool(days_remaining is not None and days_remaining < 0 and project.state != 'done'),
+
+            # Implementation Coordinators (Client coordinator & Project coordinator)
+            'client_coordinator_id': project.client_coordinator_id.id if project.client_coordinator_id else False,
+            'client_coordinator_name': project.client_coordinator_id.name if project.client_coordinator_id else 'Not Assigned',
+            'client_coordinator_email': _safe_field_val(project.client_coordinator_id, 'email'),
+            'client_coordinator_phone': _safe_field_val(project.client_coordinator_id, 'phone', 'mobile'),
+
+            'project_coordinator_id': project.project_coordinator_id.id if project.project_coordinator_id else False,
+            'project_coordinator_name': project.project_coordinator_id.name if project.project_coordinator_id else 'Not Assigned',
+            'project_coordinator_job': _safe_field_val(project.project_coordinator_id, 'job_title') or 'Implementation Coordinator',
+            'project_coordinator_email': _safe_field_val(project.project_coordinator_id, 'work_email'),
+            'project_coordinator_phone': _safe_field_val(project.project_coordinator_id, 'work_phone', 'mobile_phone', 'phone'),
+
+            # Team Lead
+            'team_lead_id': project.team_lead_id.id if project.team_lead_id else False,
+            'team_lead_name': project.team_lead_id.name if project.team_lead_id else 'Not Assigned',
+            'team_lead_job': _safe_field_val(project.team_lead_id, 'job_title') or 'Team Lead',
+            'team_lead_email': _safe_field_val(project.team_lead_id, 'work_email'),
+            'team_lead_phone': _safe_field_val(project.team_lead_id, 'work_phone', 'mobile_phone', 'phone'),
+
+            # Project Manager
+            'manager_id': project.manager_id.id if project.manager_id else False,
+            'manager_name': project.manager_id.name if project.manager_id else 'Not Assigned',
+            'manager_job': _safe_field_val(project.manager_id, 'job_title') or 'Project Manager',
+            'manager_email': _safe_field_val(project.manager_id, 'work_email'),
+            'manager_phone': _safe_field_val(project.manager_id, 'work_phone', 'mobile_phone', 'phone'),
+
+            # Team
+            'team_id': project.team_id.id if project.team_id else False,
+            'team_name': project.team_id.name if project.team_id else (f"Team {project.team_lead_id.name}" if project.team_lead_id else 'No Team'),
+
+            # Consultants
+            'consultants': consultants_data,
+            'consultant_count': len(consultants_data),
+
+            # Progress & Health
+            'progress': int(round(project.progress or 0)),
+            'planned_progress': int(round(project.planned_progress or 0)),
+            'health': project.health or 'good',
+            'health_label': dict(project._fields['health'].selection).get(project.health, 'Good'),
+            'risk_level': project.risk_level or 'low',
+            'risk_level_label': dict(project._fields['risk_level'].selection).get(project.risk_level, 'Low'),
+            'condition': project.condition or 'on_plan',
+            'condition_label': dict(project._fields['condition'].selection).get(project.condition, 'On plan'),
+            'tags': tags_data,
+
+            # Task counts
+            'total_tasks': total_tasks,
+            'done_tasks': done_tasks,
+            'in_progress_tasks': in_prog_tasks,
+            'review_tasks': review_tasks,
+            'todo_tasks': todo_tasks,
+            'overdue_tasks': overdue_tasks,
+            'scope_count': project.scope_count,
+            'doc_count': project.doc_count,
+            'imp_count': project.imp_count,
+        }
+
+    @api.model
+    def action_dashboard_start_project(self, project_id):
+        """Start a project directly from dashboard wizard."""
+        if not project_id:
+            return {'error': _('No project ID provided.')}
+        project = self.browse(project_id)
+        if not project.exists():
+            return {'error': _('Project not found.')}
+        try:
+            project.check_access('write')
+        except Exception:
+            return {'error': _('You do not have permission to start this project.')}
+        if project.state != 'todo':
+            return {'error': _('Only projects in "To Do" stage can be started.')}
+        project.action_start()
+        return {
+            'success': True,
+            'message': _('Project "%s" started successfully!') % project.name,
+            'state': project.state,
+            'running_status': project.running_status,
+        }
+
+    @api.model
+    def action_dashboard_done_project(self, project_id):
+        """Mark a project done directly from dashboard wizard."""
+        if not project_id:
+            return {'error': _('No project ID provided.')}
+        project = self.browse(project_id)
+        if not project.exists():
+            return {'error': _('Project not found.')}
+        try:
+            project.check_access('write')
+        except Exception:
+            return {'error': _('You do not have permission to update this project.')}
+        if project.state != 'in_progress':
+            return {'error': _('Only in-progress projects can be marked as done.')}
+        project.action_done()
+        return {
+            'success': True,
+            'message': _('Project "%s" marked as done!') % project.name,
+            'state': project.state,
+            'running_status': project.running_status,
+        }

@@ -843,11 +843,11 @@
                                                             <i class="fa fa-arrow-right me-1"></i> On plan
                                                         </t>
                                                     </span>
-                                                    <!-- Direct button to open Project Form -->
-                                                    <button class="btn btn-sm btn-link text-muted p-0 ms-2"
-                                                            t-on-click="(ev) => { ev.stopPropagation(); this.openProject(proj.id); }"
-                                                            title="Open Project Form View">
-                                                        <i class="fa fa-external-link"></i>
+                                                    <!-- Eye button to open Project Details Wizard & Actions -->
+                                                    <button class="pm-row-action-btn pm-row-eye-btn ms-2"
+                                                            t-on-click="(ev) => { ev.stopPropagation(); this.openProjectDetailWizard(proj.id); }"
+                                                            title="View Project Details &amp; Start Project">
+                                                        <i class="fa fa-eye"></i>
                                                     </button>
                                                 </div>
                                             </td>
@@ -1414,13 +1414,6 @@
                                 </div>
                             </div>
                         </div>
-
-                        <!-- Right Actions -->
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <button class="pm-link-btn" t-on-click="viewMyTasks" title="Open full tasks table in Odoo view">
-                                Full Tasks View <i class="fa fa-external-link ms-1"></i>
-                            </button>
-                        </div>
                     </div>
 
                     <!-- 4 Summary Counter Cards -->
@@ -1848,7 +1841,7 @@
                 <!-- ======================================================== -->
                 <t t-if="state.scopeWizardOpen">
                     <div class="pm-modal-backdrop" t-on-click="closeScopeWizard">
-                        <div class="pm-modal-dialog" t-on-click.stop="">
+                        <div class="pm-modal-dialog pm-modal-dialog-scope-edit" t-on-click.stop="">
                             <div class="pm-modal-content">
                                 <div class="pm-modal-header d-flex justify-content-between align-items-center">
                                     <div>
@@ -1986,7 +1979,7 @@
                                             </div>
 
                                             <!-- Assigned Employee Badges / Chips with Remove (x) -->
-                                            <div class="d-flex flex-wrap gap-1 p-2 bg-light rounded border mb-2" style="min-height: 42px;">
+                                            <div class="pm-wizard-assigned-box d-flex flex-wrap gap-1 mb-2" style="min-height: 42px;">
                                                 <t t-if="state.wizardData.responsible_ids and state.wizardData.responsible_ids.length">
                                                     <t t-foreach="state.wizardData.responsible_ids" t-as="rEmpId" t-key="rEmpId">
                                                         <span class="badge bg-primary text-white d-inline-flex align-items-center py-1 px-2 gap-1 rounded-pill" style="font-size: 0.82rem;">
@@ -2006,7 +1999,7 @@
 
                                             <!-- Dropdown to Add Another Employee -->
                                             <div class="input-group">
-                                                <span class="input-group-text bg-white"><i class="fa fa-user-plus text-primary"></i></span>
+                                                <span class="input-group-text pm-input-addon"><i class="fa fa-user-plus text-primary"></i></span>
                                                 <select class="form-select pm-form-control" t-on-change="(ev) => this.onAddWizardResponsible(ev)">
                                                     <option value="">+ Add employee to this task...</option>
                                                     <t t-if="state.projectScopesData and state.projectScopesData.available_employees">
@@ -2079,7 +2072,7 @@
                                                     <t t-else="">Normal (0 Stars)</t>
                                                 </span>
                                             </label>
-                                            <div class="d-flex align-items-center justify-content-between p-2 bg-light rounded border">
+                                            <div class="pm-wizard-priority-box d-flex align-items-center justify-content-between p-2 rounded border">
                                                 <div class="pm-priority-stars-selector d-flex align-items-center gap-2">
                                                     <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
                                                         <i class="fa cursor-pointer"
@@ -2784,6 +2777,379 @@
                                         </t>
                                         <button type="button" class="btn btn-sm btn-outline-secondary pm-btn-modal-cancel pm-modal-btn-close px-4 py-1 rounded-pill fw-semibold"
                                                 t-on-click="closeScopeDetailWizard">
+                                            Close
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL WIZARD: PROJECT DETAILS & QUICK ACTIONS  -->
+                <!-- ======================================================== -->
+                <t t-if="state.projectDetailWizardOpen">
+                    <div class="pm-modal-backdrop" t-on-click="closeProjectDetailWizard">
+                        <div class="pm-modal-dialog pm-modal-dialog-lg pm-modal-lg pm-modal-project-detail" t-on-click="(ev) => ev.stopPropagation()">
+                            <div class="pm-modal-content">
+                                <!-- Modal Header -->
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center gap-2">
+                                    <div class="d-flex align-items-center gap-3 flex-grow-1 min-w-0" style="min-width: 0;">
+                                        <div class="pm-project-modal-icon-badge flex-shrink-0">
+                                            <i class="fa fa-folder-open text-primary"></i>
+                                        </div>
+                                        <div class="min-w-0">
+                                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                                <h5 class="fw-bold m-0 text-truncate" style="color: var(--pm-text-heading);"
+                                                    t-att-title="state.projectDetailData and state.projectDetailData.name"
+                                                    t-esc="state.projectDetailData and state.projectDetailData.name || 'Project Details'"/>
+                                                <t t-if="state.projectDetailData">
+                                                    <span class="pm-badge" t-att-class="'pm-badge-' + state.projectDetailData.running_status"
+                                                          t-esc="state.projectDetailData.running_status_label"/>
+                                                    <span class="pm-health-item" t-att-class="'pm-health-' + state.projectDetailData.health">
+                                                        <span class="pm-dot-health"></span>
+                                                        <t t-esc="state.projectDetailData.health_label"/>
+                                                    </span>
+                                                </t>
+                                            </div>
+                                            <div class="pm-modal-sub-meta small text-muted mt-1 d-flex align-items-center gap-2 flex-wrap">
+                                                <span><i class="fa fa-building-o me-1"></i><strong t-esc="state.projectDetailData and state.projectDetailData.client_name"/></span>
+                                                <span>·</span>
+                                                <span><i class="fa fa-users me-1"></i><strong t-esc="state.projectDetailData and state.projectDetailData.team_name"/></span>
+                                                <t t-if="state.projectDetailData and state.projectDetailData.client_city">
+                                                    <span>·</span>
+                                                    <span><i class="fa fa-map-marker me-1"></i><t t-esc="state.projectDetailData.client_city"/></span>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close flex-shrink-0" t-on-click="closeProjectDetailWizard" aria-label="Close"></button>
+                                </div>
+
+                                <!-- Modal Body -->
+                                <div class="pm-modal-body">
+                                    <t t-if="state.projectDetailLoading">
+                                        <div class="text-center py-5">
+                                            <i class="fa fa-spinner fa-spin text-primary fa-2x mb-2"></i>
+                                            <div class="text-muted small">Loading project details...</div>
+                                        </div>
+                                    </t>
+                                    <t t-elif="state.projectDetailData">
+                                        <!-- Top Action: Start Project Banner or In-Progress Status Banner -->
+                                        <t t-if="state.projectDetailData.can_start">
+                                            <div class="pm-start-project-banner mb-4">
+                                                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 flex-wrap gap-3"
+                                                     style="background: linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(99,102,241,0.12) 100%); border: 1.5px solid rgba(59,130,246,0.35);">
+                                                    <div class="d-flex align-items-center gap-3">
+                                                        <div class="pm-banner-icon-circle bg-primary text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                                                             style="width: 44px; height: 44px; font-size: 1.15rem;">
+                                                            <i class="fa fa-play"></i>
+                                                        </div>
+                                                        <div>
+                                                            <div class="fw-bold" style="color: var(--pm-text-heading); font-size: 0.98rem;">Project Ready to Start</div>
+                                                            <div class="text-muted small">This project is in <strong>To Do (Not Started)</strong> stage. Click Start Project to begin execution.</div>
+                                                        </div>
+                                                    </div>
+                                                    <button type="button" class="btn btn-primary fw-bold px-4 py-2 rounded-pill shadow-sm d-flex align-items-center gap-2"
+                                                            t-att-disabled="state.startingProject"
+                                                            t-on-click="() => this.startProjectFromWizard(state.projectDetailData.id)">
+                                                        <t t-if="state.startingProject">
+                                                            <i class="fa fa-spinner fa-spin"></i> Starting...
+                                                        </t>
+                                                        <t t-else="">
+                                                            <i class="fa fa-play"></i> Start Project
+                                                        </t>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </t>
+                                        <t t-elif="state.projectDetailData.is_running">
+                                            <div class="pm-running-project-banner mb-4">
+                                                <div class="d-flex align-items-center justify-content-between p-3 rounded-3 flex-wrap gap-2"
+                                                     style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.3);">
+                                                    <div class="d-flex align-items-center gap-3">
+                                                        <div class="pm-banner-icon-circle bg-success text-white rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                                                             style="width: 40px; height: 40px; font-size: 1.1rem;">
+                                                            <i class="fa fa-bolt"></i>
+                                                        </div>
+                                                        <div>
+                                                            <div class="fw-bold text-success d-flex align-items-center gap-2" style="font-size: 0.95rem;">
+                                                                <span>Project In Progress</span>
+                                                                <span class="badge bg-success text-white rounded-pill small py-0 px-2" style="font-size: 0.72rem;">Running</span>
+                                                            </div>
+                                                            <div class="text-muted small">Active execution underway. Progress: <strong><t t-esc="state.projectDetailData.progress"/>%</strong> · Condition: <strong><t t-esc="state.projectDetailData.condition_label"/></strong></div>
+                                                        </div>
+                                                    </div>
+                                                    <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-semibold"
+                                                            t-on-click="() => this.openProjectScopesFromWizard(state.projectDetailData.id)">
+                                                        <i class="fa fa-tasks me-1"></i> View Scopes &amp; Tasks
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </t>
+
+                                        <!-- Progress Bar Card -->
+                                        <div class="pm-wizard-kpi-card mb-4 p-3 rounded" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <span class="text-uppercase small fw-bold" style="letter-spacing: 0.05em; color: var(--pm-text-muted);">
+                                                    <i class="fa fa-line-chart text-primary me-1"></i> Progress vs Plan
+                                                </span>
+                                                <span class="small fw-semibold" style="color: var(--pm-text-heading);">
+                                                    Actual: <strong class="text-primary"><t t-esc="state.projectDetailData.progress"/>%</strong>
+                                                    <span class="mx-2 text-muted">|</span>
+                                                    Planned: <strong class="text-secondary"><t t-esc="state.projectDetailData.planned_progress"/>%</strong>
+                                                    <span class="mx-2 text-muted">|</span>
+                                                    Condition: <span class="pm-condition-pill" t-att-class="'pm-cond-' + state.projectDetailData.condition"><t t-esc="state.projectDetailData.condition_label"/></span>
+                                                </span>
+                                            </div>
+                                            <div class="pm-progress-wrapper mb-2" style="position: relative;">
+                                                <div class="pm-progress-track" style="height: 10px; border-radius: 9999px;">
+                                                    <div class="pm-progress-fill pm-fill-emerald"
+                                                         t-attf-style="width: {{ state.projectDetailData.progress }}%; border-radius: 9999px;"></div>
+                                                    <div class="pm-target-marker"
+                                                         t-attf-style="left: {{ state.projectDetailData.planned_progress }}%;"
+                                                         t-att-title="'Target today: ' + state.projectDetailData.planned_progress + '%'"></div>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex justify-content-between small text-muted pt-1">
+                                                <span><i class="fa fa-calendar-check-o text-success me-1"></i> Start: <strong><t t-esc="state.projectDetailData.date_start"/></strong></span>
+                                                <span><i class="fa fa-flag-checkered text-warning me-1"></i> End: <strong><t t-esc="state.projectDetailData.date_end"/></strong></span>
+                                                <span><i class="fa fa-shield text-info me-1"></i> Risk: <span t-att-class="'pm-risk-' + state.projectDetailData.risk_level"><t t-esc="state.projectDetailData.risk_level_label"/></span></span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Two-Column Grid: Timeline & Client (Col 1) and Leadership & Coordinators (Col 2) -->
+                                        <div class="row g-3 mb-4">
+                                            <!-- Column 1: Client & Dates -->
+                                            <div class="col-md-6">
+                                                <div class="p-3 rounded h-100" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom" style="border-color: var(--pm-border) !important;">
+                                                        <i class="fa fa-briefcase text-primary"></i>
+                                                        <span class="fw-bold small text-uppercase" style="color: var(--pm-text-heading); letter-spacing: 0.04em;">Client &amp; Timeline</span>
+                                                    </div>
+
+                                                    <!-- Client -->
+                                                    <div class="mb-3">
+                                                        <div class="text-muted small mb-1">Client</div>
+                                                        <div class="fw-bold fs-6" style="color: var(--pm-text-heading);">
+                                                            <i class="fa fa-building-o text-primary me-2"></i>
+                                                            <t t-esc="state.projectDetailData.client_name"/>
+                                                        </div>
+                                                        <div class="small text-muted mt-1 ps-4" t-if="state.projectDetailData.client_city or state.projectDetailData.client_phone or state.projectDetailData.client_email">
+                                                            <t t-if="state.projectDetailData.client_city"><i class="fa fa-map-marker me-1"></i><t t-esc="state.projectDetailData.client_city"/><br/></t>
+                                                            <t t-if="state.projectDetailData.client_email"><i class="fa fa-envelope-o me-1"></i><t t-esc="state.projectDetailData.client_email"/><br/></t>
+                                                            <t t-if="state.projectDetailData.client_phone"><i class="fa fa-phone me-1"></i><t t-esc="state.projectDetailData.client_phone"/></t>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Start Date & End Date -->
+                                                    <div class="row g-2 mb-3">
+                                                        <div class="col-6">
+                                                            <div class="p-2 rounded bg-white dark-bg-card border" style="border-color: var(--pm-border) !important;">
+                                                                <div class="text-muted small" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Project Start Date</div>
+                                                                <div class="fw-bold mt-1" style="color: var(--pm-text-heading); font-size: 0.88rem;">
+                                                                    <i class="fa fa-calendar-check-o text-success me-1"></i>
+                                                                    <t t-esc="state.projectDetailData.date_start"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-6">
+                                                            <div class="p-2 rounded bg-white dark-bg-card border" style="border-color: var(--pm-border) !important;">
+                                                                <div class="text-muted small" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Project End Date</div>
+                                                                <div class="fw-bold mt-1" style="color: var(--pm-text-heading); font-size: 0.88rem;">
+                                                                    <i class="fa fa-calendar-times-o text-danger me-1"></i>
+                                                                    <t t-esc="state.projectDetailData.date_end"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Project Team -->
+                                                    <div class="mb-1">
+                                                        <div class="text-muted small mb-1">Assigned Team</div>
+                                                        <div class="fw-semibold small" style="color: var(--pm-text-body);">
+                                                            <span class="pm-team-dot-pill">
+                                                                <span class="pm-dot pm-dot-team"></span>
+                                                                <t t-esc="state.projectDetailData.team_name"/>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Column 2: Leadership & Coordinators -->
+                                            <div class="col-md-6">
+                                                <div class="p-3 rounded h-100" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                                    <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom" style="border-color: var(--pm-border) !important;">
+                                                        <i class="fa fa-id-badge text-primary"></i>
+                                                        <span class="fw-bold small text-uppercase" style="color: var(--pm-text-heading); letter-spacing: 0.04em;">Leadership &amp; Coordinators</span>
+                                                    </div>
+
+                                                    <!-- Project Manager -->
+                                                    <div class="mb-3">
+                                                        <div class="text-muted small" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Project Manager</div>
+                                                        <div class="d-flex align-items-center gap-2 mt-1">
+                                                            <div class="rounded-circle bg-primary-subtle text-primary d-flex align-items-center justify-content-center fw-bold"
+                                                                 style="width: 32px; height: 32px; font-size: 0.8rem;">
+                                                                PM
+                                                            </div>
+                                                            <div>
+                                                                <div class="fw-bold small" style="color: var(--pm-text-heading);" t-esc="state.projectDetailData.manager_name"/>
+                                                                <div class="text-muted" style="font-size: 0.75rem;">
+                                                                    <t t-esc="state.projectDetailData.manager_job"/>
+                                                                    <t t-if="state.projectDetailData.manager_email"> · <t t-esc="state.projectDetailData.manager_email"/></t>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Team Lead -->
+                                                    <div class="mb-3">
+                                                        <div class="text-muted small" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Team Lead</div>
+                                                        <div class="d-flex align-items-center gap-2 mt-1">
+                                                            <div class="rounded-circle bg-info-subtle text-info d-flex align-items-center justify-content-center fw-bold"
+                                                                 style="width: 32px; height: 32px; font-size: 0.8rem;">
+                                                                TL
+                                                            </div>
+                                                            <div>
+                                                                <div class="fw-bold small" style="color: var(--pm-text-heading);" t-esc="state.projectDetailData.team_lead_name"/>
+                                                                <div class="text-muted" style="font-size: 0.75rem;">
+                                                                    <t t-esc="state.projectDetailData.team_lead_job"/>
+                                                                    <t t-if="state.projectDetailData.team_lead_email"> · <t t-esc="state.projectDetailData.team_lead_email"/></t>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Implementation Coordinator -->
+                                                    <div class="mb-2">
+                                                        <div class="text-muted small" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Implementation Coordinator</div>
+                                                        <!-- Client Implementation Coordinator -->
+                                                        <div class="p-2 rounded bg-white dark-bg-card border mb-2 mt-1" style="border-color: var(--pm-border) !important;">
+                                                            <div class="small fw-semibold" style="color: var(--pm-text-heading);">
+                                                                <i class="fa fa-handshake-o text-warning me-1"></i>
+                                                                <span class="text-muted fw-normal" style="font-size: 0.72rem;">Client Coordinator: </span>
+                                                                <strong t-esc="state.projectDetailData.client_coordinator_name"/>
+                                                            </div>
+                                                            <div class="text-muted ps-3" style="font-size: 0.75rem;" t-if="state.projectDetailData.client_coordinator_phone or state.projectDetailData.client_coordinator_email">
+                                                                <t t-if="state.projectDetailData.client_coordinator_phone"><i class="fa fa-phone me-1"></i><t t-esc="state.projectDetailData.client_coordinator_phone"/> </t>
+                                                                <t t-if="state.projectDetailData.client_coordinator_email"> · <i class="fa fa-envelope-o me-1"></i><t t-esc="state.projectDetailData.client_coordinator_email"/></t>
+                                                            </div>
+                                                        </div>
+                                                        <!-- Project Implementation Coordinator -->
+                                                        <div class="p-2 rounded bg-white dark-bg-card border" style="border-color: var(--pm-border) !important;" t-if="state.projectDetailData.project_coordinator_name and state.projectDetailData.project_coordinator_name !== 'Not Assigned'">
+                                                            <div class="small fw-semibold" style="color: var(--pm-text-heading);">
+                                                                <i class="fa fa-user-circle text-primary me-1"></i>
+                                                                <span class="text-muted fw-normal" style="font-size: 0.72rem;">Internal Project Coordinator: </span>
+                                                                <strong t-esc="state.projectDetailData.project_coordinator_name"/>
+                                                            </div>
+                                                            <div class="text-muted ps-3" style="font-size: 0.75rem;" t-if="state.projectDetailData.project_coordinator_email">
+                                                                <t t-esc="state.projectDetailData.project_coordinator_job"/> · <i class="fa fa-envelope-o me-1"></i><t t-esc="state.projectDetailData.project_coordinator_email"/>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Full-Width Section: Consultants Under the Project -->
+                                        <div class="p-3 rounded mb-3" style="background: var(--pm-tile-bg, #f8fafc); border: 1px solid var(--pm-border);">
+                                            <div class="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom" style="border-color: var(--pm-border) !important;">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="fa fa-users text-primary"></i>
+                                                    <span class="fw-bold small text-uppercase" style="color: var(--pm-text-heading); letter-spacing: 0.04em;">Consultants Under Project</span>
+                                                </div>
+                                                <span class="badge bg-primary text-white rounded-pill px-2 py-1" style="font-size: 0.75rem;">
+                                                    <t t-esc="state.projectDetailData.consultant_count"/> Assigned
+                                                </span>
+                                            </div>
+
+                                            <t t-if="state.projectDetailData.consultants and state.projectDetailData.consultants.length > 0">
+                                                <div class="row g-2">
+                                                    <t t-foreach="state.projectDetailData.consultants" t-as="cons" t-key="cons.id">
+                                                        <div class="col-md-6 col-lg-4">
+                                                            <div class="pm-consultant-card p-2 rounded bg-white dark-bg-card border h-100 d-flex align-items-center gap-2"
+                                                                 style="border-color: var(--pm-border) !important;">
+                                                                <div class="pm-consultant-avatar rounded-circle bg-primary-subtle text-primary fw-bold d-flex align-items-center justify-content-center flex-shrink-0"
+                                                                     style="width: 36px; height: 36px; font-size: 0.82rem;">
+                                                                    <t t-esc="cons.initials"/>
+                                                                </div>
+                                                                <div class="min-w-0 flex-grow-1">
+                                                                    <div class="fw-bold small text-truncate" style="color: var(--pm-text-heading);" t-att-title="cons.name" t-esc="cons.name"/>
+                                                                    <div class="text-muted text-truncate" style="font-size: 0.72rem;">
+                                                                        <t t-esc="cons.job_title"/>
+                                                                    </div>
+                                                                    <div class="text-muted text-truncate" style="font-size: 0.7rem;" t-if="cons.work_email">
+                                                                        <i class="fa fa-envelope-o me-1"></i><t t-esc="cons.work_email"/>
+                                                                    </div>
+                                                                </div>
+                                                                <span class="badge bg-secondary-subtle text-secondary small flex-shrink-0"
+                                                                      t-if="cons.tasks_count > 0"
+                                                                      t-att-title="cons.tasks_count + ' scopes/tasks assigned'">
+                                                                    <t t-esc="cons.tasks_count"/> tasks
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </t>
+                                                </div>
+                                            </t>
+                                            <t t-else="">
+                                                <div class="text-center py-3 text-muted small">
+                                                    <i class="fa fa-user-times mb-1" style="font-size: 1.5rem; opacity: 0.5;"></i>
+                                                    <div>No consultants assigned to this project yet.</div>
+                                                </div>
+                                            </t>
+                                        </div>
+
+                                        <!-- Summary Scope/Deliverables Pills -->
+                                        <div class="d-flex align-items-center justify-content-between p-2 rounded bg-light-subtle border small flex-wrap gap-2"
+                                             style="border-color: var(--pm-border) !important; font-size: 0.8rem;">
+                                            <div class="d-flex align-items-center gap-3">
+                                                <span><i class="fa fa-tasks text-primary me-1"></i> <strong><t t-esc="state.projectDetailData.total_tasks"/></strong> Total Tasks</span>
+                                                <span><i class="fa fa-check-circle text-success me-1"></i> <strong><t t-esc="state.projectDetailData.done_tasks"/></strong> Done</span>
+                                                <span><i class="fa fa-spinner text-info me-1"></i> <strong><t t-esc="state.projectDetailData.in_progress_tasks"/></strong> In Progress</span>
+                                                <t t-if="state.projectDetailData.overdue_tasks > 0">
+                                                    <span class="text-danger"><i class="fa fa-exclamation-triangle me-1"></i> <strong><t t-esc="state.projectDetailData.overdue_tasks"/></strong> Overdue</span>
+                                                </t>
+                                            </div>
+                                            <div>
+                                                <span class="text-muted">Master Scopes: <strong><t t-esc="state.projectDetailData.scope_count"/></strong></span>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Modal Footer -->
+                                <div class="pm-modal-footer d-flex justify-content-between align-items-center gap-2">
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1"
+                                                t-if="state.projectDetailData"
+                                                t-on-click="() => this.openProjectFromWizard(state.projectDetailData.id)"
+                                                title="Open full backend Project form view in Odoo">
+                                            <i class="fa fa-folder-open-o me-1"></i> Open Project Form
+                                        </button>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <t t-if="state.projectDetailData and state.projectDetailData.can_start">
+                                            <button type="button" class="btn btn-sm btn-primary fw-bold rounded-pill px-4 py-1 shadow-sm"
+                                                    t-att-disabled="state.startingProject"
+                                                    t-on-click="() => this.startProjectFromWizard(state.projectDetailData.id)">
+                                                <t t-if="state.startingProject">
+                                                    <i class="fa fa-spinner fa-spin me-1"></i> Starting...
+                                                </t>
+                                                <t t-else="">
+                                                    <i class="fa fa-play me-1"></i> Start Project
+                                                </t>
+                                            </button>
+                                        </t>
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-semibold"
+                                                t-if="state.projectDetailData"
+                                                t-on-click="() => this.openProjectScopesFromWizard(state.projectDetailData.id)">
+                                            <i class="fa fa-tasks me-1"></i> View Scopes
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-secondary pm-btn-modal-cancel px-4 py-1 rounded-pill fw-semibold"
+                                                t-on-click="closeProjectDetailWizard">
                                             Close
                                         </button>
                                     </div>

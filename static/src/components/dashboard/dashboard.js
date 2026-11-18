@@ -73,6 +73,10 @@ export class ProjectManageDashboard extends Component {
             scopeDetailWizardOpen: false,
             scopeDetailLoading: false,
             scopeDetailData: null,
+            projectDetailWizardOpen: false,
+            projectDetailLoading: false,
+            projectDetailData: null,
+            startingProject: false,
             bulkWizardOpen: false,
             bulkData: {
                 target: 'scope',
@@ -1967,6 +1971,81 @@ export class ProjectManageDashboard extends Component {
         if (this.notification) {
             this.notification.add("Dashboard refreshed", { type: "success" });
         }
+    }
+
+    async openProjectDetailWizard(projectId) {
+        if (!projectId) return;
+        const numericId = parseInt(projectId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
+
+        this.state.projectDetailWizardOpen = true;
+        this.state.projectDetailLoading = true;
+        this.state.projectDetailData = null;
+        try {
+            const data = await this.orm.call("project.manage", "get_project_detail_dashboard", [numericId]);
+            if (data && !data.error) {
+                this.state.projectDetailData = data;
+            } else {
+                if (this.notification) this.notification.add((data && data.error) || "Could not load project details.", { type: "danger" });
+                this.state.projectDetailWizardOpen = false;
+            }
+        } catch (err) {
+            console.error("Failed to load project details:", err);
+            if (this.notification) this.notification.add("Could not load project details.", { type: "danger" });
+            this.state.projectDetailWizardOpen = false;
+        } finally {
+            this.state.projectDetailLoading = false;
+        }
+    }
+
+    closeProjectDetailWizard() {
+        this.state.projectDetailWizardOpen = false;
+        this.state.projectDetailData = null;
+    }
+
+    async startProjectFromWizard(projectId) {
+        if (!projectId) return;
+        const numericId = parseInt(projectId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
+
+        this.state.startingProject = true;
+        try {
+            const res = await this.orm.call("project.manage", "action_dashboard_start_project", [numericId]);
+            if (res && res.success) {
+                if (this.notification) {
+                    this.notification.add(res.message || "Project started successfully!", { type: "success" });
+                }
+                const updated = await this.orm.call("project.manage", "get_project_detail_dashboard", [numericId]);
+                if (updated && !updated.error) {
+                    this.state.projectDetailData = updated;
+                }
+                await this.loadData();
+                if (this.state.selectedProjectId === numericId) {
+                    await this.loadProjectScopes(numericId);
+                }
+            } else {
+                if (this.notification) {
+                    this.notification.add((res && res.error) || "Could not start project.", { type: "danger" });
+                }
+            }
+        } catch (err) {
+            console.error("Failed to start project:", err);
+            if (this.notification) {
+                this.notification.add("Failed to start project: " + (err.message || err), { type: "danger" });
+            }
+        } finally {
+            this.state.startingProject = false;
+        }
+    }
+
+    openProjectFromWizard(projectId) {
+        this.closeProjectDetailWizard();
+        this.openProject(projectId);
+    }
+
+    openProjectScopesFromWizard(projectId) {
+        this.closeProjectDetailWizard();
+        this.openProjectScopesTab(projectId);
     }
 }
 
