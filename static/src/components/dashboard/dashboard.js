@@ -56,6 +56,9 @@ export class ProjectManageDashboard extends Component {
             projectConditionFilter: 'all', // 'all', 'ahead', 'on_plan', 'behind', 'overdue'
             projectDeliveryFilter: 'all',  // 'all', 'on_time'
             projectSearchFilter: '',       // search query string
+            mobileSelectedProjectId: null,
+            mobileProjectDetailData: null,
+            mobileProjectDetailLoading: false,
             projectCardsWizardOpen: false,
             projectCardsWizardTitle: "Projects",
             projectCardsWizardSubtitle: "",
@@ -394,6 +397,10 @@ export class ProjectManageDashboard extends Component {
         this.state.selectedScopeName = val ? val : null;
     }
 
+    onScopeDropdownChange(ev) {
+        this.onScopeSelectChange(ev);
+    }
+
     onSearchChange(ev) {
         this.state.searchQuery = ev.target.value.toLowerCase().trim();
     }
@@ -580,6 +587,9 @@ export class ProjectManageDashboard extends Component {
 
     // ==================== 5-VIEW TAB NAVIGATION METHODS ====================
     setActiveTab(tab) {
+        if (tab !== 'projects') {
+            this.state.mobileSelectedProjectId = null;
+        }
         this.state.activeMainView = tab;
         if (tab === 'scopes' && !this.state.selectedProjectId) {
             const projs = (this.state.data && this.state.data.projects) || [];
@@ -636,6 +646,18 @@ export class ProjectManageDashboard extends Component {
 
     setProjectStatusFilter(filter) {
         this.state.projectStatusFilter = filter;
+    }
+
+    setProjectRiskFilter(filter) {
+        this.state.projectRiskFilter = filter;
+    }
+
+    setProjectConditionFilter(filter) {
+        this.state.projectConditionFilter = filter;
+    }
+
+    setProjectHealthFilter(filter) {
+        this.state.projectHealthFilter = filter;
     }
 
     get filteredProjects() {
@@ -836,6 +858,32 @@ export class ProjectManageDashboard extends Component {
     openProjectDetailFromCardWizard(projectId) {
         this.closeProjectCardsWizard();
         this.openProjectDetailWizard(projectId);
+    }
+
+    async selectMobileProject(projectId) {
+        if (!projectId) return;
+        this.state.mobileSelectedProjectId = projectId;
+        this.state.mobileProjectDetailLoading = true;
+        this.state.mobileProjectDetailData = null;
+        try {
+            const numericId = parseInt(projectId, 10);
+            const data = await this.orm.call("project.manage", "get_project_detail_dashboard", [numericId]);
+            if (data && !data.error) {
+                this.state.mobileProjectDetailData = data;
+            } else {
+                this.state.mobileProjectDetailData = this.state.data?.projects?.find(p => p.id === projectId) || null;
+            }
+        } catch (err) {
+            console.error("Failed to load project details on mobile:", err);
+            this.state.mobileProjectDetailData = this.state.data?.projects?.find(p => p.id === projectId) || null;
+        } finally {
+            this.state.mobileProjectDetailLoading = false;
+        }
+    }
+
+    backToMobileProjectsList() {
+        this.state.mobileSelectedProjectId = null;
+        this.state.mobileProjectDetailData = null;
     }
 
     // ==================== CALENDAR VIEW METHODS & GETTERS ====================
@@ -1586,6 +1634,10 @@ export class ProjectManageDashboard extends Component {
 
     isStarActive(priority, star) {
         return (Number(priority) || 0) >= star;
+    }
+
+    parseInt(val, radix = 10) {
+        return parseInt(val, radix);
     }
 
     setWizardPriority(star) {
@@ -2395,6 +2447,9 @@ export class ProjectManageDashboard extends Component {
                 await this.loadData();
                 if (this.state.selectedProjectId === updatedId) {
                     await this.loadProjectScopes(updatedId);
+                }
+                if (this.state.mobileSelectedProjectId === updatedId) {
+                    await this.selectMobileProject(updatedId);
                 }
             }
         } catch (err) {

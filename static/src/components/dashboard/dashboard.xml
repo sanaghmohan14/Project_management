@@ -728,6 +728,8 @@
 <!-- ==================== 4. BOTTOM ROW: PROJECTS PORTFOLIO TABLE ==================== -->
                 <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
                 <t t-if="this.isSectionVisible('projects') and !state.data.user_info.is_consultant">
+                    <!-- Desktop Table View: strictly shown on desktop (!state.isMobile) -->
+                    <t t-if="!state.isMobile">
                     <section class="pm-table-section">
                     <div class="pm-table-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div class="pm-table-title-box d-flex align-items-center gap-2">
@@ -1264,6 +1266,397 @@
                 </section>
                 </t>
 
+                <!-- ==================== MOBILE VIEW: PROJECTS CARDS & DETAIL ==================== -->
+                <t t-if="state.isMobile">
+                    <section class="pm-mobile-projects-section pt-2">
+                        <!-- VIEW A: PROJECTS CARDS LIST (MATCHING IMAGE 2) -->
+                        <t t-if="!state.mobileSelectedProjectId">
+                            <div class="pm-mobile-projects-header mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <h4 class="fw-bold m-0" style="color: var(--pm-text-heading);">Projects</h4>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2 py-1" style="font-size: 0.75rem;">
+                                        <t t-esc="this.filteredProjects.length"/> of <t t-esc="(state.data and state.data.projects and state.data.projects.length) || 0"/>
+                                    </span>
+                                </div>
+
+                                <!-- Search Bar -->
+                                <div class="position-relative mb-2">
+                                    <i class="fa fa-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                                    <input type="text"
+                                           class="form-control form-control-sm ps-5 rounded-pill pm-clean-input"
+                                           placeholder="Search project or client name..."
+                                           t-model="state.projectSearchFilter"
+                                           style="padding-top: 8px; padding-bottom: 8px; font-size: 0.85rem;"/>
+                                    <button t-if="state.projectSearchFilter"
+                                            type="button"
+                                            class="btn btn-sm btn-link position-absolute top-50 end-0 translate-middle-y me-2 text-muted p-0 text-decoration-none"
+                                            t-on-click="() => { this.state.projectSearchFilter = ''; }">
+                                        <i class="fa fa-times-circle"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Filter Chips (Horizontal Scroll) -->
+                                <div class="d-flex align-items-center gap-1 overflow-auto pb-2 mb-2" style="-webkit-overflow-scrolling: touch; scrollbar-width: none;">
+                                    <button type="button"
+                                            class="btn btn-sm rounded-pill px-3 py-1 text-nowrap fw-semibold"
+                                            t-att-class="state.projectStatusFilter === 'all' and state.projectRiskFilter === 'all' ? 'btn-primary' : 'btn-light border text-muted'"
+                                            style="font-size: 0.75rem;"
+                                            t-on-click="clearProjectFilters">
+                                        All (<t t-esc="(state.data and state.data.projects and state.data.projects.length) || 0"/>)
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm rounded-pill px-3 py-1 text-nowrap fw-semibold"
+                                            t-att-class="state.projectStatusFilter === 'running' ? 'btn-primary' : 'btn-light border text-muted'"
+                                            style="font-size: 0.75rem;"
+                                            t-on-click="() => this.setProjectStatusFilter('running')">
+                                        <i class="fa fa-play me-1"></i> Running (<t t-esc="state.data.running_count || 0"/>)
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm rounded-pill px-3 py-1 text-nowrap fw-semibold"
+                                            t-att-class="state.projectStatusFilter === 'completed' ? 'btn-primary' : 'btn-light border text-muted'"
+                                            style="font-size: 0.75rem;"
+                                            t-on-click="() => this.setProjectStatusFilter('completed')">
+                                        <i class="fa fa-check me-1"></i> Completed (<t t-esc="state.data.completed_count || 0"/>)
+                                    </button>
+                                    <button type="button"
+                                            class="btn btn-sm rounded-pill px-3 py-1 text-nowrap fw-semibold"
+                                            t-att-class="state.projectRiskFilter === 'high' ? 'btn-danger' : 'btn-light border text-muted'"
+                                            style="font-size: 0.75rem;"
+                                            t-on-click="() => this.setProjectRiskFilter('high')">
+                                        <i class="fa fa-exclamation-triangle me-1"></i> High Risk (<t t-esc="state.data.high_risk_count || 0"/>)
+                                    </button>
+                                </div>
+
+                                <!-- 3 Metric Summary Tiles (Matching Image 2 Quotations Style) -->
+                                <div class="row g-2 mb-3">
+                                    <div class="col-4">
+                                        <div class="pm-mobile-metric-tile shadow-sm"
+                                             style="background: linear-gradient(135deg, #b45309, #d97706);"
+                                             t-on-click="() => this.setProjectStatusFilter('running')">
+                                            <div class="pm-metric-tile-val" t-esc="state.data.running_count || 0"/>
+                                            <div class="pm-metric-tile-lbl">Running</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="pm-mobile-metric-tile shadow-sm"
+                                             style="background: linear-gradient(135deg, #5b21b6, #7c3aed);"
+                                             t-on-click="() => this.setProjectConditionFilter('on_plan')">
+                                            <div class="pm-metric-tile-val" t-esc="state.data.condition_on_plan || 0"/>
+                                            <div class="pm-metric-tile-lbl">On Plan</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-4">
+                                        <div class="pm-mobile-metric-tile shadow-sm"
+                                             style="background: linear-gradient(135deg, #0f766e, #0d9488);"
+                                             t-on-click="() => this.setProjectStatusFilter('completed')">
+                                            <div class="pm-metric-tile-val" t-esc="state.data.completed_count || 0"/>
+                                            <div class="pm-metric-tile-lbl">Completed</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Project Cards List -->
+                            <div class="pm-mobile-projects-list">
+                                <t t-if="this.filteredProjects.length === 0">
+                                    <div class="text-center py-5">
+                                        <i class="fa fa-folder-open-o fs-1 text-muted mb-2"></i>
+                                        <h6 class="text-muted fw-bold">No projects match the criteria</h6>
+                                        <button class="btn btn-sm btn-link" t-on-click="clearProjectFilters">Clear Filters</button>
+                                    </div>
+                                </t>
+                                <t t-foreach="this.filteredProjects" t-as="proj" t-key="proj.id">
+                                    <div class="pm-mobile-project-card cursor-pointer"
+                                         t-on-click="() => this.selectMobileProject(proj.id)">
+                                        <!-- Header: Name & Badges -->
+                                        <div class="pm-mproj-header">
+                                            <div class="flex-grow-1 min-w-0">
+                                                <div class="pm-mproj-title text-truncate">
+                                                    <t t-esc="proj.name"/>
+                                                </div>
+                                                <div class="pm-mproj-client text-truncate">
+                                                    <i class="fa fa-building-o me-1 text-muted"></i>
+                                                    <t t-esc="proj.client_name || 'No Client'"/>
+                                                </div>
+                                            </div>
+                                            <div class="pm-mproj-badges">
+                                                <span class="badge rounded-pill px-2 py-1"
+                                                      t-att-class="proj.running_status === 'running' ? 'bg-primary-subtle text-primary border border-primary-subtle' : (proj.running_status === 'completed' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle')"
+                                                      style="font-size: 0.7rem;">
+                                                    <t t-esc="proj.running_status_label || proj.running_status"/>
+                                                </span>
+                                                <span class="badge rounded-pill px-2 py-1"
+                                                      t-att-class="proj.health === 'good' ? 'bg-success-subtle text-success' : (proj.health === 'fair' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger')"
+                                                      style="font-size: 0.7rem;">
+                                                    <t t-esc="proj.health_label || proj.health"/>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Meta Grid: Team Lead & Due Date -->
+                                        <div class="pm-mproj-meta-grid">
+                                            <div class="pm-mproj-meta-item">
+                                                <span class="pm-meta-label">Team / Lead</span>
+                                                <span class="pm-meta-val text-truncate">
+                                                    <i class="fa fa-users me-1 text-muted"></i>
+                                                    <t t-esc="proj.team_lead_name || proj.team_name || 'Unassigned'"/>
+                                                </span>
+                                            </div>
+                                            <div class="pm-mproj-meta-item">
+                                                <span class="pm-meta-label">End Date</span>
+                                                <span class="pm-meta-val text-truncate">
+                                                    <i class="fa fa-calendar me-1 text-muted"></i>
+                                                    <t t-esc="proj.date_end || 'No deadline'"/>
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Progress Row -->
+                                        <div class="pm-mproj-progress-row">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="pm-mproj-label">Progress</span>
+                                                <span class="pm-mproj-val fw-bold">
+                                                    <t t-esc="proj.progress || 0"/>%
+                                                    <span class="text-muted fw-normal small">(Plan: <t t-esc="proj.planned_progress || 0"/>%)</span>
+                                                </span>
+                                            </div>
+                                            <div class="progress" style="height: 6px; background-color: rgba(0,0,0,0.08);">
+                                                <div class="progress-bar bg-success rounded-pill"
+                                                     role="progressbar"
+                                                     t-attf-style="width: #{proj.progress || 0}%;">
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Footer: Scope count & View link -->
+                                        <div class="d-flex justify-content-between align-items-center pt-2 border-top text-muted" style="font-size: 0.75rem;">
+                                            <span>
+                                                <i class="fa fa-tasks me-1 text-primary"></i>
+                                                <t t-esc="proj.scope_count || 0"/> Scopes · <t t-esc="proj.doc_count || 0"/> Docs · <t t-esc="proj.imp_count || 0"/> Impl
+                                            </span>
+                                            <span class="text-primary fw-semibold d-flex align-items-center gap-1">
+                                                Details <i class="fa fa-chevron-right" style="font-size: 0.7rem;"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+                        </t>
+
+                        <!-- VIEW B: PROJECT DETAILS SCREEN (MATCHING IMAGE 3) -->
+                        <t t-if="state.mobileSelectedProjectId">
+                            <div class="pm-mobile-detail-container pb-5">
+                                <!-- Top Back Bar & Quick Actions -->
+                                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                    <button type="button"
+                                            class="btn btn-sm btn-link text-decoration-none d-inline-flex align-items-center gap-2 p-0 text-dark fw-bold"
+                                            t-on-click="backToMobileProjectsList">
+                                        <i class="fa fa-arrow-left fs-6"></i>
+                                        <span>Back to Projects</span>
+                                    </button>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-semibold"
+                                                style="font-size: 0.75rem;"
+                                                t-on-click="() => this.openEditProjectWizard(state.mobileSelectedProjectId)">
+                                            <i class="fa fa-pencil me-1"></i> Edit
+                                        </button>
+                                        <button type="button"
+                                                class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
+                                                style="font-size: 0.75rem;"
+                                                t-on-click="() => this.openProjectScopesTab(state.mobileSelectedProjectId)">
+                                            <i class="fa fa-tasks me-1"></i> Scopes
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Loading State -->
+                                <t t-if="state.mobileProjectDetailLoading">
+                                    <div class="text-center py-5">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading project details...</span>
+                                        </div>
+                                        <div class="text-muted mt-2 small">Loading project details...</div>
+                                    </div>
+                                </t>
+
+                                <!-- Project Detail Content (Matching Image 3) -->
+                                <t t-if="!state.mobileProjectDetailLoading and state.mobileProjectDetailData">
+                                    <!-- Card 1: Project Header Box -->
+                                    <div class="card border rounded-3 p-3 mb-3 shadow-sm pm-mobile-box">
+                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                            <div>
+                                                <span class="text-muted small fw-semibold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.04em;">Project Name</span>
+                                                <h4 class="fw-bold m-0" style="color: var(--pm-text-heading);" t-esc="state.mobileProjectDetailData.name"/>
+                                            </div>
+                                            <span class="badge rounded-pill px-2 py-1"
+                                                  t-att-class="state.mobileProjectDetailData.running_status === 'running' ? 'bg-primary-subtle text-primary border border-primary-subtle' : (state.mobileProjectDetailData.running_status === 'completed' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle')"
+                                                  style="font-size: 0.75rem;">
+                                                <t t-esc="state.mobileProjectDetailData.running_status_label || state.mobileProjectDetailData.running_status"/>
+                                            </span>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-1 text-warning" style="font-size: 0.9rem;">
+                                            <i class="fa" t-att-class="this.isStarActive(state.mobileProjectDetailData.priority, 1) ? 'fa-star text-warning' : 'fa-star-o text-muted'"></i>
+                                            <i class="fa" t-att-class="this.isStarActive(state.mobileProjectDetailData.priority, 2) ? 'fa-star text-warning' : 'fa-star-o text-muted'"></i>
+                                            <i class="fa" t-att-class="this.isStarActive(state.mobileProjectDetailData.priority, 3) ? 'fa-star text-warning' : 'fa-star-o text-muted'"></i>
+                                            <span class="text-muted ms-2 small">Priority</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Card 2: Customer (Client) -->
+                                    <div class="card border rounded-3 p-3 mb-3 shadow-sm pm-mobile-box">
+                                        <span class="text-muted small fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.04em;">Client / Customer</span>
+                                        <div class="fw-bold fs-6 mb-1 text-primary" t-esc="state.mobileProjectDetailData.client_name || 'No Client Assigned'"/>
+                                        <div t-if="state.mobileProjectDetailData.client_coordinator_name" class="d-flex align-items-center gap-2 text-muted small mb-1">
+                                            <i class="fa fa-user-circle-o"></i>
+                                            <span>Coordinator: <strong class="text-dark"><t t-esc="state.mobileProjectDetailData.client_coordinator_name"/></strong></span>
+                                        </div>
+                                        <div t-if="state.mobileProjectDetailData.client_city or state.mobileProjectDetailData.client_country" class="d-flex align-items-center gap-2 text-muted small">
+                                            <i class="fa fa-map-marker"></i>
+                                            <span>
+                                                <t t-if="state.mobileProjectDetailData.client_city" t-esc="state.mobileProjectDetailData.client_city + ', '"/>
+                                                <t t-esc="state.mobileProjectDetailData.client_country"/>
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Card 3: Team & Governance -->
+                                    <div class="card border rounded-3 p-3 mb-3 shadow-sm pm-mobile-box">
+                                        <span class="text-muted small fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.04em;">Team &amp; Governance</span>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Project Team</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.team_name || 'None'"/>
+                                            </div>
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Project Manager</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.manager_name || 'Not Assigned'"/>
+                                            </div>
+                                            <div class="col-6 mt-2">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Team Lead</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.team_lead_name || 'Not Assigned'"/>
+                                            </div>
+                                            <div class="col-6 mt-2">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Impl Coordinator</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.project_coordinator_name || 'Not Assigned'"/>
+                                            </div>
+                                        </div>
+
+                                        <!-- Consultants Tag Badges -->
+                                        <t t-if="state.mobileProjectDetailData.consultants and state.mobileProjectDetailData.consultants.length > 0">
+                                            <div class="mt-3 pt-2 border-top">
+                                                <span class="text-muted d-block mb-1" style="font-size: 0.7rem;">Consultants (<t t-esc="state.mobileProjectDetailData.consultants.length"/>)</span>
+                                                <div class="d-flex flex-wrap gap-1">
+                                                    <t t-foreach="state.mobileProjectDetailData.consultants" t-as="c" t-key="c.id">
+                                                        <span class="badge bg-light text-dark border rounded-pill px-2 py-1" style="font-size: 0.72rem;">
+                                                            <i class="fa fa-user me-1 text-muted"></i>
+                                                            <t t-esc="c.name"/>
+                                                        </span>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
+
+                                    <!-- Card 4: Timeline & Progress -->
+                                    <div class="card border rounded-3 p-3 mb-3 shadow-sm pm-mobile-box">
+                                        <span class="text-muted small fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.04em;">Timeline &amp; Progress</span>
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Start Date</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.date_start || 'Not set'"/>
+                                            </div>
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">End Date</span>
+                                                <strong class="text-dark" style="font-size: 0.85rem;" t-esc="state.mobileProjectDetailData.date_end || 'Not set'"/>
+                                            </div>
+                                        </div>
+
+                                        <!-- Progress Bar -->
+                                        <div class="mt-2 pt-2 border-top">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="text-muted" style="font-size: 0.75rem;">Progress</span>
+                                                <span class="fw-bold" style="font-size: 0.82rem;">
+                                                    <t t-esc="state.mobileProjectDetailData.progress || 0"/>%
+                                                    <span class="text-muted fw-normal small">(Target: <t t-esc="state.mobileProjectDetailData.planned_progress || 0"/>%)</span>
+                                                </span>
+                                            </div>
+                                            <div class="progress" style="height: 8px; background-color: rgba(0,0,0,0.08);">
+                                                <div class="progress-bar bg-success rounded-pill"
+                                                     role="progressbar"
+                                                     t-attf-style="width: #{state.mobileProjectDetailData.progress || 0}%;">
+                                                </div>
+                                            </div>
+                                            <div class="mt-2 text-end">
+                                                <span class="badge rounded-pill px-2 py-1"
+                                                      t-att-class="state.mobileProjectDetailData.condition === 'ahead' ? 'bg-success-subtle text-success' : (state.mobileProjectDetailData.condition === 'on_plan' ? 'bg-info-subtle text-info' : 'bg-warning-subtle text-warning')"
+                                                      style="font-size: 0.72rem;">
+                                                    <i class="fa fa-clock-o me-1"></i> <t t-esc="state.mobileProjectDetailData.condition_label || state.mobileProjectDetailData.condition"/>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Card 5: Health & Risk -->
+                                    <div class="card border rounded-3 p-3 mb-3 shadow-sm pm-mobile-box">
+                                        <span class="text-muted small fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.04em;">Health &amp; Risk</span>
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Project Health</span>
+                                                <span class="badge rounded-pill px-2 py-1"
+                                                      t-att-class="state.mobileProjectDetailData.health === 'good' ? 'bg-success-subtle text-success' : (state.mobileProjectDetailData.health === 'fair' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger')"
+                                                      style="font-size: 0.73rem;">
+                                                    <t t-esc="state.mobileProjectDetailData.health_label || state.mobileProjectDetailData.health"/>
+                                                </span>
+                                            </div>
+                                            <div class="col-6">
+                                                <span class="text-muted d-block" style="font-size: 0.7rem;">Risk Level</span>
+                                                <span class="badge rounded-pill px-2 py-1"
+                                                      t-att-class="state.mobileProjectDetailData.risk_level === 'low' ? 'bg-success-subtle text-success' : (state.mobileProjectDetailData.risk_level === 'medium' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger')"
+                                                      style="font-size: 0.73rem;">
+                                                    <t t-esc="state.mobileProjectDetailData.risk_level_label || state.mobileProjectDetailData.risk_level"/> Risk
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Card 6: Deliverables Breakdown -->
+                                    <div class="card border rounded-3 p-3 mb-4 shadow-sm pm-mobile-box">
+                                        <span class="text-muted small fw-bold text-uppercase d-block mb-2" style="font-size: 0.7rem; letter-spacing: 0.04em;">Deliverables Breakdown</span>
+                                        <div class="row g-2 mb-3 text-center">
+                                            <div class="col-4">
+                                                <div class="p-2 rounded-2 bg-light border">
+                                                    <span class="d-block fw-bold text-primary" style="font-size: 1.1rem;" t-esc="state.mobileProjectDetailData.scope_count || 0"/>
+                                                    <span class="text-muted" style="font-size: 0.65rem; text-transform: uppercase;">Scopes</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 rounded-2 bg-light border">
+                                                    <span class="d-block fw-bold text-info" style="font-size: 1.1rem;" t-esc="state.mobileProjectDetailData.doc_count || 0"/>
+                                                    <span class="text-muted" style="font-size: 0.65rem; text-transform: uppercase;">Docs</span>
+                                                </div>
+                                            </div>
+                                            <div class="col-4">
+                                                <div class="p-2 rounded-2 bg-light border">
+                                                    <span class="d-block fw-bold text-purple" style="font-size: 1.1rem;" t-esc="state.mobileProjectDetailData.imp_count || 0"/>
+                                                    <span class="text-muted" style="font-size: 0.65rem; text-transform: uppercase;">Impls</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Big Primary Action Button to Open Scopes Checklist -->
+                                        <button type="button" class="btn btn-primary w-100 py-2 fw-semibold rounded-3 d-flex align-items-center justify-content-center gap-2"
+                                                t-on-click="() => this.openProjectScopesTab(state.mobileSelectedProjectId)">
+                                            <i class="fa fa-tasks"></i> Open Scopes &amp; Deliverables Checklist
+                                        </button>
+                                    </div>
+                                </t>
+                            </div>
+                        </t>
+                    </section>
+                </t>
+                </t>
+
                 <!-- ==================== 3. APPROVALS PENDING ACTION ==================== -->
                 <t t-if="this.isSectionVisible('approvals')">
                     <t t-if="state.data.approvals_summary and state.data.approvals_summary.pending_my_approval_count > 0">
@@ -1280,9 +1673,6 @@
                                     <p class="pm-section-sub mb-0">You are the designated approver in the project management hierarchy.</p>
                                 </div>
                             </div>
-                            <button class="pm-link-btn" t-on-click="viewAllApprovals">
-                                Open Approvals Center <i class="fa fa-arrow-right ms-1"></i>
-                            </button>
                         </div>
 
                         <div class="pm-approval-grid">
@@ -1346,10 +1736,14 @@
                 <t t-if="this.isSectionVisible('scopes')">
                     <!-- Mobile Scope Checklist & Project Selector (Mobile only) -->
                     <t t-if="state.isMobile">
-                        <div class="pm-mobile-scope-header p-3 rounded-3 mb-3" style="background: var(--pm-bg-card); border: 1px solid var(--pm-border);">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <span class="fw-bold small text-muted"><i class="fa fa-folder-open text-primary me-1"></i> Project:</span>
-                                <select class="form-select form-select-sm"
+                        <div class="pm-mobile-scope-header p-3 rounded-3 mb-3 shadow-sm" style="background: var(--pm-card-bg, #ffffff); border: 1px solid var(--pm-border, #e2e8f0);">
+                            <!-- Project Selector -->
+                            <div class="mb-3">
+                                <label class="form-label small fw-bold text-muted mb-1 text-uppercase d-flex align-items-center gap-1" style="font-size: 0.72rem; letter-spacing: 0.03em;">
+                                    <i class="fa fa-folder-open text-primary"></i> Select Project
+                                </label>
+                                <select class="form-select form-select-sm rounded-pill fw-semibold"
+                                        style="font-size: 0.85rem; height: 38px; border-color: var(--pm-border); background-color: var(--pm-card-bg);"
                                         t-on-change="onProjectSelectChange"
                                         t-att-value="state.selectedProjectId || ''">
                                     <option value="">-- Choose Project --</option>
@@ -1363,9 +1757,13 @@
 
                             <!-- Scope filter dropdown for mobile -->
                             <t t-if="state.projectScopesData and state.projectScopesData.unique_scopes and state.projectScopesData.unique_scopes.length > 0">
-                                <div class="pm-scope-select-wrap mb-2">
-                                    <select class="pm-scope-filter-select form-select form-select-sm"
-                                            t-on-change="onScopeDropdownChange"
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold text-muted mb-1 text-uppercase d-flex align-items-center gap-1" style="font-size: 0.72rem; letter-spacing: 0.03em;">
+                                        <i class="fa fa-filter text-info"></i> Scope Filter
+                                    </label>
+                                    <select class="pm-scope-filter-select form-select form-select-sm rounded-pill fw-semibold"
+                                            style="font-size: 0.85rem; height: 38px; border-color: var(--pm-border); background-color: var(--pm-card-bg);"
+                                            t-on-change="(ev) => this.onScopeSelectChange(ev)"
                                             t-att-value="state.selectedScopeName || ''">
                                         <option value="">📁 All Scopes (<t t-esc="state.projectScopesData.stats.total_items"/> tasks across <t t-esc="state.projectScopesData.unique_scopes.length"/> scopes)</option>
                                         <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
@@ -1378,13 +1776,13 @@
                             </t>
 
                             <!-- Mobile Quick Action Buttons -->
-                            <div class="d-flex gap-2 flex-wrap" t-if="state.selectedProjectId">
+                            <div class="d-flex gap-2 pt-1" t-if="state.selectedProjectId">
                                 <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
-                                    <button class="btn btn-sm pm-btn-add-scope flex-grow-1"
+                                    <button class="btn btn-sm pm-btn-add-scope flex-grow-1 rounded-pill fw-semibold py-2"
                                             t-on-click="(ev) => this.openScopeWizard(null, ev)">
                                         <i class="fa fa-plus me-1"></i> Add Scope
                                     </button>
-                                    <button class="btn btn-sm pm-btn-outline-primary"
+                                    <button class="btn btn-sm pm-btn-outline-primary rounded-pill fw-semibold px-3 py-2"
                                             t-on-click="(ev) => this.openImportWizardForProject(state.selectedProjectId, ev)"
                                             title="Import Scopes">
                                         <i class="fa fa-upload me-1"></i> Import
@@ -3444,21 +3842,26 @@
 
                                         <!-- Uploaded Deliverables & Documents -->
                                         <div class="mb-3">
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <div class="fw-bold small" style="color: var(--pm-text-heading);">
-                                                    UPLOADED DOCUMENTS &amp; DELIVERABLES (<t t-esc="state.scopeDetailData.doc_count || 0"/>)
-                                                    <div class="text-muted small fw-normal">Files uploaded as proof of deliverable with uploader and upload timestamp</div>
+                                            <div class="d-flex justify-content-between align-items-center gap-2 mb-2 flex-wrap flex-sm-nowrap">
+                                                <div class="min-w-0 flex-grow-1">
+                                                    <div class="fw-bold small text-uppercase" style="color: var(--pm-text-heading); letter-spacing: 0.03em;">
+                                                        Uploaded Documents &amp; Deliverables (<t t-esc="state.scopeDetailData.doc_count || 0"/>)
+                                                    </div>
+                                                    <div class="text-muted small fw-normal" style="font-size: 0.74rem;">Proof files attached to this task</div>
                                                 </div>
-                                                <div>
-                                                    <label class="btn btn-sm btn-outline-primary px-3 py-1 rounded-pill cursor-pointer m-0">
-                                                        <i class="fa fa-upload me-1"></i> Upload File
+                                                <div class="flex-shrink-0">
+                                                    <label class="btn btn-sm btn-outline-primary px-3 py-1 rounded-pill cursor-pointer m-0 text-nowrap d-inline-flex align-items-center gap-1 shadow-sm"
+                                                           style="font-size: 0.8rem; font-weight: 600; white-space: nowrap !important;">
+                                                        <i class="fa fa-upload"></i>
+                                                        <span>Upload File</span>
                                                         <input type="file" class="d-none" t-on-change="(ev) => this.onModalDocumentUpload(ev, state.scopeDetailData.id)"/>
                                                     </label>
                                                 </div>
                                             </div>
 
                                             <t t-if="state.scopeDetailData.documents and state.scopeDetailData.documents.length > 0">
-                                                <div class="table-responsive rounded border" style="border-color: var(--pm-border) !important;">
+                                                <!-- Desktop Table View (>= 768px) -->
+                                                <div class="table-responsive rounded border d-none d-md-block" style="border-color: var(--pm-border) !important;">
                                                     <table class="table table-sm table-hover mb-0" style="color: var(--pm-text-body);">
                                                         <thead style="background: var(--pm-tile-bg, #f1f5f9); font-size: 0.75rem;">
                                                             <tr>
@@ -3506,6 +3909,30 @@
                                                         </tbody>
                                                     </table>
                                                 </div>
+
+                                                <!-- Mobile Document Cards (< 768px) -->
+                                                <div class="d-md-none d-flex flex-column gap-2">
+                                                    <t t-foreach="state.scopeDetailData.documents" t-as="doc" t-key="doc.id">
+                                                        <div class="p-2 rounded-3 border d-flex align-items-center justify-content-between gap-2"
+                                                             style="background: var(--pm-tile-bg, #f8fafc); border-color: var(--pm-border) !important;">
+                                                            <div class="d-flex align-items-center gap-2 min-w-0 flex-grow-1">
+                                                                <i class="fa fa-2x flex-shrink-0 text-primary" t-att-class="this.getFileIcon(doc.filename)"></i>
+                                                                <div class="min-w-0">
+                                                                    <div class="fw-semibold text-truncate" style="font-size: 0.82rem;" t-att-title="doc.filename" t-esc="doc.filename"/>
+                                                                    <div class="text-muted text-truncate" style="font-size: 0.7rem;">
+                                                                        <span t-esc="doc.file_size_display"/> · <t t-esc="doc.uploaded_by_name"/>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <a t-att-href="doc.download_url"
+                                                               target="_blank"
+                                                               class="btn btn-sm btn-outline-primary py-1 px-3 rounded-pill flex-shrink-0"
+                                                               style="font-size: 0.75rem;">
+                                                                <i class="fa fa-download me-1"></i> Download
+                                                            </a>
+                                                        </div>
+                                                    </t>
+                                                </div>
                                             </t>
                                             <t t-else="">
                                                 <div class="text-center py-4 rounded bg-light" style="background: var(--pm-tile-bg, #f8fafc) !important; border: 1px dashed var(--pm-border);">
@@ -3519,22 +3946,24 @@
                                 </div>
 
                                 <!-- Modal Footer: Approve, Reject, Close -->
-                                <div class="pm-modal-footer d-flex justify-content-between align-items-center">
-                                    <div class="text-muted small d-flex align-items-center" style="font-size: 0.82rem; color: var(--pm-text-muted, #94a3b8);">
+                                <div class="pm-modal-footer">
+                                    <div class="text-muted small d-none d-md-flex align-items-center" style="font-size: 0.82rem; color: var(--pm-text-muted, #94a3b8);">
                                         <i class="fa fa-shield text-primary me-1"></i> Managed directly in dashboard
                                     </div>
-                                    <div class="d-flex gap-2">
+                                    <div class="pm-modal-footer-actions">
                                         <t t-if="state.scopeDetailData and state.scopeDetailData.can_approve and ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'].includes(state.scopeDetailData.approval_state)">
-                                            <button type="button" class="btn btn-sm btn-success fw-semibold px-3 py-1 rounded-pill"
-                                                    t-on-click="() => this.approveTaskFromModal(state.scopeDetailData.id)">
-                                                <i class="fa fa-check me-1"></i> Approve
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-danger fw-semibold px-3 py-1 rounded-pill"
-                                                    t-on-click="() => this.rejectTaskFromModal(state.scopeDetailData.id)">
-                                                <i class="fa fa-times me-1"></i> Reject / Re-Work
-                                            </button>
+                                            <div class="pm-modal-action-row">
+                                                <button type="button" class="btn btn-sm btn-success fw-semibold px-3 py-2 rounded-pill pm-btn-modal-approve d-inline-flex align-items-center justify-content-center"
+                                                        t-on-click="() => this.approveTaskFromModal(state.scopeDetailData.id)">
+                                                    <i class="fa fa-check me-1"></i> Approve
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-danger fw-semibold px-3 py-2 rounded-pill pm-btn-modal-reject d-inline-flex align-items-center justify-content-center"
+                                                        t-on-click="() => this.rejectTaskFromModal(state.scopeDetailData.id)">
+                                                    <i class="fa fa-times me-1"></i> Reject
+                                                </button>
+                                            </div>
                                         </t>
-                                        <button type="button" class="btn btn-sm btn-outline-secondary pm-btn-modal-cancel pm-modal-btn-close px-4 py-1 rounded-pill fw-semibold"
+                                        <button type="button" class="btn btn-sm btn-outline-secondary pm-btn-modal-cancel pm-modal-btn-close px-4 py-2 rounded-pill fw-semibold"
                                                 t-on-click="closeScopeDetailWizard">
                                             Close
                                         </button>
@@ -3957,7 +4386,7 @@
                     <span class="pm-mobile-nav-label">Approvals</span>
                 </button>
 
-                <!-- 4. Scope & Tasks -->
+                <!-- 4. Tasks -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('scopes') ? 'active' : ''"
                         t-on-click="() => this.setActiveTab('scopes')">
@@ -3967,7 +4396,7 @@
                             <t t-esc="state.data.tasks_hub.pending_count"/>
                         </span>
                     </div>
-                    <span class="pm-mobile-nav-label">Scope &amp; Tasks</span>
+                    <span class="pm-mobile-nav-label">Tasks</span>
                 </button>
 
                 <!-- 5. Calendar -->
@@ -3975,7 +4404,7 @@
                         t-att-class="this.isTabActive('calendar') ? 'active' : ''"
                         t-on-click="() => this.setActiveTab('calendar')">
                     <div class="pm-mobile-nav-icon-wrap">
-                        <i class="fa fa-calendar-alt"></i>
+                        <i class="fa fa-calendar"></i>
                     </div>
                     <span class="pm-mobile-nav-label">Calendar</span>
                 </button>
