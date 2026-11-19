@@ -3,6 +3,7 @@
 import { Component, useState, onWillStart, onMounted, onWillUnmount, onWillUpdateProps, useRef } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
+import { _t } from "@web/core/l10n/translation";
 
 export class ProjectManageDashboard extends Component {
     static template = "project_manage.Dashboard";
@@ -32,6 +33,15 @@ export class ProjectManageDashboard extends Component {
             const nextView = nextActionParams.default_main_view || nextActionContext.default_main_view;
             if (nextView && nextView !== this.state.activeMainView) {
                 this.setActiveTab(nextView);
+                if (nextView === 'projects') {
+                    this.scrollToProjectsTable();
+                }
+            }
+        });
+
+        onMounted(() => {
+            if (this.state.activeMainView === 'projects') {
+                this.scrollToProjectsTable();
             }
         });
 
@@ -40,7 +50,18 @@ export class ProjectManageDashboard extends Component {
             darkMode: initialDark,
             isMobile: typeof window !== 'undefined' ? (window.innerWidth < 992) : false,
             activeMainView: defaultView,  // 'home', 'projects', 'approvals', 'scopes', 'calendar'
-            projectStatusFilter: 'all',  // 'all', 'running', 'on_hold', 'completed', 'high_risk'
+            projectStatusFilter: 'all',  // 'all', 'running', 'on_hold', 'completed'
+            projectRiskFilter: 'all',    // 'all', 'low', 'medium', 'high'
+            projectHealthFilter: 'all',  // 'all', 'good', 'fair', 'poor'
+            projectConditionFilter: 'all', // 'all', 'ahead', 'on_plan', 'behind', 'overdue'
+            projectDeliveryFilter: 'all',  // 'all', 'on_time'
+            projectSearchFilter: '',       // search query string
+            projectCardsWizardOpen: false,
+            projectCardsWizardTitle: "Projects",
+            projectCardsWizardSubtitle: "",
+            projectCardsWizardFilterType: "all",
+            projectCardsWizardFilterValue: "",
+            projectCardsWizardSearch: "",
             calendarTimeFilter: 'today',  // 'today', 'tomorrow', 'week', 'month', 'all'
             calendarViewMode: 'week_strip',   // 'week_strip', 'month', 'agenda'
             calendarCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
@@ -85,6 +106,10 @@ export class ProjectManageDashboard extends Component {
                 import_filename: "",
             },
             savingNewProject: false,
+            editProjectWizardOpen: false,
+            editProjectWizardLoading: false,
+            savingEditProject: false,
+            editProjectData: null,
             scopeDetailWizardOpen: false,
             scopeDetailLoading: false,
             scopeDetailData: null,
@@ -616,12 +641,24 @@ export class ProjectManageDashboard extends Component {
     get filteredProjects() {
         let projs = (this.state.data && this.state.data.projects) || [];
         if (this.state.selectedTeamId) {
-            if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
+            const tm = this.state.data?.teams?.find(t => String(t.id) === String(this.state.selectedTeamId));
+            if (tm && Array.isArray(tm.project_ids) && tm.project_ids.length > 0) {
+                projs = projs.filter(p => tm.project_ids.includes(p.id));
+            } else if (typeof this.state.selectedTeamId === 'string' && this.state.selectedTeamId.startsWith('lead_')) {
                 const leadId = parseInt(this.state.selectedTeamId.replace('lead_', ''), 10);
-                projs = projs.filter(p => p.team_lead_id === leadId);
+                projs = projs.filter(p =>
+                    p.team_lead_id === leadId ||
+                    (tm && p.team_lead_name && tm.lead_name && p.team_lead_name.trim().toLowerCase() === tm.lead_name.trim().toLowerCase()) ||
+                    (tm && p.team_name && tm.name && p.team_name.trim().toLowerCase() === tm.name.trim().toLowerCase())
+                );
             } else {
                 const tId = parseInt(this.state.selectedTeamId, 10);
-                projs = projs.filter(p => p.team_id === tId);
+                projs = projs.filter(p =>
+                    p.team_id === tId ||
+                    (tm && tm.team_lead_id && p.team_lead_id === tm.team_lead_id) ||
+                    (tm && p.team_lead_name && tm.lead_name && p.team_lead_name.trim().toLowerCase() === tm.lead_name.trim().toLowerCase()) ||
+                    (tm && p.team_name && tm.name && p.team_name.trim().toLowerCase() === tm.name.trim().toLowerCase())
+                );
             }
         }
         if (this.state.projectStatusFilter && this.state.projectStatusFilter !== 'all') {
@@ -631,7 +668,174 @@ export class ProjectManageDashboard extends Component {
                 projs = projs.filter(p => p.running_status === this.state.projectStatusFilter);
             }
         }
+        if (this.state.projectRiskFilter && this.state.projectRiskFilter !== 'all') {
+            projs = projs.filter(p => p.risk_level === this.state.projectRiskFilter);
+        }
+        if (this.state.projectHealthFilter && this.state.projectHealthFilter !== 'all') {
+            projs = projs.filter(p => p.health === this.state.projectHealthFilter);
+        }
+        if (this.state.projectConditionFilter && this.state.projectConditionFilter !== 'all') {
+            projs = projs.filter(p => p.condition === this.state.projectConditionFilter);
+        }
+        if (this.state.projectDeliveryFilter === 'on_time') {
+            projs = projs.filter(p => p.condition === 'ahead' || p.condition === 'on_plan');
+        }
+        if (this.state.projectSearchFilter && this.state.projectSearchFilter.trim()) {
+            const q = this.state.projectSearchFilter.trim().toLowerCase();
+            projs = projs.filter(p =>
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.client_name && p.client_name.toLowerCase().includes(q))
+            );
+        }
         return projs;
+    }
+
+    get isProjectFilterActive() {
+        return Boolean(
+            (this.state.projectStatusFilter && this.state.projectStatusFilter !== 'all') ||
+            (this.state.projectRiskFilter && this.state.projectRiskFilter !== 'all') ||
+            (this.state.projectHealthFilter && this.state.projectHealthFilter !== 'all') ||
+            (this.state.projectConditionFilter && this.state.projectConditionFilter !== 'all') ||
+            (this.state.projectDeliveryFilter && this.state.projectDeliveryFilter !== 'all') ||
+            (this.state.selectedTeamId) ||
+            (this.state.projectSearchFilter && this.state.projectSearchFilter.trim())
+        );
+    }
+
+    get activeProjectFilterLabel() {
+        const parts = [];
+        if (this.state.selectedTeamId) {
+            const tm = this.state.data?.teams?.find(t => String(t.id) === String(this.state.selectedTeamId));
+            parts.push(tm ? tm.name : 'Team');
+        }
+        if (this.state.projectStatusFilter && this.state.projectStatusFilter !== 'all') {
+            const statusMap = {
+                running: 'Running',
+                completed: 'Completed',
+                on_hold: 'On Hold',
+                not_started: 'Not Started',
+                high_risk: 'High Risk',
+            };
+            parts.push(statusMap[this.state.projectStatusFilter] || this.state.projectStatusFilter);
+        }
+        if (this.state.projectRiskFilter && this.state.projectRiskFilter !== 'all') {
+            const riskMap = {
+                low: 'Low Risk',
+                medium: 'Medium Risk',
+                high: 'High Risk',
+            };
+            parts.push(riskMap[this.state.projectRiskFilter] || `${this.state.projectRiskFilter.toUpperCase()} Risk`);
+        }
+        if (this.state.projectHealthFilter && this.state.projectHealthFilter !== 'all') {
+            const healthMap = {
+                good: 'Good Health',
+                fair: 'Fair Health',
+                poor: 'Poor Health',
+            };
+            parts.push(healthMap[this.state.projectHealthFilter] || `Health: ${this.state.projectHealthFilter}`);
+        }
+        if (this.state.projectConditionFilter && this.state.projectConditionFilter !== 'all') {
+            const condMap = {
+                ahead: 'Ahead of Plan',
+                on_plan: 'On Plan',
+                behind: 'Behind Plan',
+                overdue: 'Overdue',
+            };
+            parts.push(condMap[this.state.projectConditionFilter] || this.state.projectConditionFilter);
+        }
+        if (this.state.projectDeliveryFilter === 'on_time') {
+            parts.push('On-Time Delivery');
+        }
+        return parts.join(' · ') || 'Filtered Projects';
+    }
+
+    clearProjectFilters(ev) {
+        if (ev) ev.stopPropagation();
+        this.state.projectStatusFilter = 'all';
+        this.state.projectRiskFilter = 'all';
+        this.state.projectHealthFilter = 'all';
+        this.state.projectConditionFilter = 'all';
+        this.state.projectDeliveryFilter = 'all';
+        this.state.selectedTeamId = null;
+        this.state.projectSearchFilter = '';
+    }
+
+    get wizardFilteredProjects() {
+        let projs = (this.state.data && this.state.data.projects) || [];
+        const fType = this.state.projectCardsWizardFilterType;
+        const fVal = this.state.projectCardsWizardFilterValue;
+
+        if (fType === 'running_status' && fVal && fVal !== 'all') {
+            projs = projs.filter(p => p.running_status === fVal);
+        } else if (fType === 'risk' && fVal && fVal !== 'all') {
+            projs = projs.filter(p => p.risk_level === fVal);
+        } else if (fType === 'health' && fVal && fVal !== 'all') {
+            projs = projs.filter(p => p.health === fVal);
+        } else if (fType === 'condition' && fVal && fVal !== 'all') {
+            projs = projs.filter(p => p.condition === fVal);
+        } else if (fType === 'on_time') {
+            projs = projs.filter(p => p.condition === 'ahead' || p.condition === 'on_plan');
+        } else if (fType === 'team' && fVal) {
+            const tm = this.state.data?.teams?.find(t => String(t.id) === String(fVal));
+            if (tm && Array.isArray(tm.project_ids) && tm.project_ids.length > 0) {
+                projs = projs.filter(p => tm.project_ids.includes(p.id));
+            } else if (typeof fVal === 'string' && fVal.startsWith('lead_')) {
+                const leadId = parseInt(fVal.replace('lead_', ''), 10);
+                projs = projs.filter(p =>
+                    p.team_lead_id === leadId ||
+                    (tm && p.team_lead_name && tm.lead_name && p.team_lead_name.trim().toLowerCase() === tm.lead_name.trim().toLowerCase()) ||
+                    (tm && p.team_name && tm.name && p.team_name.trim().toLowerCase() === tm.name.trim().toLowerCase())
+                );
+            } else {
+                const tId = parseInt(fVal, 10);
+                projs = projs.filter(p =>
+                    p.team_id === tId ||
+                    (tm && tm.team_lead_id && p.team_lead_id === tm.team_lead_id) ||
+                    (tm && p.team_lead_name && tm.lead_name && p.team_lead_name.trim().toLowerCase() === tm.lead_name.trim().toLowerCase()) ||
+                    (tm && p.team_name && tm.name && p.team_name.trim().toLowerCase() === tm.name.trim().toLowerCase())
+                );
+            }
+        }
+
+        if (this.state.projectCardsWizardSearch && this.state.projectCardsWizardSearch.trim()) {
+            const q = this.state.projectCardsWizardSearch.trim().toLowerCase();
+            projs = projs.filter(p =>
+                (p.name && p.name.toLowerCase().includes(q)) ||
+                (p.client_name && p.client_name.toLowerCase().includes(q)) ||
+                (p.team_name && p.team_name.toLowerCase().includes(q))
+            );
+        }
+        return projs;
+    }
+
+    openProjectCardsWizard(filterType = 'all', filterValue = '', title = '', subtitle = '', ev = null) {
+        if (ev) ev.stopPropagation();
+        this.state.projectCardsWizardFilterType = filterType;
+        this.state.projectCardsWizardFilterValue = filterValue;
+        this.state.projectCardsWizardTitle = title || "Projects";
+        this.state.projectCardsWizardSubtitle = subtitle || "";
+        this.state.projectCardsWizardSearch = "";
+        this.state.projectCardsWizardOpen = true;
+    }
+
+    closeProjectCardsWizard() {
+        this.state.projectCardsWizardOpen = false;
+        this.state.projectCardsWizardSearch = "";
+    }
+
+    openProjectScopesFromCardWizard(projectId) {
+        this.closeProjectCardsWizard();
+        this.openProjectScopesTab(projectId);
+    }
+
+    openEditProjectFromCardWizard(projectId) {
+        this.closeProjectCardsWizard();
+        this.openEditProjectWizard(projectId);
+    }
+
+    openProjectDetailFromCardWizard(projectId) {
+        this.closeProjectCardsWizard();
+        this.openProjectDetailWizard(projectId);
     }
 
     // ==================== CALENDAR VIEW METHODS & GETTERS ====================
@@ -1619,11 +1823,13 @@ export class ProjectManageDashboard extends Component {
             target: "new",
             context: { default_project_id: numericId },
         }, {
-            onClose: () => {
-                if (this.state.selectedProjectId) {
-                    this.loadProjectScopes(this.state.selectedProjectId);
+            onClose: async () => {
+                const targetId = this.state.selectedProjectId || numericId;
+                if (targetId) {
+                    this.state.selectedProjectId = targetId;
+                    await this.loadProjectScopes(targetId);
                 }
-                this.loadData();
+                await this.loadData();
             }
         });
     }
@@ -2017,6 +2223,191 @@ export class ProjectManageDashboard extends Component {
         }
     }
 
+    async openEditProjectWizard(projectId, ev) {
+        if (ev) ev.stopPropagation();
+        if (!projectId) return;
+        const numericId = parseInt(projectId, 10);
+        if (isNaN(numericId) || numericId <= 0) return;
+
+        if (this.state.projectDetailWizardOpen) {
+            this.state.projectDetailWizardOpen = false;
+        }
+
+        this.state.editProjectWizardOpen = true;
+        this.state.editProjectWizardLoading = true;
+        try {
+            const res = await this.orm.call("project.manage", "get_project_for_edit", [numericId]);
+            if (res && res.project) {
+                if (res.meta) {
+                    this.state.projectFormData = res.meta;
+                }
+                const p = res.project;
+                this.state.editProjectData = {
+                    id: p.id,
+                    name: p.name || "",
+                    priority: String(p.priority || "0"),
+                    partner_id: p.partner_id ? String(p.partner_id) : "",
+                    client_coordinator_id: p.client_coordinator_id ? String(p.client_coordinator_id) : "",
+                    date_start: p.date_start || "",
+                    date_end: p.date_end || "",
+                    tag_ids: Array.isArray(p.tag_ids) ? [...p.tag_ids] : [],
+                    team_id: p.team_id ? String(p.team_id) : "",
+                    manager_id: p.manager_id ? String(p.manager_id) : "",
+                    team_lead_id: p.team_lead_id ? String(p.team_lead_id) : "",
+                    project_coordinator_id: p.project_coordinator_id ? String(p.project_coordinator_id) : "",
+                    consultant_ids: Array.isArray(p.consultant_ids) ? [...p.consultant_ids] : [],
+                    state: p.state || "todo",
+                    health: p.health || "good",
+                    risk_level: p.risk_level || "low",
+                };
+            } else {
+                if (this.notification) {
+                    this.notification.add("Could not load project for editing.", { type: "danger" });
+                }
+                this.state.editProjectWizardOpen = false;
+            }
+        } catch (err) {
+            console.error("Failed to load project for edit:", err);
+            if (this.notification) {
+                this.notification.add("Failed to load project details.", { type: "danger" });
+            }
+            this.state.editProjectWizardOpen = false;
+        } finally {
+            this.state.editProjectWizardLoading = false;
+        }
+    }
+
+    closeEditProjectWizard() {
+        if (this.state.savingEditProject) return;
+        this.state.editProjectWizardOpen = false;
+        this.state.editProjectData = null;
+    }
+
+    isEditProjectStarActive(star) {
+        if (!this.state.editProjectData) return false;
+        const cur = parseInt(this.state.editProjectData.priority || 0, 10);
+        return cur >= star;
+    }
+
+    setEditProjectPriority(star) {
+        if (!this.state.editProjectData) return;
+        const cur = parseInt(this.state.editProjectData.priority || 0, 10);
+        this.state.editProjectData.priority = (cur === star) ? "0" : String(star);
+    }
+
+    onEditProjectClientSelect(ev) {
+        if (!this.state.editProjectData) return;
+        const clientId = ev.target.value;
+        this.state.editProjectData.partner_id = clientId;
+        if (clientId && (!this.state.editProjectData.client_coordinator_id || this.state.editProjectData.client_coordinator_id === "")) {
+            this.state.editProjectData.client_coordinator_id = clientId;
+        }
+    }
+
+    onEditProjectTeamSelect(ev) {
+        if (!this.state.editProjectData) return;
+        const teamIdVal = ev.target.value;
+        this.state.editProjectData.team_id = teamIdVal;
+        if (!teamIdVal || !this.state.projectFormData || !this.state.projectFormData.teams) {
+            return;
+        }
+        const selectedTeam = this.state.projectFormData.teams.find(t => String(t.id) === String(teamIdVal));
+        if (selectedTeam) {
+            if (selectedTeam.team_lead_emp_id) {
+                this.state.editProjectData.team_lead_id = String(selectedTeam.team_lead_emp_id);
+            }
+            if (selectedTeam.member_emp_ids && selectedTeam.member_emp_ids.length > 0) {
+                const current = new Set(this.state.editProjectData.consultant_ids || []);
+                selectedTeam.member_emp_ids.forEach(id => current.add(id));
+                this.state.editProjectData.consultant_ids = Array.from(current);
+            }
+        }
+    }
+
+    toggleEditProjectTag(tagId) {
+        if (!this.state.editProjectData) return;
+        const cur = this.state.editProjectData.tag_ids || [];
+        if (cur.includes(tagId)) {
+            this.state.editProjectData.tag_ids = cur.filter(id => id !== tagId);
+        } else {
+            this.state.editProjectData.tag_ids = [...cur, tagId];
+        }
+    }
+
+    addEditProjectConsultant(ev) {
+        if (!this.state.editProjectData) return;
+        const val = ev.target.value;
+        if (!val) return;
+        const empId = parseInt(val, 10);
+        if (isNaN(empId)) return;
+        if (!this.state.editProjectData.consultant_ids.includes(empId)) {
+            this.state.editProjectData.consultant_ids.push(empId);
+        }
+        ev.target.value = "";
+    }
+
+    removeEditProjectConsultant(empId) {
+        if (!this.state.editProjectData) return;
+        this.state.editProjectData.consultant_ids = (this.state.editProjectData.consultant_ids || []).filter(id => id !== empId);
+    }
+
+    async saveEditProject() {
+        if (!this.state.editProjectData) return;
+        const data = this.state.editProjectData;
+        if (!data.name || !data.name.trim()) {
+            if (this.notification) this.notification.add("Project Name is required.", { type: "warning" });
+            return;
+        }
+        if (!data.partner_id) {
+            if (this.notification) this.notification.add("Please select a Client.", { type: "warning" });
+            return;
+        }
+        if (!data.date_start || !data.date_end) {
+            if (this.notification) this.notification.add("Please provide Start and End Dates.", { type: "warning" });
+            return;
+        }
+        if (new Date(data.date_end) < new Date(data.date_start)) {
+            if (this.notification) this.notification.add("End date cannot be earlier than start date.", { type: "warning" });
+            return;
+        }
+        if (!data.manager_id) {
+            if (this.notification) this.notification.add("Please select a Project Manager.", { type: "warning" });
+            return;
+        }
+        if (!data.team_lead_id) {
+            if (this.notification) this.notification.add("Please select a Team Lead.", { type: "warning" });
+            return;
+        }
+        if (!data.consultant_ids || data.consultant_ids.length === 0) {
+            data.consultant_ids = [parseInt(data.team_lead_id, 10)];
+        }
+
+        this.state.savingEditProject = true;
+        try {
+            const res = await this.orm.call("project.manage", "update_project_from_dashboard", [data.id, data]);
+            if (res && res.success) {
+                if (this.notification) {
+                    this.notification.add(`Project "${res.project_name}" updated successfully!`, { type: "success" });
+                }
+                const updatedId = data.id;
+                this.state.editProjectWizardOpen = false;
+                this.state.editProjectData = null;
+                await this.loadData();
+                if (this.state.selectedProjectId === updatedId) {
+                    await this.loadProjectScopes(updatedId);
+                }
+            }
+        } catch (err) {
+            console.error("Failed to update project from dashboard:", err);
+            const msg = err && err.data && err.data.message ? err.data.message : (err && err.message ? err.message : "Failed to update project.");
+            if (this.notification) {
+                this.notification.add(msg, { type: "danger" });
+            }
+        } finally {
+            this.state.savingEditProject = false;
+        }
+    }
+
     createNewTeam() {
         if (!this.state.data.user_info.can_see_all_teams) {
             if (this.notification) {
@@ -2032,46 +2423,90 @@ export class ProjectManageDashboard extends Component {
         });
     }
 
-    viewAllProjects(domain = [], name = "Projects") {
-        this.state.projectStatusFilter = 'all';
+    scrollToProjectsTable() {
+        if (this.state.activeMainView === 'calendar') {
+            this.setActiveTab('home');
+        }
         if (this.state.isMobile) {
             this.setActiveTab('projects');
         } else if (typeof document !== 'undefined') {
-            const el = document.querySelector(".pm-table-section");
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+            setTimeout(() => {
+                const el = document.querySelector(".pm-table-section");
+                if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+            }, 60);
         }
+    }
+
+    viewAllProjects(domain = [], name = "Projects") {
+        this.openProjectCardsWizard('all', '', 'Total Projects', 'All portfolio projects');
     }
 
     viewRunningProjects() {
-        this.state.projectStatusFilter = 'running';
-        this.setActiveTab('projects');
-    }
-
-    viewHighRiskProjects() {
-        this.state.projectStatusFilter = 'high_risk';
-        this.setActiveTab('projects');
-    }
-
-    viewProjectsByRisk(level, ev) {
-        if (ev) ev.stopPropagation();
-        if (level === 'high') {
-            this.state.projectStatusFilter = 'high_risk';
-        } else {
-            this.state.projectStatusFilter = 'all';
-        }
-        this.setActiveTab('projects');
+        this.openProjectCardsWizard('running_status', 'running', 'Running Projects', 'Projects currently active and in progress');
     }
 
     viewProjectsByRunningStatus(status, ev) {
         if (ev) ev.stopPropagation();
-        this.state.projectStatusFilter = status || 'all';
-        this.setActiveTab('projects');
+        const labelMap = {
+            running: 'Running Projects',
+            completed: 'Completed Projects',
+            on_hold: 'On-Hold Projects',
+            not_started: 'Not Started Projects',
+        };
+        const title = labelMap[status] || 'Projects by Running Status';
+        this.openProjectCardsWizard('running_status', status, title, '', ev);
+    }
+
+    viewHighRiskProjects() {
+        this.openProjectCardsWizard('risk', 'high', 'High-Risk Projects', 'Critical projects requiring immediate attention');
+    }
+
+    viewProjectsByRisk(level, ev) {
+        if (ev) ev.stopPropagation();
+        const labelMap = {
+            low: 'Low-Risk Projects',
+            medium: 'Medium-Risk Projects',
+            high: 'High-Risk Projects',
+        };
+        const title = labelMap[level] || 'Projects by Risk Level';
+        this.openProjectCardsWizard('risk', level, title, '', ev);
+    }
+
+    viewProjectsByHealth(health, ev) {
+        if (ev) ev.stopPropagation();
+        const labelMap = {
+            good: 'Good Health Projects',
+            fair: 'Fair Health Projects',
+            poor: 'Poor Health Projects',
+        };
+        const title = labelMap[health] || 'Projects by Health Status';
+        this.openProjectCardsWizard('health', health, title, '', ev);
     }
 
     viewProjectsByCondition(condition, ev) {
         if (ev) ev.stopPropagation();
-        this.state.projectStatusFilter = 'all';
-        this.setActiveTab('projects');
+        const labelMap = {
+            ahead: 'Ahead of Plan Projects',
+            on_plan: 'On Plan Projects',
+            behind: 'Behind Plan Projects',
+            overdue: 'Overdue Projects',
+        };
+        const title = labelMap[condition] || 'Projects by Condition';
+        this.openProjectCardsWizard('condition', condition, title, '', ev);
+    }
+
+    viewOnTimeProjects(ev) {
+        if (ev) ev.stopPropagation();
+        this.openProjectCardsWizard('on_time', '', 'On-Time Delivery Projects', 'Projects delivering ahead of or on planned schedule', ev);
+    }
+
+    filterProjectsByTeam(teamId, ev) {
+        if (ev) ev.stopPropagation();
+        const tm = this.state.data?.teams?.find(t => String(t.id) === String(teamId));
+        const title = (tm ? tm.name : 'Team') + ' — Projects';
+        this.openProjectCardsWizard('team', teamId, title, 'Projects assigned to this team', ev);
     }
 
     async approveTask(taskId) {

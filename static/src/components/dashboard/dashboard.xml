@@ -202,7 +202,7 @@
 
                     <!-- Overall Health (For Managers/Executives) OR Task Completion (For Consultants) -->
                     <t t-if="!state.data.user_info.is_consultant">
-                        <div class="pm-kpi-card">
+                        <div class="pm-kpi-card" t-on-click="() => this.viewProjectsByHealth('all')" title="Click to view all projects by health in dashboard">
                             <div class="pm-kpi-header">
                                 <span class="pm-kpi-title">Overall health</span>
                                 <div class="pm-kpi-icon-box bg-emerald-subtle">
@@ -219,7 +219,9 @@
                                 <div class="pm-seg pm-seg-rose" t-attf-style="width: {{ (state.data.health_poor_count / (state.data.total_projects || 1)) * 100 }}%;"></div>
                             </div>
                             <div class="pm-kpi-subtext">
-                                <t t-esc="state.data.health_good_count"/> good · <t t-esc="state.data.health_fair_count"/> fair · <t t-esc="state.data.health_poor_count"/> poor
+                                <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('good', ev)"><t t-esc="state.data.health_good_count"/> good</span> · 
+                                <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('fair', ev)"><t t-esc="state.data.health_fair_count"/> fair</span> · 
+                                <span class="pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('poor', ev)"><t t-esc="state.data.health_poor_count"/> poor</span>
                             </div>
                         </div>
                     </t>
@@ -273,7 +275,7 @@
                     </div>
 
                     <!-- On-Time Delivery -->
-                    <div class="pm-kpi-card">
+                    <div class="pm-kpi-card" t-on-click="(ev) => this.viewOnTimeProjects(ev)" title="Click to view on-time projects in dashboard">
                         <div class="pm-kpi-header">
                             <span class="pm-kpi-title">On-time delivery</span>
                             <div class="pm-kpi-icon-box bg-cyan-subtle">
@@ -298,7 +300,7 @@
                 <section class="pm-charts-row">
                     <!-- 1. Project Health Donut (For Managers/Leads) OR Tasks Bar Chart (For Consultants) -->
                     <t t-if="!state.data.user_info.is_consultant">
-                        <div class="pm-widget-card">
+                        <div class="pm-widget-card pm-card-clickable" t-on-click="() => this.viewProjectsByHealth('all')" title="Click to view all projects by health in dashboard">
                             <div class="pm-widget-header">
                                 <div>
                                     <h3 class="pm-widget-title">Project health</h3>
@@ -330,17 +332,17 @@
                                 </div>
                                 <!-- Legend -->
                                 <div class="pm-donut-legend">
-                                    <div class="pm-legend-row">
+                                    <div class="pm-legend-row pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('good', ev)" title="View good health projects in dashboard">
                                         <span class="pm-legend-dot bg-emerald"></span>
                                         <span class="pm-legend-label">Good</span>
                                         <strong class="pm-legend-val" t-esc="state.data.health_good_count"/>
                                     </div>
-                                    <div class="pm-legend-row">
+                                    <div class="pm-legend-row pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('fair', ev)" title="View fair health projects in dashboard">
                                         <span class="pm-legend-dot bg-amber"></span>
                                         <span class="pm-legend-label">Fair</span>
                                         <strong class="pm-legend-val" t-esc="state.data.health_fair_count"/>
                                     </div>
-                                    <div class="pm-legend-row">
+                                    <div class="pm-legend-row pm-clickable-sub" t-on-click="(ev) => this.viewProjectsByHealth('poor', ev)" title="View poor health projects in dashboard">
                                         <span class="pm-legend-dot bg-rose"></span>
                                         <span class="pm-legend-label">Poor</span>
                                         <strong class="pm-legend-val" t-esc="state.data.health_poor_count"/>
@@ -542,7 +544,7 @@
                 <section class="pm-teams-row">
                     <!-- Individual Team Cards -->
                     <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
-                        <div class="pm-team-card" t-on-click="() => this.openTeam(tm.id)">
+                        <div class="pm-team-card" t-on-click="(ev) => this.filterProjectsByTeam(tm.id, ev)" title="Click to view this team's projects in dashboard">
                             <div class="pm-team-card-header">
                                 <div class="pm-team-lead-box">
                                     <h4 class="pm-team-title" t-esc="tm.name"/>
@@ -727,13 +729,28 @@
                 <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants) -->
                 <t t-if="this.isSectionVisible('projects') and !state.data.user_info.is_consultant">
                     <section class="pm-table-section">
-                    <div class="pm-table-header">
-                        <div class="pm-table-title-box">
-                            <h2 class="pm-table-title">Projects</h2>
+                    <div class="pm-table-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div class="pm-table-title-box d-flex align-items-center gap-2">
+                            <h2 class="pm-table-title m-0">Projects</h2>
+                            <t t-if="this.isProjectFilterActive">
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle d-inline-flex align-items-center gap-1 py-1 px-2 rounded-pill small" style="font-size: 0.8rem;">
+                                    <i class="fa fa-filter"></i>
+                                    <span t-esc="this.activeProjectFilterLabel"/> (<t t-esc="this.filteredProjects.length"/>)
+                                    <i class="fa fa-times cursor-pointer ms-1 text-muted" title="Clear filter" t-on-click="clearProjectFilters" style="cursor: pointer;"></i>
+                                </span>
+                                <button class="btn btn-sm btn-link text-primary p-0 text-decoration-none small fw-semibold" t-on-click="clearProjectFilters">
+                                    Show All
+                                </button>
+                            </t>
+                            <t t-else="">
+                                <span class="text-muted small fw-semibold">(<t t-esc="this.filteredProjects.length"/>)</span>
+                            </t>
                         </div>
-                        <div class="pm-table-legend-note">
-                            <span class="pm-target-marker-sample"></span>
-                            <span>Black line = where the plan says it should be today</span>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="pm-table-legend-note">
+                                <span class="pm-target-marker-sample"></span>
+                                <span>Black line = where the plan says it should be today</span>
+                            </div>
                         </div>
                     </div>
 
@@ -752,20 +769,28 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <t t-if="!state.data.projects or state.data.projects.length === 0">
+                                <t t-if="!this.filteredProjects or this.filteredProjects.length === 0">
                                     <tr>
                                         <td colspan="8" class="text-center py-5">
                                             <i class="fa fa-folder-open-o text-muted mb-2" style="font-size: 2.2rem; opacity: 0.5;"></i>
                                             <div class="pm-widget-title mb-1">No Projects Found</div>
-                                            <p class="pm-widget-sub mb-3">Create your first project to view live performance and timeline tracking.</p>
-                                            <button class="pm-action-btn" t-on-click="createNewProject">
-                                                <i class="fa fa-plus me-1"></i> Create Project
-                                            </button>
+                                            <t t-if="this.isProjectFilterActive">
+                                                <p class="pm-widget-sub mb-3">No projects match the filter "<t t-esc="this.activeProjectFilterLabel"/>".</p>
+                                                <button class="btn btn-sm btn-outline-primary rounded-pill px-3 py-1" t-on-click="clearProjectFilters">
+                                                    <i class="fa fa-times me-1"></i> Clear Filter &amp; Show All
+                                                </button>
+                                            </t>
+                                            <t t-else="">
+                                                <p class="pm-widget-sub mb-3">Create your first project to view live performance and timeline tracking.</p>
+                                                <button class="pm-action-btn" t-on-click="createNewProject">
+                                                    <i class="fa fa-plus me-1"></i> Create Project
+                                                </button>
+                                            </t>
                                         </td>
                                     </tr>
                                 </t>
                                 <t t-else="">
-                                    <t t-foreach="state.data.projects" t-as="proj" t-key="proj.id">
+                                    <t t-foreach="this.filteredProjects" t-as="proj" t-key="proj.id">
                                         <tr class="pm-project-clickable-row"
                                             t-att-class="state.selectedProjectId === proj.id ? 'pm-row-selected' : ''"
                                             t-on-click="(ev) => this.onSelectProject(proj.id, ev)"
@@ -954,8 +979,8 @@
                                                                     <i class="fa fa-star me-1 text-warning"></i> Reviews (<t t-esc="proj.review_count || 0"/>)
                                                                 </button>
                                                                 <button class="btn btn-sm pm-btn-outline-secondary"
-                                                                        t-on-click="(ev) => { ev.stopPropagation(); this.openProject(proj.id); }"
-                                                                        title="Open project form in Odoo">
+                                                                        t-on-click="(ev) => { ev.stopPropagation(); this.openEditProjectWizard(proj.id, ev); }"
+                                                                        title="Edit Project in Dashboard">
                                                                     <i class="fa fa-pencil me-1"></i> Edit Project
                                                                 </button>
                                                                 <button class="btn btn-sm pm-btn-close-panel"
@@ -2845,6 +2870,486 @@
                     </div>
                 </t>
 
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL: PROJECT CARDS LIST (IN-DASHBOARD POPUP)  -->
+                <!-- ======================================================== -->
+                <t t-if="state.projectCardsWizardOpen">
+                    <div class="pm-modal-backdrop pm-modal-clean" t-on-click="closeProjectCardsWizard">
+                        <div class="pm-modal-dialog pm-modal-xl" t-on-click.stop="">
+                            <div class="pm-modal-content">
+                                <!-- Modal Header -->
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="bg-primary-subtle text-primary rounded-3 d-flex align-items-center justify-content-center"
+                                             style="width: 42px; height: 42px; font-size: 1.15rem;">
+                                            <i class="fa fa-th-large"></i>
+                                        </div>
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <h5 class="fw-bold m-0" style="color: var(--pm-text-heading);" t-esc="state.projectCardsWizardTitle"/>
+                                                <span class="badge bg-primary text-white rounded-pill px-2 py-1" style="font-size: 0.78rem;">
+                                                    <t t-esc="this.wizardFilteredProjects.length"/>
+                                                </span>
+                                            </div>
+                                            <div class="text-muted small mt-1" t-if="state.projectCardsWizardSubtitle">
+                                                <t t-esc="state.projectCardsWizardSubtitle"/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeProjectCardsWizard" aria-label="Close"></button>
+                                </div>
+
+                                <!-- Search & Count Bar -->
+                                <div class="px-4 py-3 border-bottom d-flex align-items-center justify-content-between gap-3"
+                                     style="background: var(--pm-tile-bg, #f8fafc); border-color: var(--pm-border) !important;">
+                                    <div class="position-relative flex-grow-1" style="max-width: 440px;">
+                                        <i class="fa fa-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                                        <input type="text"
+                                               class="form-control form-control-sm ps-5 rounded-pill pm-clean-input"
+                                               placeholder="Filter by project name, client name or team..."
+                                               t-model="state.projectCardsWizardSearch"/>
+                                    </div>
+                                    <div class="text-muted small d-none d-sm-block">
+                                        Showing <strong t-esc="this.wizardFilteredProjects.length"/> of <strong t-esc="(state.data and state.data.projects and state.data.projects.length) || 0"/> total projects
+                                    </div>
+                                </div>
+
+                                <!-- Modal Body: Project Cards Grid -->
+                                <div class="pm-modal-body p-4" style="max-height: 70vh; overflow-y: auto;">
+                                    <t t-if="this.wizardFilteredProjects.length === 0">
+                                        <div class="text-center py-5">
+                                            <div class="mb-3">
+                                                <i class="fa fa-folder-open-o text-muted opacity-50" style="font-size: 3rem;"></i>
+                                            </div>
+                                            <h6 class="fw-bold" style="color: var(--pm-text-heading);">No projects found</h6>
+                                            <p class="text-muted small mb-0">No projects match the selected criteria or search query.</p>
+                                        </div>
+                                    </t>
+                                    <t t-else="">
+                                        <div class="row g-3">
+                                            <t t-foreach="this.wizardFilteredProjects" t-as="proj" t-key="proj.id">
+                                                <div class="col-12 col-md-6">
+                                                    <div class="card h-100 border rounded-3 p-3 shadow-sm pm-project-card-item"
+                                                         style="background: var(--pm-card-bg); border-color: var(--pm-border) !important;">
+                                                        
+                                                        <!-- Top Row: Project Name & Running Status Badge -->
+                                                        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                                            <div class="flex-grow-1 min-w-0">
+                                                                <h6 class="fw-bold m-0 text-truncate" style="color: var(--pm-text-heading); font-size: 1.05rem;" t-att-title="proj.name">
+                                                                    <i class="fa fa-folder-open text-primary me-2"></i>
+                                                                    <t t-esc="proj.name"/>
+                                                                </h6>
+                                                            </div>
+                                                            <span class="badge flex-shrink-0 text-capitalize px-2 py-1"
+                                                                  t-att-class="proj.running_status === 'running' ? 'bg-primary-subtle text-primary border border-primary-subtle' : (proj.running_status === 'completed' ? 'bg-success-subtle text-success border border-success-subtle' : (proj.running_status === 'on_hold' ? 'bg-warning-subtle text-warning border border-warning-subtle' : 'bg-secondary-subtle text-secondary border border-secondary-subtle'))"
+                                                                  style="font-size: 0.75rem; font-weight: 600;">
+                                                                <i t-if="proj.running_status === 'running'" class="fa fa-play-circle me-1"></i>
+                                                                <i t-elif="proj.running_status === 'completed'" class="fa fa-check-circle me-1"></i>
+                                                                <i t-elif="proj.running_status === 'on_hold'" class="fa fa-pause-circle me-1"></i>
+                                                                <i t-else="" class="fa fa-clock-o me-1"></i>
+                                                                <t t-esc="proj.running_status_label || proj.running_status"/>
+                                                            </span>
+                                                        </div>
+
+                                                        <!-- Client Name (Prominent & Clear) -->
+                                                        <div class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom" style="border-color: var(--pm-border-light) !important;">
+                                                            <div class="text-truncate">
+                                                                <span class="text-muted small me-1"><i class="fa fa-building-o me-1"></i>Client:</span>
+                                                                <strong class="text-truncate" style="color: var(--pm-text-body); font-size: 0.92rem;" t-att-title="proj.client_name">
+                                                                    <t t-esc="proj.client_name"/>
+                                                                </strong>
+                                                                <span class="text-muted small ms-1" t-if="proj.client_city">· <t t-esc="proj.client_city"/></span>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Metadata Row: Team, Due Date, Health & Risk Badges -->
+                                                        <div class="row g-2 mb-3 small">
+                                                            <div class="col-6 text-truncate">
+                                                                <span class="text-muted d-block" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Team</span>
+                                                                <span class="fw-semibold text-truncate d-block" style="color: var(--pm-text-body);" t-att-title="proj.team_name">
+                                                                    <i class="fa fa-users text-muted me-1"></i><t t-esc="proj.team_name"/>
+                                                                </span>
+                                                            </div>
+                                                            <div class="col-6 text-truncate">
+                                                                <span class="text-muted d-block" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Timeline</span>
+                                                                <span class="fw-semibold text-truncate d-block" style="color: var(--pm-text-body);" t-att-title="proj.due_date_str">
+                                                                    <i class="fa fa-calendar-o text-muted me-1"></i><t t-esc="proj.due_date_str"/>
+                                                                </span>
+                                                            </div>
+                                                            <div class="col-6 mt-2">
+                                                                <span class="text-muted d-block" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Health</span>
+                                                                <span class="badge rounded-pill px-2 py-1"
+                                                                      t-att-class="proj.health === 'good' ? 'bg-success-subtle text-success' : (proj.health === 'fair' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger')"
+                                                                      style="font-size: 0.73rem;">
+                                                                    <i class="fa fa-circle me-1" style="font-size: 0.55rem;"></i>
+                                                                    <t t-esc="proj.health_label || proj.health"/>
+                                                                </span>
+                                                            </div>
+                                                            <div class="col-6 mt-2">
+                                                                <span class="text-muted d-block" style="font-size: 0.72rem; text-transform: uppercase; font-weight: 600;">Risk Level</span>
+                                                                <span class="badge rounded-pill px-2 py-1"
+                                                                      t-att-class="proj.risk_level === 'low' ? 'bg-success-subtle text-success' : (proj.risk_level === 'medium' ? 'bg-warning-subtle text-warning' : 'bg-danger-subtle text-danger')"
+                                                                      style="font-size: 0.73rem;">
+                                                                    <t t-esc="proj.risk_level_label || proj.risk_level"/> Risk
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Progress Bar -->
+                                                        <div class="mb-3">
+                                                            <div class="d-flex justify-content-between align-items-center mb-1 small">
+                                                                <span class="text-muted" style="font-size: 0.75rem;">Progress</span>
+                                                                <div class="d-flex align-items-center gap-1">
+                                                                    <strong style="color: var(--pm-text-heading);"><t t-esc="proj.progress"/>%</strong>
+                                                                    <span class="text-muted" style="font-size: 0.72rem;">(plan: <t t-esc="proj.planned_progress"/>%)</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="progress" style="height: 6px; background-color: var(--pm-border-light); border-radius: 3px;">
+                                                                <div class="progress-bar rounded-3"
+                                                                     role="progressbar"
+                                                                     t-attf-style="width: {{ proj.progress }}%;"
+                                                                     t-att-class="proj.progress >= proj.planned_progress ? 'bg-success' : 'bg-warning'">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Action Buttons Inside Dashboard -->
+                                                        <div class="d-flex align-items-center justify-content-between gap-2 pt-2 border-top mt-auto" style="border-color: var(--pm-border-light) !important;">
+                                                            <button type="button"
+                                                                    class="btn btn-sm btn-outline-secondary rounded-2 px-2 py-1 d-inline-flex align-items-center gap-1"
+                                                                    style="font-size: 0.78rem;"
+                                                                    t-on-click="() => this.openProjectDetailFromCardWizard(proj.id)"
+                                                                    title="View complete project overview in dashboard">
+                                                                <i class="fa fa-info-circle"></i> Details
+                                                            </button>
+                                                            <div class="d-flex align-items-center gap-2">
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-outline-primary rounded-2 px-2 py-1 d-inline-flex align-items-center gap-1"
+                                                                        style="font-size: 0.78rem;"
+                                                                        t-on-click="() => this.openEditProjectFromCardWizard(proj.id)"
+                                                                        title="Edit project directly in dashboard modal">
+                                                                    <i class="fa fa-pencil"></i> Edit
+                                                                </button>
+                                                                <button type="button"
+                                                                        class="btn btn-sm btn-primary rounded-2 px-3 py-1 fw-semibold d-inline-flex align-items-center gap-1"
+                                                                        style="font-size: 0.78rem;"
+                                                                        t-on-click="() => this.openProjectScopesFromCardWizard(proj.id)"
+                                                                        title="Open Project Scopes and Deliverables in dashboard">
+                                                                    <i class="fa fa-tasks"></i> Scopes &amp; Tasks
+                                                                </button>
+                                                            </div>
+                                                        </div>
+
+                                                    </div>
+                                                </div>
+                                            </t>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Modal Footer -->
+                                <div class="pm-modal-footer d-flex justify-content-between align-items-center">
+                                    <div class="small text-muted">
+                                        Total <strong t-esc="this.wizardFilteredProjects.length"/> projects in current view
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-secondary px-4 py-2 rounded-3 fw-semibold" t-on-click="closeProjectCardsWizard">
+                                        Close
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
+                <!-- ======================================================== -->
+                <!-- DASHBOARD MODAL: EDIT PROJECT (COMPLETE IN DASHBOARD)    -->
+                <!-- ======================================================== -->
+                <t t-if="state.editProjectWizardOpen">
+                    <div class="pm-modal-backdrop pm-modal-clean" t-on-click="closeEditProjectWizard">
+                        <div class="pm-modal-dialog pm-modal-dialog-lg" t-on-click.stop="">
+                            <div class="pm-modal-content">
+                                <!-- Modal Header -->
+                                <div class="pm-modal-header d-flex justify-content-between align-items-center">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <h5 class="fw-bold m-0" style="color: var(--pm-text-heading);">
+                                            <i class="fa fa-pencil me-2 text-primary"></i>Edit Project
+                                        </h5>
+                                        <t t-if="state.editProjectData and state.editProjectData.name">
+                                            <span class="text-muted small fw-normal">· <t t-esc="state.editProjectData.name"/></span>
+                                        </t>
+                                    </div>
+                                    <button type="button" class="btn-close pm-modal-close" t-on-click="closeEditProjectWizard" aria-label="Close"></button>
+                                </div>
+
+                                <div class="pm-modal-body">
+                                    <t t-if="state.editProjectWizardLoading">
+                                        <div class="text-center py-5">
+                                            <i class="fa fa-spinner fa-spin text-primary fa-2x mb-2"></i>
+                                            <div class="text-muted small">Loading project details...</div>
+                                        </div>
+                                    </t>
+                                    <t t-elif="state.editProjectData">
+                                        <!-- Top Row: Project Name & Priority Stars -->
+                                        <div class="mb-4">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label class="form-label small text-muted text-uppercase fw-semibold mb-0">Project Name <span class="text-danger">*</span></label>
+                                                <!-- Priority Stars -->
+                                                <div class="d-flex align-items-center gap-1" title="Set project priority">
+                                                    <t t-foreach="[1, 2, 3]" t-as="star" t-key="star">
+                                                        <i class="fa cursor-pointer"
+                                                           t-att-class="this.isEditProjectStarActive(star) ? 'fa-star text-warning' : 'fa-star-o text-muted opacity-50'"
+                                                           t-on-click="() => this.setEditProjectPriority(star)"
+                                                           style="cursor: pointer; font-size: 1.25rem;"></i>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                            <input type="text" class="form-control pm-title-underline w-100"
+                                                   t-model="state.editProjectData.name"
+                                                   placeholder="e.g. Website Redesign..."
+                                                   required="1"/>
+                                        </div>
+
+                                        <!-- Two Column Layout: GENERAL and TEAM -->
+                                        <div class="row g-4">
+                                            <!-- Column 1: GENERAL -->
+                                            <div class="col-md-6">
+                                                <div class="pm-section-heading">General</div>
+
+                                                <!-- Client -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Client <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-on-change="onEditProjectClientSelect"
+                                                            t-att-value="state.editProjectData.partner_id || ''">
+                                                        <option value="">-- Select Client --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.clients">
+                                                            <t t-foreach="state.projectFormData.clients" t-as="cl" t-key="cl.id">
+                                                                <option t-att-value="cl.id"><t t-esc="cl.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Client Implementation Coordinator -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Client Implementation Coordinator <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.editProjectData.client_coordinator_id">
+                                                        <option value="">-- Select Client Coordinator --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.coordinators">
+                                                            <t t-foreach="state.projectFormData.coordinators" t-as="coor" t-key="coor.id">
+                                                                <option t-att-value="coor.id"><t t-esc="coor.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Start Date & End Date -->
+                                                <div class="row g-2 mb-3">
+                                                    <div class="col-6">
+                                                        <label class="form-label pm-field-label">Start Date <span class="text-danger">*</span></label>
+                                                        <input type="date" class="form-control pm-clean-input"
+                                                               t-model="state.editProjectData.date_start"
+                                                               required="1"/>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label pm-field-label">End Date <span class="text-danger">*</span></label>
+                                                        <input type="date" class="form-control pm-clean-input"
+                                                               t-model="state.editProjectData.date_end"
+                                                               required="1"/>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Tags -->
+                                                <div class="mb-2">
+                                                    <label class="form-label pm-field-label d-flex justify-content-between">
+                                                        <span>Tags</span>
+                                                        <span class="text-muted small" t-if="state.editProjectData.tag_ids and state.editProjectData.tag_ids.length">
+                                                            <t t-esc="state.editProjectData.tag_ids.length"/> selected
+                                                        </span>
+                                                    </label>
+                                                    <div class="d-flex flex-wrap gap-1" t-if="state.projectFormData and state.projectFormData.tags">
+                                                        <t t-foreach="state.projectFormData.tags" t-as="tag" t-key="tag.id">
+                                                            <button type="button"
+                                                                    class="btn btn-sm rounded-pill py-1 px-2"
+                                                                    t-att-class="state.editProjectData.tag_ids and state.editProjectData.tag_ids.includes(tag.id) ? 'btn-primary' : 'btn-light border-0 text-muted'"
+                                                                    style="font-size: 0.75rem;"
+                                                                    t-on-click="() => this.toggleEditProjectTag(tag.id)">
+                                                                <t t-esc="tag.name"/>
+                                                            </button>
+                                                        </t>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Column 2: TEAM -->
+                                            <div class="col-md-6">
+                                                <div class="pm-section-heading">Team</div>
+
+                                                <!-- Project Team -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label d-flex justify-content-between">
+                                                        <span>Project Team</span>
+                                                        <span class="text-muted fw-normal small" style="font-size: 0.72rem;">Auto-fills lead &amp; members</span>
+                                                    </label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-on-change="onEditProjectTeamSelect"
+                                                            t-att-value="state.editProjectData.team_id || ''">
+                                                        <option value="">-- No Team (Individual Assignment) --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.teams">
+                                                            <t t-foreach="state.projectFormData.teams" t-as="tm" t-key="tm.id">
+                                                                <option t-att-value="tm.id"><t t-esc="tm.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Project Manager -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Project Manager <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.editProjectData.manager_id">
+                                                        <option value="">-- Select Project Manager --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id">
+                                                                    <t t-esc="emp.name"/><t t-if="emp.job_title"> (<t t-esc="emp.job_title"/>)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Team Lead -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Team Lead <span class="text-danger">*</span></label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.editProjectData.team_lead_id">
+                                                        <option value="">-- Select Team Lead --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id">
+                                                                    <t t-esc="emp.name"/><t t-if="emp.job_title"> (<t t-esc="emp.job_title"/>)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Project Implementation Coordinator -->
+                                                <div class="mb-3">
+                                                    <label class="form-label pm-field-label">Project Implementation Coordinator</label>
+                                                    <select class="form-select pm-clean-input"
+                                                            t-model="state.editProjectData.project_coordinator_id">
+                                                        <option value="">-- Optional Coordinator --</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id"><t t-esc="emp.name"/></option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Consultants -->
+                                                <div class="mb-2">
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <label class="form-label pm-field-label mb-0">Consultants <span class="text-danger">*</span></label>
+                                                        <span class="text-muted small" t-if="state.editProjectData.consultant_ids">
+                                                            <t t-esc="state.editProjectData.consultant_ids.length"/> assigned
+                                                        </span>
+                                                    </div>
+
+                                                    <!-- Consultant Chips -->
+                                                    <div class="d-flex flex-wrap gap-1 mb-2" t-if="state.editProjectData.consultant_ids and state.editProjectData.consultant_ids.length">
+                                                        <t t-foreach="state.editProjectData.consultant_ids" t-as="cid" t-key="cid">
+                                                            <span class="badge bg-primary text-white d-inline-flex align-items-center py-1 px-2 gap-1 rounded-pill" style="font-size: 0.8rem; font-weight: 500;">
+                                                                <t t-esc="this.getEmployeeNameFromMeta(cid)"/>
+                                                                <i class="fa fa-times ms-1 text-white-50 cursor-pointer"
+                                                                   title="Remove"
+                                                                   style="cursor: pointer;"
+                                                                   t-on-click="() => this.removeEditProjectConsultant(cid)"></i>
+                                                            </span>
+                                                        </t>
+                                                    </div>
+
+                                                    <!-- Dropdown to add consultant -->
+                                                    <select class="form-select form-select-sm pm-clean-input" t-on-change="(ev) => this.addEditProjectConsultant(ev)">
+                                                        <option value="">+ Add consultant...</option>
+                                                        <t t-if="state.projectFormData and state.projectFormData.employees">
+                                                            <t t-foreach="state.projectFormData.employees" t-as="emp" t-key="emp.id">
+                                                                <option t-att-value="emp.id" t-att-disabled="state.editProjectData.consultant_ids and state.editProjectData.consultant_ids.includes(emp.id)">
+                                                                    <t t-esc="emp.name"/>
+                                                                    <t t-if="state.editProjectData.consultant_ids and state.editProjectData.consultant_ids.includes(emp.id)"> (assigned)</t>
+                                                                </option>
+                                                            </t>
+                                                        </t>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Row 3: STAGE, HEALTH & RISK LEVEL -->
+                                        <div class="mt-4 pt-3 border-top" style="border-color: var(--pm-border) !important;">
+                                            <div class="pm-section-heading mb-3">Status, Health &amp; Risk</div>
+                                            <div class="row g-3">
+                                                <!-- Stage / Status -->
+                                                <div class="col-md-4">
+                                                    <label class="form-label pm-field-label">Stage</label>
+                                                    <select class="form-select pm-clean-input" t-model="state.editProjectData.state">
+                                                        <option value="todo">To Do</option>
+                                                        <option value="in_progress">In Progress</option>
+                                                        <option value="done">Done</option>
+                                                        <option value="cancelled">Cancelled</option>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Health -->
+                                                <div class="col-md-4">
+                                                    <label class="form-label pm-field-label">Health</label>
+                                                    <select class="form-select pm-clean-input" t-model="state.editProjectData.health">
+                                                        <option value="good">🟢 Good</option>
+                                                        <option value="fair">🟡 Fair</option>
+                                                        <option value="poor">🔴 Poor</option>
+                                                    </select>
+                                                </div>
+
+                                                <!-- Risk Level -->
+                                                <div class="col-md-4">
+                                                    <label class="form-label pm-field-label">Risk Level</label>
+                                                    <select class="form-select pm-clean-input" t-model="state.editProjectData.risk_level">
+                                                        <option value="low">🟢 Low</option>
+                                                        <option value="medium">🟡 Medium</option>
+                                                        <option value="high">🔴 High</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </t>
+                                </div>
+
+                                <!-- Modal Footer -->
+                                <div class="pm-modal-footer d-flex justify-content-end align-items-center gap-2">
+                                    <button type="button" class="btn btn-sm btn-link text-muted text-decoration-none px-3"
+                                            t-att-disabled="state.savingEditProject"
+                                            t-on-click="closeEditProjectWizard">
+                                        Cancel
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-primary fw-semibold px-4 py-2 rounded-3"
+                                            t-att-disabled="state.savingEditProject or state.editProjectWizardLoading"
+                                            t-on-click="saveEditProject">
+                                        <t t-if="state.savingEditProject">
+                                            <i class="fa fa-spinner fa-spin me-1"></i> Saving...
+                                        </t>
+                                        <t t-else="">
+                                            Save Changes
+                                        </t>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </t>
+
                 <!-- DASHBOARD MODAL WIZARD: VIEW TASK DETAILS & UPLOADED DOCUMENTS -->
                 <t t-if="state.scopeDetailWizardOpen">
                     <div class="pm-modal-backdrop" t-on-click="closeScopeDetailWizard">
@@ -3379,9 +3884,9 @@
                                     <div>
                                         <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1"
                                                 t-if="state.projectDetailData"
-                                                t-on-click="() => this.openProjectFromWizard(state.projectDetailData.id)"
-                                                title="Open full backend Project form view in Odoo">
-                                            <i class="fa fa-folder-open-o me-1"></i> Open Project Form
+                                                t-on-click="() => this.openEditProjectWizard(state.projectDetailData.id)"
+                                                title="Edit Project in Dashboard">
+                                            <i class="fa fa-pencil me-1"></i> Edit Project
                                         </button>
                                     </div>
                                     <div class="d-flex align-items-center gap-2">

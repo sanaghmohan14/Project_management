@@ -171,13 +171,9 @@ class ProjectScopeImportWizard(models.TransientModel):
                 'title': _('Import Successful'),
                 'message': _('Successfully imported %s scopes and %s tasks into project "%s" with dates, team members, and approver roles.',
                              scopes_created, tasks_created, self.project_id.name),
+                'type': 'success',
                 'sticky': False,
-                'next': {
-                    'type': 'ir.actions.act_window',
-                    'res_model': 'project.manage',
-                    'res_id': self.project_id.id,
-                    'views': [(False, 'form')],
-                }
+                'next': {'type': 'ir.actions.act_window_close'},
             }
         }
 

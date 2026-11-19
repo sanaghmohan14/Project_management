@@ -769,6 +769,15 @@ class ProjectManage(models.Model):
 
         # Enforce Scopes menu access strictly for Project Managers only (self-heal in DB)
         try:
+            # Ensure Projects top menu points to Kanban action_project_manage
+            m_proj = self.env.ref('project_manage.menu_project_manage_projects', raise_if_not_found=False)
+            act_proj = self.env.ref('project_manage.action_project_manage', raise_if_not_found=False)
+            if m_proj and act_proj:
+                expected_act = f"ir.actions.act_window,{act_proj.id}"
+                if m_proj.action != act_proj and str(getattr(m_proj, 'action', '')) != expected_act:
+                    m_proj.sudo().write({'action': expected_act})
+                    self.env.registry.clear_cache()
+
             tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
             cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
             mgr_grp = self.env.ref('project_manage.group_project_manage_manager', raise_if_not_found=False)
@@ -1121,7 +1130,9 @@ class ProjectManage(models.Model):
                 teams_data.append({
                     'id': tm.id,
                     'name': tm.name,
+                    'team_lead_id': tm.team_lead_id.id if tm.team_lead_id else False,
                     'lead_name': tm.team_lead_id.name if tm.team_lead_id else 'Unassigned',
+                    'project_ids': tm_projects.ids,
                     'members_count': len(tm.member_ids),
                     'projects_count': tm_tot,
                     'healthy_count': tm_healthy,
@@ -1172,7 +1183,9 @@ class ProjectManage(models.Model):
                 teams_data.append({
                     'id': team_card_id,
                     'name': real_team.name if real_team else f"Team {lead.name}",
+                    'team_lead_id': lead.id if lead else False,
                     'lead_name': lead.name,
+                    'project_ids': lead_projects.ids,
                     'members_count': len(consultants),
                     'projects_count': tm_tot,
                     'healthy_count': tm_healthy,
@@ -1189,7 +1202,9 @@ class ProjectManage(models.Model):
                 filter_teams.append({
                     'id': team_card_id,
                     'name': real_team.name if real_team else f"Team {lead.name}",
+                    'team_lead_id': lead.id if lead else False,
                     'lead_name': lead.name,
+                    'project_ids': lead_projects.ids,
                 })
 
         # Build real project rows
@@ -1207,6 +1222,8 @@ class ProjectManage(models.Model):
                 'client_city': p.partner_id.city or (p.partner_id.country_id.name if p.partner_id.country_id else ''),
                 'team_id': p.team_id.id if p.team_id else False,
                 'team_name': p.team_id.name or (f"Team {p.team_lead_id.name}" if p.team_lead_id else 'No Team'),
+                'team_lead_id': p.team_lead_id.id if p.team_lead_id else False,
+                'team_lead_name': p.team_lead_id.name if p.team_lead_id else '',
                 'running_status': p.running_status or 'running',
                 'running_status_label': dict(p._fields['running_status'].selection).get(p.running_status, 'Running'),
                 'health': p.health or 'good',
@@ -2585,6 +2602,139 @@ class ProjectManage(models.Model):
             'success': True,
             'project_id': new_project.id,
             'project_name': new_project.name,
+        }
+
+    @api.model
+    def get_project_for_edit(self, project_id):
+        """Return metadata options and current project values for in-dashboard project editing."""
+        if not project_id:
+            raise UserError(_("No Project ID provided."))
+        project = self.browse(project_id)
+        if not project.exists():
+            raise UserError(_("Project not found."))
+
+        form_meta = self.get_new_project_form_data()
+        project_data = {
+            'id': project.id,
+            'name': project.name or '',
+            'priority': project.priority or '0',
+            'partner_id': project.partner_id.id if project.partner_id else '',
+            'client_coordinator_id': project.client_coordinator_id.id if project.client_coordinator_id else '',
+            'date_start': str(project.date_start) if project.date_start else '',
+            'date_end': str(project.date_end) if project.date_end else '',
+            'tag_ids': project.tag_ids.ids if project.tag_ids else [],
+            'team_id': project.team_id.id if project.team_id else '',
+            'manager_id': project.manager_id.id if project.manager_id else '',
+            'team_lead_id': project.team_lead_id.id if project.team_lead_id else '',
+            'project_coordinator_id': project.project_coordinator_id.id if project.project_coordinator_id else '',
+            'consultant_ids': project.consultant_ids.ids if project.consultant_ids else [],
+            'state': project.state or 'todo',
+            'health': project.health or 'good',
+            'risk_level': project.risk_level or 'low',
+        }
+        return {
+            'meta': form_meta,
+            'project': project_data,
+        }
+
+    @api.model
+    def update_project_from_dashboard(self, project_id, vals):
+        """Update an existing project directly from the dashboard modal without navigating to backend."""
+        user = self.env.user
+        project = self.browse(project_id)
+        if not project.exists():
+            raise UserError(_("Project not found."))
+
+        is_admin = (
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('base.group_system') or
+            user.id in (1, 2)
+        )
+        can_manage = (
+            is_admin or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            user.has_group('project_manage.group_project_manage_team_lead')
+        )
+        if not can_manage:
+            raise AccessError(_("You do not have permission to edit projects."))
+
+        project_vals = {}
+        if 'name' in vals:
+            name = (vals.get('name') or '').strip()
+            if not name:
+                raise UserError(_("Project Name is required."))
+            project_vals['name'] = name
+
+        if 'priority' in vals:
+            project_vals['priority'] = str(vals.get('priority') or '0')
+
+        if 'partner_id' in vals:
+            pid = vals.get('partner_id')
+            if pid and str(pid).isdigit():
+                project_vals['partner_id'] = int(pid)
+
+        if 'client_coordinator_id' in vals:
+            cid = vals.get('client_coordinator_id')
+            if cid and str(cid).isdigit():
+                project_vals['client_coordinator_id'] = int(cid)
+
+        if 'date_start' in vals and vals.get('date_start'):
+            project_vals['date_start'] = vals.get('date_start')
+
+        if 'date_end' in vals and vals.get('date_end'):
+            project_vals['date_end'] = vals.get('date_end')
+
+        if project_vals.get('date_start') and project_vals.get('date_end'):
+            if project_vals['date_end'] < project_vals['date_start']:
+                raise UserError(_("End Date cannot be earlier than Start Date."))
+
+        if 'manager_id' in vals:
+            mid = vals.get('manager_id')
+            if mid and str(mid).isdigit():
+                project_vals['manager_id'] = int(mid)
+
+        if 'team_lead_id' in vals:
+            tlid = vals.get('team_lead_id')
+            if tlid and str(tlid).isdigit():
+                project_vals['team_lead_id'] = int(tlid)
+
+        if 'project_coordinator_id' in vals:
+            pcid = vals.get('project_coordinator_id')
+            project_vals['project_coordinator_id'] = int(pcid) if pcid and str(pcid).isdigit() else False
+
+        if 'team_id' in vals:
+            tid = vals.get('team_id')
+            project_vals['team_id'] = int(tid) if tid and str(tid).isdigit() else False
+
+        if 'consultant_ids' in vals:
+            raw_consultants = vals.get('consultant_ids') or []
+            consultant_ids = [int(cid) for cid in raw_consultants if str(cid).isdigit()]
+            if consultant_ids:
+                project_vals['consultant_ids'] = [(6, 0, consultant_ids)]
+
+        if 'tag_ids' in vals:
+            raw_tags = vals.get('tag_ids') or []
+            tag_ids = [int(tid) for tid in raw_tags if str(tid).isdigit()]
+            project_vals['tag_ids'] = [(6, 0, tag_ids)]
+
+        if 'state' in vals and vals.get('state'):
+            project_vals['state'] = vals.get('state')
+
+        if 'health' in vals and vals.get('health'):
+            project_vals['health'] = vals.get('health')
+
+        if 'risk_level' in vals and vals.get('risk_level'):
+            project_vals['risk_level'] = vals.get('risk_level')
+
+        if project_vals:
+            project.write(project_vals)
+
+        return {
+            'success': True,
+            'project_id': project.id,
+            'project_name': project.name,
         }
 
     @api.model

@@ -13,6 +13,10 @@
               parent="menu_project_manage_root" action="action_project_manage"
               groups="project_manage.group_project_manage_consultant" sequence="10"/>
 
+    <record id="menu_project_manage_projects" model="ir.ui.menu">
+        <field name="action" ref="project_manage.action_project_manage"/>
+    </record>
+
     <menuitem id="menu_project_manage_calendar" name="Calendar"
               parent="menu_project_manage_root" action="action_project_manage_calendar_dashboard"
               groups="project_manage.group_project_manage_consultant" sequence="11"/>
