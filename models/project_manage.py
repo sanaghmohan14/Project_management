@@ -778,20 +778,20 @@ class ProjectManage(models.Model):
                     m_proj.sudo().write({'action': expected_act})
                     self.env.registry.clear_cache()
 
-            tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
-            cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
-            mgr_grp = self.env.ref('project_manage.group_project_manage_manager', raise_if_not_found=False)
-            if mgr_grp:
+            admin_grp = self.env.ref('project_manage.group_project_manage_administrator', raise_if_not_found=False)
+            if admin_grp:
                 for xid in (
+                    'project_manage.menu_project_manage_approvals',
                     'project_manage.menu_project_manage_scopes_menu',
                     'project_manage.menu_project_manage_scopes_calendar',
                     'project_manage.menu_project_manage_scopes',
                     'project_manage.menu_project_manage_documentation',
                     'project_manage.menu_project_manage_implementation',
+                    'project_manage.menu_project_manage_config',
                 ):
                     m_rec = self.env.ref(xid, raise_if_not_found=False)
-                    if m_rec and (tl_grp in m_rec.group_ids or cons_grp in m_rec.group_ids or mgr_grp not in m_rec.group_ids):
-                        m_rec.sudo().write({'group_ids': [(6, 0, [mgr_grp.id])]})
+                    if m_rec and (len(m_rec.group_ids) != 1 or admin_grp not in m_rec.group_ids):
+                        m_rec.sudo().write({'group_ids': [(6, 0, [admin_grp.id])]})
                         self.env.registry.clear_cache()
         except Exception:
             pass
@@ -1084,15 +1084,21 @@ class ProjectManage(models.Model):
                 tm_progress = round(sum(tm_projects.mapped('progress')) / tm_tot) if tm_tot else 0
                 tm_on_time = round((len(tm_projects.filtered(lambda p: p.condition in ('ahead', 'on_plan'))) / tm_tot) * 100) if tm_tot else 0
 
-                # Real Quality Score: percentage of completed/reviewed tasks in this team's projects
-                tm_scopes = tm_projects.mapped('scope_ids')
+                # Completed Tasks: percentage of completed tasks in this team's projects
+                tm_scopes = tm_projects.mapped('scope_ids').filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
                 if tm_scopes:
-                    done_scopes = len(tm_scopes.filtered(lambda s: s.state in ('done', 'under_review')))
-                    tm_quality = round((done_scopes / len(tm_scopes)) * 100)
+                    done_scopes = len(tm_scopes.filtered(lambda s: s.state == 'done'))
+                    tm_completed_tasks_pct = round((done_scopes / len(tm_scopes)) * 100)
+                    tm_completed_count = done_scopes
+                    tm_total_tasks = len(tm_scopes)
                 elif tm_tot:
-                    tm_quality = tm_progress
+                    tm_completed_tasks_pct = tm_progress
+                    tm_completed_count = 0
+                    tm_total_tasks = 0
                 else:
-                    tm_quality = 0
+                    tm_completed_tasks_pct = 0
+                    tm_completed_count = 0
+                    tm_total_tasks = 0
 
                 # Real Utilisation: ratio of active projects to team members
                 if tm.member_ids:
@@ -1137,8 +1143,11 @@ class ProjectManage(models.Model):
                     'projects_count': tm_tot,
                     'healthy_count': tm_healthy,
                     'productivity': tm_progress,
-                    'quality': tm_quality,
+                    'quality': tm_completed_tasks_pct,
                     'on_time': tm_on_time,
+                    'completed_tasks_pct': tm_completed_tasks_pct,
+                    'completed_tasks_count': tm_completed_count,
+                    'total_tasks_count': tm_total_tasks,
                     'utilisation': tm_util,
                     'rating': rating,
                     'rating_class': rating_class,
@@ -1161,12 +1170,21 @@ class ProjectManage(models.Model):
                 tm_progress = round(sum(lead_projects.mapped('progress')) / tm_tot) if tm_tot else 0
                 tm_on_time = round((len(lead_projects.filtered(lambda p: p.condition in ('ahead', 'on_plan'))) / tm_tot) * 100) if tm_tot else 0
 
-                tm_scopes = lead_projects.mapped('scope_ids')
+                # Completed Tasks: percentage of completed tasks in this team's projects
+                tm_scopes = lead_projects.mapped('scope_ids').filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
                 if tm_scopes:
-                    done_scopes = len(tm_scopes.filtered(lambda s: s.state in ('done', 'under_review')))
-                    tm_quality = round((done_scopes / len(tm_scopes)) * 100)
+                    done_scopes = len(tm_scopes.filtered(lambda s: s.state == 'done'))
+                    tm_completed_tasks_pct = round((done_scopes / len(tm_scopes)) * 100)
+                    tm_completed_count = done_scopes
+                    tm_total_tasks = len(tm_scopes)
+                elif tm_tot:
+                    tm_completed_tasks_pct = tm_progress
+                    tm_completed_count = 0
+                    tm_total_tasks = 0
                 else:
-                    tm_quality = tm_progress
+                    tm_completed_tasks_pct = 0
+                    tm_completed_count = 0
+                    tm_total_tasks = 0
 
                 consultants = lead_projects.mapped('consultant_ids')
                 tm_util = min(round((len(lead_projects.filtered(lambda p: p.running_status == 'running')) / (len(consultants) or 1)) * 100), 100) if consultants else 100
@@ -1190,8 +1208,11 @@ class ProjectManage(models.Model):
                     'projects_count': tm_tot,
                     'healthy_count': tm_healthy,
                     'productivity': tm_progress,
-                    'quality': tm_quality,
+                    'quality': tm_completed_tasks_pct,
                     'on_time': tm_on_time,
+                    'completed_tasks_pct': tm_completed_tasks_pct,
+                    'completed_tasks_count': tm_completed_count,
+                    'total_tasks_count': tm_total_tasks,
                     'utilisation': tm_util,
                     'rating': rating,
                     'rating_class': 'text-bg-success' if rating == 'Excellent' else ('text-bg-primary' if rating == 'Good' else 'text-bg-warning'),
@@ -2964,33 +2985,222 @@ class ProjectManage(models.Model):
         }
 
 
+    # =========================================================================
+    # CUSTOMER REVIEWS DASHBOARD BACKEND METHODS
+    # =========================================================================
+    @api.model
+    def get_customer_reviews_dashboard(self, project_id=None):
+        """Retrieve aggregated customer reviews data for the modern Reviews Dashboard view."""
+        domain = []
+        if project_id and project_id != 'all':
+            try:
+                p_id = int(project_id)
+                domain.append(('project_id', '=', p_id))
+            except (ValueError, TypeError):
+                pass
+
+        all_reviews = self.env['project.manage.review'].search(domain, order='review_date desc, id desc')
+
+        total_count = len(all_reviews)
+        avg_rating = round(sum(r.rating_value for r in all_reviews) / total_count, 1) if total_count else 0.0
+
+        count_5 = len(all_reviews.filtered(lambda r: r.rating_value == 5))
+        count_4 = len(all_reviews.filtered(lambda r: r.rating_value == 4))
+        count_3 = len(all_reviews.filtered(lambda r: r.rating_value == 3))
+        count_2 = len(all_reviews.filtered(lambda r: r.rating_value == 2))
+        count_1 = len(all_reviews.filtered(lambda r: r.rating_value == 1))
+
+        positive_count = count_5 + count_4
+        positive_pct = round((positive_count / total_count) * 100) if total_count else 0
+        pending_ack_count = len(all_reviews.filtered(lambda r: not r.response_sent and r.state != 'draft'))
+        approved_count = len(all_reviews.filtered(lambda r: r.state == 'approved'))
+        submitted_count = len(all_reviews.filtered(lambda r: r.state in ('submitted', 'under_review')))
+        draft_count = len(all_reviews.filtered(lambda r: r.state == 'draft'))
+
+        reviews_list = []
+        for r in all_reviews:
+            reviews_list.append({
+                'id': r.id,
+                'reference': r.reference or f"REV-{r.id:04d}",
+                'name': r.name,
+                'project_id': r.project_id.id,
+                'project_name': r.project_id.name,
+                'partner_id': r.partner_id.id if r.partner_id else False,
+                'partner_name': r.partner_id.name if r.partner_id else 'Client',
+                'reviewer_name': r.reviewer_name or (r.partner_id.name if r.partner_id else 'Client'),
+                'reviewer_email': r.reviewer_email or '',
+                'reviewer_phone': r.reviewer_phone or '',
+                'review_date': r.review_date.strftime('%d %b %Y') if r.review_date else '',
+                'review_date_iso': r.review_date.isoformat() if r.review_date else '',
+                'review_type': r.review_type or 'milestone',
+                'review_type_label': dict(r._fields['review_type'].selection).get(r.review_type, 'Milestone Review'),
+                'rating': r.rating or '5',
+                'rating_value': r.rating_value or 5,
+                'nps_score': r.nps_score or '',
+                'feedback': r.feedback or '',
+                'strengths': r.strengths or '',
+                'areas_for_improvement': r.areas_for_improvement or '',
+                'state': r.state or 'draft',
+                'state_label': dict(r._fields['state'].selection).get(r.state, 'Draft'),
+                'internal_response': r.internal_response or '',
+                'response_sent': bool(r.response_sent),
+                'response_date': r.response_date.strftime('%d %b %Y') if r.response_date else '',
+                'manager_name': r.manager_id.name if r.manager_id else '',
+                'team_lead_name': r.team_lead_id.name if r.team_lead_id else '',
+                'project_progress': round(r.project_id.progress, 1) if r.project_id else 0.0,
+            })
+
+        available_projects = self.env['project.manage'].search([], order='name asc')
+        projects_list = [{
+            'id': p.id,
+            'name': p.name,
+            'partner_id': p.partner_id.id if p.partner_id else False,
+            'partner_name': p.partner_id.name if p.partner_id else '',
+            'coordinator_name': p.client_coordinator_id.name if p.client_coordinator_id else '',
+            'coordinator_email': p.client_coordinator_id.email if p.client_coordinator_id else (p.partner_id.email if p.partner_id else ''),
+            'coordinator_phone': p.client_coordinator_id.phone if p.client_coordinator_id else (p.partner_id.phone if p.partner_id else ''),
+        } for p in available_projects]
+
+        return {
+            'summary': {
+                'total_count': total_count,
+                'avg_rating': avg_rating,
+                'rating_5': count_5,
+                'rating_4': count_4,
+                'rating_3': count_3,
+                'rating_low': count_2 + count_1,
+                'positive_pct': positive_pct,
+                'pending_ack_count': pending_ack_count,
+                'approved_count': approved_count,
+                'submitted_count': submitted_count,
+                'draft_count': draft_count,
+            },
+            'reviews': reviews_list,
+            'projects': projects_list,
+        }
+
+    @api.model
+    def save_customer_review_dashboard(self, vals, review_id=False):
+        """Create or update a customer review from dashboard."""
+        try:
+            do_submit = vals.pop('do_submit', False)
+            do_approve = vals.pop('do_approve', False)
+
+            clean_vals = {}
+            for k in ('name', 'project_id', 'partner_id', 'reviewer_name', 'reviewer_email',
+                      'reviewer_phone', 'review_date', 'review_type', 'rating', 'nps_score',
+                      'feedback', 'strengths', 'areas_for_improvement', 'state', 'internal_response'):
+                if k in vals:
+                    clean_vals[k] = vals[k]
+
+            if 'project_id' in clean_vals and clean_vals['project_id']:
+                clean_vals['project_id'] = int(clean_vals['project_id'])
+            if 'partner_id' in clean_vals and clean_vals['partner_id']:
+                clean_vals['partner_id'] = int(clean_vals['partner_id'])
+
+            if review_id:
+                review = self.env['project.manage.review'].browse(int(review_id))
+                review.write(clean_vals)
+            else:
+                review = self.env['project.manage.review'].create(clean_vals)
+
+            if do_approve:
+                review.action_approve()
+            elif do_submit:
+                review.action_submit()
+
+            return {
+                'success': True,
+                'review_id': review.id,
+                'message': _('Review "%s" saved successfully.') % review.name,
+                'data': self.get_customer_reviews_dashboard(),
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
+    @api.model
+    def acknowledge_customer_review_dashboard(self, review_id, internal_response=False, send_email=False):
+        """Acknowledge review, record response, and optionally send thank-you email."""
+        try:
+            review = self.env['project.manage.review'].browse(int(review_id))
+            if not review.exists():
+                return {'error': _('Review not found.')}
+
+            if internal_response is not False:
+                review.internal_response = internal_response
+
+            review.action_approve()
+
+            email_sent = False
+            if send_email:
+                try:
+                    review.action_send_acknowledgement()
+                    email_sent = True
+                except Exception:
+                    pass
+
+            msg = _('Review acknowledged successfully.')
+            if email_sent:
+                msg += _(' Thank-you acknowledgement sent to client.')
+
+            return {
+                'success': True,
+                'message': msg,
+                'data': self.get_customer_reviews_dashboard(),
+            }
+        except Exception as e:
+            return {'error': str(e)}
+
+    @api.model
+    def delete_customer_review_dashboard(self, review_id):
+        """Delete a review from dashboard."""
+        try:
+            review = self.env['project.manage.review'].browse(int(review_id))
+            if review.exists():
+                name = review.name
+                review.unlink()
+                return {
+                    'success': True,
+                    'message': _('Review "%s" deleted.') % name,
+                    'data': self.get_customer_reviews_dashboard(),
+                }
+            return {'error': _('Review not found.')}
+        except Exception as e:
+            return {'error': str(e)}
+
+
 class IrUiMenu(models.Model):
     _inherit = 'ir.ui.menu'
 
     def _filter_visible_menus(self):
-        """Strictly hide Scopes and Tasks management menus from Team Leads and Consultants."""
+        """Strictly hide Approvals, Scopes, and Configuration menus from non-Administrators (Consultants, Team Leads, PMs, VPs, CEOs)."""
         res = super()._filter_visible_menus()
         user = self.env.user
-        is_manager = bool(
+        is_admin = bool(
             self.env.is_superuser() or
             self.env.su or
             user.id in (1, 2) or
             user.has_group('base.group_system') or
-            user.has_group('project_manage.group_project_manage_administrator') or
-            user.has_group('project_manage.group_project_manage_ceo') or
-            user.has_group('project_manage.group_project_manage_vp') or
-            user.has_group('project_manage.group_project_manage_manager')
+            user.has_group('project_manage.group_project_manage_administrator')
         )
-        if not is_manager:
-            scope_menu_xmlids = (
+        if not is_admin:
+            admin_only_menu_xmlids = (
+                'project_manage.menu_project_manage_approvals',
                 'project_manage.menu_project_manage_scopes_menu',
                 'project_manage.menu_project_manage_scopes_calendar',
                 'project_manage.menu_project_manage_scopes',
                 'project_manage.menu_project_manage_documentation',
                 'project_manage.menu_project_manage_implementation',
+                'project_manage.menu_project_manage_config',
+                'project_manage.menu_project_config_documentation',
+                'project_manage.menu_project_manage_teams',
+                'project_manage.menu_project_config_scopes',
+                'project_manage.menu_project_config_import',
+                'project_manage.menu_project_manage_tags',
+                'project_manage.menu_project_manage_users',
             )
             hidden_ids = set()
-            for xid in scope_menu_xmlids:
+            for xid in admin_only_menu_xmlids:
                 m = self.env.ref(xid, raise_if_not_found=False)
                 if m:
                     hidden_ids.add(m.id)

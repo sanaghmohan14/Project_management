@@ -78,28 +78,63 @@ class ResUsers(models.Model):
                     WHERE gid = %s AND hid = %s
                 """, (sys_grp.id, admin_grp.id))
 
-            # 2a. Explicitly unbind consultant group from Customer Reviews, Approval Requests, and Scopes menus in DB
+            # 2a. Explicitly configure Customer Reviews menu permissions (Team Lead and above)
             cons_grp = self.env.ref('project_manage.group_project_manage_consultant', raise_if_not_found=False)
             tl_grp = self.env.ref('project_manage.group_project_manage_team_lead', raise_if_not_found=False)
-            if cons_grp and tl_grp:
-                restricted_menu_names = (
-                    'menu_project_manage_reviews',
-                    'menu_project_manage_approvals',
-                    'menu_project_manage_scopes_menu',
-                    'menu_project_manage_scopes_calendar',
-                    'menu_project_manage_scopes',
-                    'menu_project_manage_documentation',
-                    'menu_project_manage_implementation',
-                )
+            if cons_grp:
                 self.env.cr.execute("""
                     DELETE FROM ir_ui_menu_group_rel
                     WHERE gid = %s
                       AND menu_id IN (
                           SELECT res_id FROM ir_model_data
                           WHERE module = 'project_manage'
-                            AND name IN %s
+                            AND name = 'menu_project_manage_reviews'
                       );
-                """, (cons_grp.id, restricted_menu_names))
+                """, (cons_grp.id,))
+
+            if tl_grp:
+                self.env.cr.execute("""
+                    INSERT INTO ir_ui_menu_group_rel (menu_id, gid)
+                    SELECT imd.res_id, %s
+                    FROM ir_model_data imd
+                    WHERE imd.module = 'project_manage'
+                      AND imd.name = 'menu_project_manage_reviews'
+                      AND NOT EXISTS (
+                          SELECT 1 FROM ir_ui_menu_group_rel r
+                          WHERE r.menu_id = imd.res_id AND r.gid = %s
+                      );
+                """, (tl_grp.id, tl_grp.id))
+
+            # 2b. Explicitly enforce Administrator-ONLY menus:
+            # - Approval Requests
+            # - Scopes (and all submenus)
+            # - Configuration (and all submenus)
+            # Purge ALL other roles (Consultant, Team Lead, Project Manager, VP, CEO) from these menus!
+            if admin_grp:
+                admin_only_menu_names = (
+                    'menu_project_manage_approvals',
+                    'menu_project_manage_scopes_menu',
+                    'menu_project_manage_scopes_calendar',
+                    'menu_project_manage_scopes',
+                    'menu_project_manage_documentation',
+                    'menu_project_manage_implementation',
+                    'menu_project_manage_config',
+                    'menu_project_config_documentation',
+                    'menu_project_manage_teams',
+                    'menu_project_config_scopes',
+                    'menu_project_config_import',
+                    'menu_project_manage_tags',
+                    'menu_project_manage_users',
+                )
+                self.env.cr.execute("""
+                    DELETE FROM ir_ui_menu_group_rel
+                    WHERE menu_id IN (
+                        SELECT res_id FROM ir_model_data
+                        WHERE module = 'project_manage'
+                          AND name IN %s
+                    )
+                    AND gid != %s;
+                """, (admin_only_menu_names, admin_grp.id))
 
                 self.env.cr.execute("""
                     INSERT INTO ir_ui_menu_group_rel (menu_id, gid)
@@ -111,7 +146,7 @@ class ResUsers(models.Model):
                           SELECT 1 FROM ir_ui_menu_group_rel r
                           WHERE r.menu_id = imd.res_id AND r.gid = %s
                       );
-                """, (tl_grp.id, restricted_menu_names, tl_grp.id))
+                """, (admin_grp.id, admin_only_menu_names, admin_grp.id))
 
                 self.env['ir.ui.menu'].clear_caches()
 

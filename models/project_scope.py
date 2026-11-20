@@ -1307,6 +1307,8 @@ class ProjectManageScope(models.Model):
             'submitted_by_name': scope.submitted_by_id.name if scope.submitted_by_id else '',
             'submission_date_str': scope.submitted_date.strftime('%d %b %Y, %I:%M %p') if scope.submitted_date else '',
             'submission_notes': scope.evidence_proof or scope.notes or '',
+            'notes': scope.notes or '',
+            'evidence_proof': scope.evidence_proof or '',
             'approval_authority': scope.approval_authority or 'tl',
             'approval_authority_label': dict(scope._fields['approval_authority'].selection).get(scope.approval_authority, 'Team Lead'),
             'can_approve': can_approve,
@@ -1335,6 +1337,32 @@ class ProjectManageScope(models.Model):
             'uploaded_by': self.env.user.id,
             'upload_date': fields.Datetime.now(),
         })
+        if notes and not scope.notes:
+            scope.sudo().write({'notes': notes})
+        return self.get_scope_details_dashboard(scope.id)
+
+    @api.model
+    def update_scope_notes_dashboard(self, scope_id, notes):
+        """Update notes / description for the scope item from dashboard modal."""
+        scope = self.browse(int(scope_id))
+        if not scope.exists():
+            return {'error': _("Task not found.")}
+        scope.sudo().write({'notes': notes or ''})
+        return self.get_scope_details_dashboard(scope.id)
+
+    @api.model
+    def delete_scope_document_dashboard(self, scope_id, document_id):
+        """Delete an uploaded document/deliverable from the scope item."""
+        scope = self.browse(int(scope_id))
+        if not scope.exists():
+            return {'error': _("Task not found.")}
+        doc = self.env['project.manage.scope.document'].sudo().browse(int(document_id))
+        if doc.exists() and doc.scope_id.id == scope.id:
+            doc.unlink()
+        else:
+            att = self.env['ir.attachment'].sudo().browse(int(document_id))
+            if att.exists() and att.res_model == 'project.manage.scope' and att.res_id == scope.id:
+                att.unlink()
         return self.get_scope_details_dashboard(scope.id)
 
     @api.model
@@ -1382,7 +1410,7 @@ class ProjectManageScopeDocument(models.Model):
         'res.users', string='Uploaded By', default=lambda self: self.env.user)
     upload_date = fields.Datetime(
         string='Uploaded On', default=fields.Datetime.now)
-    notes = fields.Char(string='Notes / Description')
+    notes = fields.Text(string='Notes / Description')
 
     @api.onchange('filename', 'file')
     def _onchange_file_set_name(self):

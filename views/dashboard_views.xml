@@ -15,4 +15,13 @@
         <field name="context">{'default_main_view': 'calendar'}</field>
         <field name="params">{'default_main_view': 'calendar'}</field>
     </record>
+
+    <!-- Project Management Customer Reviews Dashboard Client Action -->
+    <record id="action_project_manage_reviews_dashboard" model="ir.actions.client">
+        <field name="name">Customer Reviews</field>
+        <field name="tag">project_manage_dashboard</field>
+        <field name="target">current</field>
+        <field name="context">{'default_main_view': 'reviews'}</field>
+        <field name="params">{'default_main_view': 'reviews'}</field>
+    </record>
 </odoo>
