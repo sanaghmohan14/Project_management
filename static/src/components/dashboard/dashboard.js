@@ -123,6 +123,7 @@ export class ProjectManageDashboard extends Component {
             scopeDetailNotes: "",
             scopeDetailNotesSaving: false,
             scopeDetailEditingNotes: false,
+            scopeDetailSubmitting: false,
             scopeDetailUploadOpen: false,
             scopeDetailUploadFile: null,
             scopeDetailUploadFilename: "",
@@ -2774,6 +2775,36 @@ export class ProjectManageDashboard extends Component {
         this.state.scopeDetailUploadType = "deliverable";
         this.state.scopeDetailUploading = false;
         this.state.scopeDetailNotesSaving = false;
+        this.state.scopeDetailSubmitting = false;
+    }
+
+    async submitTaskFromModal(scopeId) {
+        if (!scopeId) return;
+        this.state.scopeDetailSubmitting = true;
+        try {
+            const res = await this.orm.call("project.manage", "action_dashboard_submit_scope", [scopeId]);
+            if (res && res.error) {
+                if (this.notification) this.notification.add(res.error, { type: "danger" });
+                return;
+            }
+            if (this.notification) {
+                this.notification.add("Task marked complete and submitted for review.", { type: "success" });
+            }
+            const updated = await this.orm.call("project.manage.scope", "get_scope_details_dashboard", [scopeId]);
+            if (updated && !updated.error) {
+                this.state.scopeDetailData = updated;
+            }
+            await this.loadData();
+            if (this.state.selectedProjectId) {
+                await this.loadProjectScopes(this.state.selectedProjectId);
+            }
+        } catch (err) {
+            console.error("Failed to submit task from modal:", err);
+            const msg = (err && err.data && err.data.message) || (err && err.message) || "Could not submit task.";
+            if (this.notification) this.notification.add(msg, { type: "danger" });
+        } finally {
+            this.state.scopeDetailSubmitting = false;
+        }
     }
 
     async approveTaskFromModal(scopeId) {
@@ -2802,6 +2833,10 @@ export class ProjectManageDashboard extends Component {
 
     async saveScopeDetailNotes() {
         if (!this.state.scopeDetailData || !this.state.scopeDetailData.id) return;
+        if (this.state.scopeDetailData.can_modify_documents === false) {
+            if (this.notification) this.notification.add("Task description and notes cannot be edited after approval by Team Leads or Consultants.", { type: "danger" });
+            return;
+        }
         this.state.scopeDetailNotesSaving = true;
         try {
             const res = await this.orm.call("project.manage.scope", "update_scope_notes_dashboard", [
@@ -2861,6 +2896,10 @@ export class ProjectManageDashboard extends Component {
             if (this.notification) this.notification.add("Please select a file to upload.", { type: "warning" });
             return;
         }
+        if (this.state.scopeDetailData && this.state.scopeDetailData.can_modify_documents === false) {
+            if (this.notification) this.notification.add("Approved deliverables and documents cannot be modified or added by Team Leads or Consultants.", { type: "danger" });
+            return;
+        }
         const file = this.state.scopeDetailUploadFile;
         const notes = this.state.scopeDetailUploadNotes || "";
         const docType = this.state.scopeDetailUploadType || "deliverable";
@@ -2901,6 +2940,10 @@ export class ProjectManageDashboard extends Component {
 
     async deleteModalDocument(scopeId, docId) {
         if (!scopeId || !docId) return;
+        if (this.state.scopeDetailData && this.state.scopeDetailData.can_modify_documents === false) {
+            if (this.notification) this.notification.add("Approved deliverables and documents cannot be deleted by Team Leads or Consultants.", { type: "danger" });
+            return;
+        }
         if (!confirm("Are you sure you want to delete this document?")) return;
         try {
             const res = await this.orm.call("project.manage.scope", "delete_scope_document_dashboard", [

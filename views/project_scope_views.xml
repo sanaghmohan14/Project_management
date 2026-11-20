@@ -159,6 +159,7 @@
                         </button>
                     </div>
                     <field name="can_edit_scope_fields" invisible="1"/>
+                    <field name="can_modify_documents" invisible="1"/>
                     <div class="oe_title">
                         <label for="name" string="Document Name" invisible="category != 'Documentation'"/>
                         <label for="name" string="Implementation Activity" invisible="category == 'Documentation'"/>
@@ -193,10 +194,10 @@
                     <notebook>
                         <page string="Documents &amp; Files" name="documents">
                             <group string="Quick File Upload (Multiple Attachments)">
-                                <field name="attachment_ids" widget="many2many_binary" string="Upload Files" nolabel="1"/>
+                                <field name="attachment_ids" widget="many2many_binary" string="Upload Files" nolabel="1" readonly="not can_modify_documents"/>
                             </group>
                             <group string="Document &amp; Deliverable Register (Upload Details)">
-                                <field name="document_ids" nolabel="1">
+                                <field name="document_ids" nolabel="1" readonly="not can_modify_documents">
                                     <list editable="bottom">
                                         <field name="name" string="Document Title" placeholder="e.g. Approved SOP, Audit Evidence..."/>
                                         <field name="doc_type" string="Category" widget="badge"/>

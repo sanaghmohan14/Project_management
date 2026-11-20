@@ -208,6 +208,8 @@ class ProjectManageScope(models.Model):
         string='Is Assigned to Current User', compute='_compute_is_my_task', search='_search_is_my_task')
     can_edit_scope_fields = fields.Boolean(
         string='Can Edit Scope Fields', compute='_compute_can_edit_scope_fields')
+    can_modify_documents = fields.Boolean(
+        string='Can Modify Documents', compute='_compute_can_modify_documents')
     can_current_user_complete = fields.Boolean(
         string='Can Complete Task', compute='_compute_can_current_user_complete')
 
@@ -325,21 +327,48 @@ class ProjectManageScope(models.Model):
         for rec in self:
             rec.can_edit_scope_fields = can_edit
 
-    def _compute_can_current_user_complete(self):
-        user = self.env.user
-        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
-        is_admin = bool(
+    def _is_manager_or_above(self, user=None):
+        """Returns True if the user is a Project Manager, VP, CEO, Administrator, or Superuser.
+        Returns False for Team Leads and Consultants.
+        """
+        user = user or self.env.user
+        return bool(
             self.env.is_superuser() or
             user.id in (1, 2) or
             user.has_group('base.group_system') or
-            user.has_group('project_manage.group_project_manage_administrator')
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            (hasattr(user, '_is_admin') and user._is_admin())
+        )
+
+    @api.depends('approval_state', 'state')
+    def _compute_can_modify_documents(self):
+        is_manager = self._is_manager_or_above()
+        for rec in self:
+            is_approved = bool(rec.approval_state == 'approved' or rec.state == 'done')
+            # Higher roles can always manage documents; Team Leads and Consultants are locked out once approved
+            rec.can_modify_documents = bool(is_manager or not is_approved)
+
+    def _compute_can_current_user_complete(self):
+        user = self.env.user
+        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
+        is_lead_or_above = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            user.has_group('project_manage.group_project_manage_team_lead') or
+            (hasattr(user, '_is_admin') and user._is_admin())
         )
         for rec in self:
-            if rec.state == 'done' or rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
-                rec.can_current_user_complete = False
-                continue
-
-            if not rec.responsible_ids and not rec.responsible_id:
+            if rec.state in ('done', 'cancelled') or rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 rec.can_current_user_complete = False
                 continue
 
@@ -355,7 +384,7 @@ class ProjectManageScope(models.Model):
                 (user in all_resp_users) or
                 (current_emp and current_emp in all_resp_emps)
             )
-            rec.can_current_user_complete = bool(is_assigned or is_admin)
+            rec.can_current_user_complete = bool(is_assigned or is_lead_or_above)
 
     def _search_can_user_approve(self, operator, value):
         user = self.env.user
@@ -960,15 +989,21 @@ class ProjectManageScope(models.Model):
         """
         user = self.env.user
         current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
-        is_admin = bool(
+        is_lead_or_above = bool(
             self.env.is_superuser() or
             user.id in (1, 2) or
             user.has_group('base.group_system') or
-            user.has_group('project_manage.group_project_manage_administrator')
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            user.has_group('project_manage.group_project_manage_team_lead') or
+            (hasattr(user, '_is_admin') and user._is_admin())
         )
 
         for rec in self:
-            if not is_admin:
+            if not is_lead_or_above:
                 if not rec.responsible_ids and not rec.responsible_id:
                     raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
                 all_resp_users = rec.responsible_ids.mapped('user_id')
@@ -1282,6 +1317,10 @@ class ProjectManageScope(models.Model):
             user.has_group('project_manage.group_project_manage_administrator')
         )
         can_approve = bool(scope.can_user_approve or is_admin)
+        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
+        is_manager = self._is_manager_or_above()
+        can_modify_documents = bool(is_manager or not is_approved)
+        can_submit = bool(scope.can_current_user_complete)
 
         return {
             'id': scope.id,
@@ -1312,6 +1351,9 @@ class ProjectManageScope(models.Model):
             'approval_authority': scope.approval_authority or 'tl',
             'approval_authority_label': dict(scope._fields['approval_authority'].selection).get(scope.approval_authority, 'Team Lead'),
             'can_approve': can_approve,
+            'can_submit': can_submit,
+            'is_approved': is_approved,
+            'can_modify_documents': can_modify_documents,
             'documents': docs,
             'doc_count': len(docs),
         }
@@ -1322,6 +1364,10 @@ class ProjectManageScope(models.Model):
         scope = self.browse(int(scope_id))
         if not scope.exists():
             return {'error': _("Task not found.")}
+
+        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
+        if is_approved and not self._is_manager_or_above():
+            return {'error': _("Approved deliverables and documents cannot be modified or added by Team Leads or Consultants.")}
 
         clean_file = file_data
         if isinstance(clean_file, str) and ',' in clean_file and ';base64' in clean_file.split(',')[0]:
@@ -1347,6 +1393,11 @@ class ProjectManageScope(models.Model):
         scope = self.browse(int(scope_id))
         if not scope.exists():
             return {'error': _("Task not found.")}
+
+        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
+        if is_approved and not self._is_manager_or_above():
+            return {'error': _("Task description and notes cannot be edited after approval by Team Leads or Consultants.")}
+
         scope.sudo().write({'notes': notes or ''})
         return self.get_scope_details_dashboard(scope.id)
 
@@ -1356,6 +1407,11 @@ class ProjectManageScope(models.Model):
         scope = self.browse(int(scope_id))
         if not scope.exists():
             return {'error': _("Task not found.")}
+
+        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
+        if is_approved and not self._is_manager_or_above():
+            return {'error': _("Approved deliverables and documents cannot be deleted by Team Leads or Consultants.")}
+
         doc = self.env['project.manage.scope.document'].sudo().browse(int(document_id))
         if doc.exists() and doc.scope_id.id == scope.id:
             doc.unlink()
@@ -1466,8 +1522,20 @@ class ProjectManageScopeDocument(models.Model):
                     doc.scope_id.sudo().write({'attachment_ids': [(4, att.id)]})
         return records
 
-    def unlink(self):
+    def write(self, vals):
+        is_manager = self.env['project.manage.scope']._is_manager_or_above()
         for doc in self:
+            scope = doc.scope_id
+            if scope and (scope.approval_state == 'approved' or scope.state == 'done') and not is_manager:
+                raise UserError(_("Approved deliverables and documents cannot be modified by Team Leads or Consultants."))
+        return super().write(vals)
+
+    def unlink(self):
+        is_manager = self.env['project.manage.scope']._is_manager_or_above()
+        for doc in self:
+            scope = doc.scope_id
+            if scope and (scope.approval_state == 'approved' or scope.state == 'done') and not is_manager:
+                raise UserError(_("Approved deliverables and documents cannot be deleted by Team Leads or Consultants."))
             if doc.scope_id and (doc.filename or doc.name):
                 fname = doc.filename or doc.name
                 to_remove = doc.scope_id.attachment_ids.filtered(lambda a: a.name == fname)

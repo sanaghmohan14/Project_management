@@ -3945,12 +3945,19 @@
                                                 <div class="fw-bold small text-uppercase" style="color: var(--pm-text-heading); letter-spacing: 0.03em;">
                                                     <i class="fa fa-align-left text-primary me-1"></i> Task Description &amp; Notes
                                                 </div>
-                                                <button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-semibold" 
-                                                        style="font-size: 0.78rem;"
-                                                        t-on-click="() => { this.state.scopeDetailEditingNotes = !this.state.scopeDetailEditingNotes; }">
-                                                    <i class="fa me-1" t-att-class="state.scopeDetailEditingNotes ? 'fa-eye' : 'fa-pencil'"></i>
-                                                    <span t-esc="state.scopeDetailEditingNotes ? 'Preview' : 'Edit Description &amp; Notes'"/>
-                                                </button>
+                                                <t t-if="state.scopeDetailData.can_modify_documents">
+                                                    <button type="button" class="btn btn-sm btn-link text-primary p-0 text-decoration-none fw-semibold" 
+                                                            style="font-size: 0.78rem;"
+                                                            t-on-click="() => { this.state.scopeDetailEditingNotes = !this.state.scopeDetailEditingNotes; }">
+                                                        <i class="fa me-1" t-att-class="state.scopeDetailEditingNotes ? 'fa-eye' : 'fa-pencil'"></i>
+                                                        <span t-esc="state.scopeDetailEditingNotes ? 'Preview' : 'Edit Description &amp; Notes'"/>
+                                                    </button>
+                                                </t>
+                                                <t t-else="">
+                                                    <span class="badge bg-light text-muted border py-1 px-2 small">
+                                                        <i class="fa fa-lock me-1"></i> Locked after approval
+                                                    </span>
+                                                </t>
                                             </div>
 
                                             <!-- Edit Mode -->
@@ -3996,10 +4003,12 @@
                                                     <t t-else="">
                                                         <div class="d-flex align-items-center justify-content-between text-muted small fst-italic py-1">
                                                             <span>No task description or notes added yet.</span>
-                                                            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-3 rounded-pill shadow-sm" style="font-size: 0.74rem;"
-                                                                    t-on-click="() => { this.state.scopeDetailEditingNotes = true; }">
-                                                                <i class="fa fa-plus me-1"></i> Add Description
-                                                            </button>
+                                                            <t t-if="state.scopeDetailData.can_modify_documents">
+                                                                <button type="button" class="btn btn-sm btn-outline-primary py-1 px-3 rounded-pill shadow-sm" style="font-size: 0.74rem;"
+                                                                        t-on-click="() => { this.state.scopeDetailEditingNotes = true; }">
+                                                                    <i class="fa fa-plus me-1"></i> Add Description
+                                                                </button>
+                                                            </t>
                                                         </div>
                                                     </t>
                                                 </div>
@@ -4016,14 +4025,22 @@
                                                     <div class="text-muted small fw-normal" style="font-size: 0.74rem;">Proof files, deliverables, SOPs, and sign-offs attached to this task</div>
                                                 </div>
                                                 <div class="flex-shrink-0">
-                                                    <button type="button"
-                                                            class="btn btn-sm px-3 py-1 rounded-pill text-nowrap d-inline-flex align-items-center gap-1 shadow-sm"
-                                                            t-att-class="state.scopeDetailUploadOpen ? 'btn-secondary text-white' : 'btn-outline-primary'"
-                                                            style="font-size: 0.8rem; font-weight: 600; white-space: nowrap !important;"
-                                                            t-on-click="() => this.toggleModalUploadSection()">
-                                                        <i class="fa" t-att-class="state.scopeDetailUploadOpen ? 'fa-times' : 'fa-upload'"></i>
-                                                        <span t-esc="state.scopeDetailUploadOpen ? 'Close Panel' : 'Upload File'"/>
-                                                    </button>
+                                                    <t t-if="state.scopeDetailData.can_modify_documents">
+                                                        <button type="button"
+                                                                class="btn btn-sm px-3 py-1 rounded-pill text-nowrap d-inline-flex align-items-center gap-1 shadow-sm"
+                                                                t-att-class="state.scopeDetailUploadOpen ? 'btn-secondary text-white' : 'btn-outline-primary'"
+                                                                style="font-size: 0.8rem; font-weight: 600; white-space: nowrap !important;"
+                                                                t-on-click="() => this.toggleModalUploadSection()">
+                                                            <i class="fa" t-att-class="state.scopeDetailUploadOpen ? 'fa-times' : 'fa-upload'"></i>
+                                                            <span t-esc="state.scopeDetailUploadOpen ? 'Close Panel' : 'Upload File'"/>
+                                                        </button>
+                                                    </t>
+                                                    <t t-else="">
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-3 rounded-pill small d-inline-flex align-items-center gap-1 shadow-sm"
+                                                              title="Deliverable is approved and locked. Documents cannot be added, edited, or deleted by Team Leads or Consultants.">
+                                                            <i class="fa fa-lock"></i> Approved &amp; Locked
+                                                        </span>
+                                                    </t>
                                                 </div>
                                             </div>
 
@@ -4166,13 +4183,15 @@
                                                                                style="font-size: 0.75rem;">
                                                                                 <i class="fa fa-download me-1"></i> Download
                                                                             </a>
-                                                                            <button type="button" 
-                                                                                    class="btn btn-sm btn-outline-danger py-1 px-2 rounded-pill"
-                                                                                    title="Delete document"
-                                                                                    style="font-size: 0.75rem;"
-                                                                                    t-on-click="() => this.deleteModalDocument(state.scopeDetailData.id, doc.id)">
-                                                                                <i class="fa fa-trash-o"></i>
-                                                                            </button>
+                                                                            <t t-if="state.scopeDetailData.can_modify_documents">
+                                                                                <button type="button" 
+                                                                                        class="btn btn-sm btn-outline-danger py-1 px-2 rounded-pill"
+                                                                                        title="Delete document"
+                                                                                        style="font-size: 0.75rem;"
+                                                                                        t-on-click="() => this.deleteModalDocument(state.scopeDetailData.id, doc.id)">
+                                                                                    <i class="fa fa-trash-o"></i>
+                                                                                </button>
+                                                                            </t>
                                                                         </div>
                                                                     </td>
                                                                 </tr>
@@ -4204,12 +4223,14 @@
                                                                        style="font-size: 0.75rem;">
                                                                         <i class="fa fa-download"></i>
                                                                     </a>
-                                                                    <button type="button" 
-                                                                            class="btn btn-sm btn-outline-danger py-1 px-2 rounded-pill"
-                                                                            style="font-size: 0.75rem;"
-                                                                            t-on-click="() => this.deleteModalDocument(state.scopeDetailData.id, doc.id)">
-                                                                        <i class="fa fa-trash-o"></i>
-                                                                    </button>
+                                                                    <t t-if="state.scopeDetailData.can_modify_documents">
+                                                                        <button type="button" 
+                                                                                class="btn btn-sm btn-outline-danger py-1 px-2 rounded-pill"
+                                                                                style="font-size: 0.75rem;"
+                                                                                t-on-click="() => this.deleteModalDocument(state.scopeDetailData.id, doc.id)">
+                                                                            <i class="fa fa-trash-o"></i>
+                                                                        </button>
+                                                                    </t>
                                                                 </div>
                                                             </div>
                                                             <t t-if="doc.notes">
@@ -4238,6 +4259,19 @@
                                         <i class="fa fa-shield text-primary me-1"></i> Managed directly in dashboard
                                     </div>
                                     <div class="pm-modal-footer-actions">
+                                        <t t-if="state.scopeDetailData and state.scopeDetailData.can_submit">
+                                            <button type="button" class="btn btn-sm btn-primary fw-semibold px-4 py-2 rounded-pill pm-btn-modal-submit d-inline-flex align-items-center justify-content-center gap-1 shadow-sm"
+                                                    t-att-disabled="state.scopeDetailSubmitting"
+                                                    t-on-click="() => this.submitTaskFromModal(state.scopeDetailData.id)"
+                                                    title="Submit task for review &amp; approval">
+                                                <t t-if="state.scopeDetailSubmitting">
+                                                    <i class="fa fa-spinner fa-spin me-1"></i> Submitting...
+                                                </t>
+                                                <t t-else="">
+                                                    <i class="fa fa-paper-plane me-1"></i> Submit for Approval
+                                                </t>
+                                            </button>
+                                        </t>
                                         <t t-if="state.scopeDetailData and state.scopeDetailData.can_approve and ['pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'].includes(state.scopeDetailData.approval_state)">
                                             <div class="pm-modal-action-row">
                                                 <button type="button" class="btn btn-sm btn-success fw-semibold px-3 py-2 rounded-pill pm-btn-modal-approve d-inline-flex align-items-center justify-content-center"

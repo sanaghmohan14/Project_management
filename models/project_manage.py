@@ -1892,12 +1892,15 @@ class ProjectManage(models.Model):
         return False
 
     @api.model
-    def action_dashboard_submit_scope(self, scope_id):
-        scope = self.env['project.manage.scope'].browse(scope_id)
-        if scope.exists():
-            scope.action_submit_for_approval()
-            return True
-        return False
+    def action_dashboard_submit_scope(self, scope_id=None, **kwargs):
+        sid = scope_id or kwargs.get('scope_id')
+        if not sid:
+            return {'error': _("Task ID is required.")}
+        scope = self.env['project.manage.scope'].browse(int(sid))
+        if not scope.exists():
+            return {'error': _("Task not found.")}
+        scope.action_submit_for_approval()
+        return {'success': True}
 
     @api.model
     def get_project_scopes_dashboard(self, project_id):
