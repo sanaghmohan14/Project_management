@@ -79,6 +79,8 @@ export class ProjectManageDashboard extends Component {
             calendarDate: new Date().getDate(),
             calendarTaskFilterScope: 'day', // 'day' (selected date), 'week', 'month', 'overdue'
             calendarSearchQuery: "",
+            mobileCalendarViewMode: 'month', // 'month' (Month Grid) or 'week' (Timeline Week)
+            mobileCalendarStatusFilter: 'all', // 'all', 'completed', 'due', 'not_started', 'in_progress'
             selectedTeamId: null,
             activeRoleView: null,
             selectedProjectId: null,
@@ -476,6 +478,116 @@ export class ProjectManageDashboard extends Component {
         // Search query
         if (this.state.searchQuery) {
             const q = this.state.searchQuery;
+            list = list.filter(s => 
+                (s.item_id && s.item_id.toLowerCase().includes(q)) ||
+                (s.name && s.name.toLowerCase().includes(q)) ||
+                (s.scope_name && s.scope_name.toLowerCase().includes(q)) ||
+                (s.responsible_name && s.responsible_name.toLowerCase().includes(q))
+            );
+        }
+
+        return list;
+    }
+
+    // ==================== MOBILE ASSIGNED SCOPES & TASKS GETTERS ====================
+    get isConsultantUser() {
+        const u = this.state.data?.user_info;
+        return Boolean(u?.is_consultant || u?.role_code === 'consultant');
+    }
+
+    get mobileAssignedScopes() {
+        if (!this.state.projectScopesData || !this.state.projectScopesData.scopes) {
+            return [];
+        }
+        let list = this.state.projectScopesData.scopes;
+        const isConsultant = this.isConsultantUser;
+
+        if (isConsultant) {
+            const uid = this.state.data?.user_info?.id;
+            const uname = (this.state.data?.user_info?.name || '').trim().toLowerCase();
+            list = list.filter(s => {
+                if (s.is_assigned_to_me !== undefined) {
+                    return s.is_assigned_to_me;
+                }
+                if (!s.is_assigned && (!s.responsible_name || s.responsible_name === 'Unassigned' || !s.responsible_name.trim())) {
+                    return false;
+                }
+                if (uid && s.responsible_user_ids && s.responsible_user_ids.includes(uid)) {
+                    return true;
+                }
+                if (uname && s.responsible_name && s.responsible_name !== 'Unassigned') {
+                    return s.responsible_name.toLowerCase().includes(uname);
+                }
+                return false;
+            });
+        } else {
+            // For mobile view, filter out unassigned tasks
+            list = list.filter(s => s.is_assigned !== false && s.responsible_name && s.responsible_name !== 'Unassigned' && s.responsible_name.trim() !== '');
+        }
+
+        return list;
+    }
+
+    get mobileUniqueScopes() {
+        const assignedScopes = this.mobileAssignedScopes;
+        const scopeMap = {};
+        const unique = [];
+        for (const s of assignedScopes) {
+            const scName = s.scope_name || s.scope || 'Scope';
+            if (!scopeMap[scName]) {
+                scopeMap[scName] = {
+                    name: scName,
+                    scope_no: s.scope_no !== undefined ? s.scope_no : 0,
+                    total: 0,
+                    done: 0,
+                };
+                unique.push(scopeMap[scName]);
+            }
+            scopeMap[scName].total += 1;
+            if (s.state === 'done') {
+                scopeMap[scName].done += 1;
+            }
+        }
+        return unique;
+    }
+
+    get mobileScopesStats() {
+        const assignedScopes = this.mobileAssignedScopes;
+        return {
+            total_items: assignedScopes.length,
+            done_items: assignedScopes.filter(s => s.state === 'done').length,
+        };
+    }
+
+    get mobileFilteredScopes() {
+        let list = this.mobileAssignedScopes;
+
+        // Filter by category
+        if (this.state.activeCategoryFilter === 'documentation') {
+            list = list.filter(s => s.category && s.category.toLowerCase().includes('doc'));
+        } else if (this.state.activeCategoryFilter === 'implementation') {
+            list = list.filter(s => s.category && s.category.toLowerCase().includes('imp'));
+        }
+
+        // Filter by status color
+        if (this.state.activeStatusFilter === 'completed') {
+            list = list.filter(s => s.status_color === 'green');
+        } else if (this.state.activeStatusFilter === 'in_progress') {
+            list = list.filter(s => s.status_color === 'blue');
+        } else if (this.state.activeStatusFilter === 'pending') {
+            list = list.filter(s => s.status_color === 'yellow');
+        } else if (this.state.activeStatusFilter === 'overdue') {
+            list = list.filter(s => s.status_color === 'red');
+        }
+
+        // Filter by specific Scope
+        if (this.state.selectedScopeName) {
+            list = list.filter(s => s.scope_name === this.state.selectedScopeName);
+        }
+
+        // Search query
+        if (this.state.searchQuery) {
+            const q = this.state.searchQuery.toLowerCase();
             list = list.filter(s => 
                 (s.item_id && s.item_id.toLowerCase().includes(q)) ||
                 (s.name && s.name.toLowerCase().includes(q)) ||
@@ -1576,6 +1688,312 @@ export class ProjectManageDashboard extends Component {
         }
 
         return Object.values(groups).sort((a, b) => a.dateIso.localeCompare(b.dateIso));
+    }
+
+    // ==================== MOBILE CALENDAR SPECIFIC METHODS & GETTERS ====================
+    setMobileCalendarViewMode(mode) {
+        this.state.mobileCalendarViewMode = mode;
+    }
+
+    toggleMobileCalendarViewMode() {
+        this.state.mobileCalendarViewMode = this.state.mobileCalendarViewMode === 'month' ? 'week' : 'month';
+    }
+
+    setMobileCalendarStatusFilter(filter) {
+        this.state.mobileCalendarStatusFilter = filter;
+    }
+
+    calendarPrevMonth() {
+        if (this.state.calendarMonth === 0) {
+            this.state.calendarMonth = 11;
+            this.state.calendarYear -= 1;
+        } else {
+            this.state.calendarMonth -= 1;
+        }
+    }
+
+    calendarNextMonth() {
+        if (this.state.calendarMonth === 11) {
+            this.state.calendarMonth = 0;
+            this.state.calendarYear += 1;
+        } else {
+            this.state.calendarMonth += 1;
+        }
+    }
+
+    selectMobileCalendarDay(day) {
+        if (!day) return;
+        this.state.calendarYear = day.year;
+        this.state.calendarMonth = day.month;
+        this.state.calendarDate = day.dayNum;
+    }
+
+    getMobileTaskStatusInfo(evt) {
+        // Requirements:
+        // Completed tasks in GREEN
+        // Due tasks in RED
+        // Not started in YELLOW
+        // In progress in BLUE
+        if (evt.status === 'done' || evt.status === 'completed') {
+            return {
+                status: 'completed',
+                color: 'green',
+                label: 'Completed',
+                cardClass: 'pm-mob-cal-card-green',
+                dotClass: 'dot-green',
+                icon: 'fa-check-circle',
+                accentColor: '#16a34a',
+                bg: '#ecfdf5',
+                borderColor: '#86efac',
+            };
+        }
+        if (evt.is_overdue || (evt.days_remaining !== undefined && evt.days_remaining <= 0)) {
+            return {
+                status: 'due',
+                color: 'red',
+                label: 'Due',
+                cardClass: 'pm-mob-cal-card-red',
+                dotClass: 'dot-red',
+                icon: 'fa-bell',
+                accentColor: '#dc2626',
+                bg: '#fef2f2',
+                borderColor: '#fca5a5',
+            };
+        }
+        if (evt.status === 'in_progress') {
+            return {
+                status: 'in_progress',
+                color: 'blue',
+                label: 'In Progress',
+                cardClass: 'pm-mob-cal-card-blue',
+                dotClass: 'dot-blue',
+                icon: 'fa-clock-o',
+                accentColor: '#2563eb',
+                bg: '#eff6ff',
+                borderColor: '#93c5fd',
+            };
+        }
+        return {
+            status: 'not_started',
+            color: 'yellow',
+            label: 'Not Started',
+            cardClass: 'pm-mob-cal-card-yellow',
+            dotClass: 'dot-yellow',
+            icon: 'fa-circle-o',
+            accentColor: '#d97706',
+            bg: '#fffbeb',
+            borderColor: '#fde047',
+        };
+    }
+
+    get mobileCalendarDateTitle() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const yy = String(cur.getFullYear()).slice(-2);
+        return `${cur.getDate()} ${monthNames[cur.getMonth()]}, ${yy} ${dayNames[cur.getDay()]}`;
+    }
+
+    get mobileCalendarMonthYearTitle() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, 1);
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        return `${monthNames[cur.getMonth()]} ${cur.getFullYear()}`;
+    }
+
+    get mobileCalendarIsSelectedDateToday() {
+        const now = new Date();
+        return this.state.calendarYear === now.getFullYear() &&
+               this.state.calendarMonth === now.getMonth() &&
+               this.state.calendarDate === now.getDate();
+    }
+
+    get mobileCalendarMonthGrid() {
+        const year = this.state.calendarYear;
+        const month = this.state.calendarMonth;
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const selectedIso = `${year}-${pad(month + 1)}-${pad(this.state.calendarDate)}`;
+
+        const firstDay = new Date(year, month, 1);
+        const dayOfWeek = firstDay.getDay(); // 0 is Sun, 1 is Mon... 6 is Sat
+        const paddingDays = dayOfWeek; // Sun-first: 0 pad for Sun
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const prevMonthLastDate = new Date(year, month, 0).getDate();
+
+        const allEvents = this.filteredCalendarEvents;
+        const cells = [];
+
+        // Previous month padding days
+        for (let i = paddingDays - 1; i >= 0; i--) {
+            const d = prevMonthLastDate - i;
+            const prevM = month === 0 ? 11 : month - 1;
+            const prevY = month === 0 ? year - 1 : year;
+            const dateIso = `${prevY}-${pad(prevM + 1)}-${pad(d)}`;
+            cells.push({
+                key: `prev_${d}`,
+                dayNum: d,
+                month: prevM,
+                year: prevY,
+                dateIso,
+                isCurrentMonth: false,
+                isToday: dateIso === todayIso,
+                isSelected: dateIso === selectedIso,
+                dots: [],
+            });
+        }
+
+        // Current month days
+        for (let d = 1; d <= daysInMonth; d++) {
+            const dateIso = `${year}-${pad(month + 1)}-${pad(d)}`;
+            const cellEvents = allEvents.filter(e => e.date === dateIso);
+
+            const hasCompleted = cellEvents.some(e => e.status === 'done' || e.status === 'completed');
+            const hasDue = cellEvents.some(e => (e.status !== 'done' && e.status !== 'completed') && (e.is_overdue || (e.days_remaining !== undefined && e.days_remaining <= 0)));
+            const hasInProgress = cellEvents.some(e => e.status === 'in_progress' && !e.is_overdue && !(e.days_remaining !== undefined && e.days_remaining <= 0));
+            const hasNotStarted = cellEvents.some(e => (e.status === 'todo' || !e.status) && !e.is_overdue && !(e.days_remaining !== undefined && e.days_remaining <= 0));
+
+            const dots = [];
+            if (hasDue) dots.push('red');
+            if (hasInProgress) dots.push('blue');
+            if (hasNotStarted) dots.push('yellow');
+            if (hasCompleted) dots.push('green');
+
+            cells.push({
+                key: `cur_${d}`,
+                dayNum: d,
+                month,
+                year,
+                dateIso,
+                isCurrentMonth: true,
+                isToday: dateIso === todayIso,
+                isSelected: (d === this.state.calendarDate),
+                dots,
+                hasTasks: cellEvents.length > 0,
+            });
+        }
+
+        // Next month trailing days to complete 35 or 42 cells
+        const totalCells = cells.length <= 35 ? 35 : 42;
+        const remaining = totalCells - cells.length;
+        const nextM = month === 11 ? 0 : month + 1;
+        const nextY = month === 11 ? year + 1 : year;
+
+        for (let d = 1; d <= remaining; d++) {
+            const dateIso = `${nextY}-${pad(nextM + 1)}-${pad(d)}`;
+            cells.push({
+                key: `next_${d}`,
+                dayNum: d,
+                month: nextM,
+                year: nextY,
+                dateIso,
+                isCurrentMonth: false,
+                isToday: dateIso === todayIso,
+                isSelected: dateIso === selectedIso,
+                dots: [],
+            });
+        }
+
+        return cells;
+    }
+
+    get mobileCalendarWeekStripDays() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayOfWeek = cur.getDay(); // 0 is Sun
+        const sunday = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - dayOfWeek);
+
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const selectedIso = `${cur.getFullYear()}-${pad(cur.getMonth() + 1)}-${pad(cur.getDate())}`;
+
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const allEvents = this.filteredCalendarEvents;
+
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(sunday.getFullYear(), sunday.getMonth(), sunday.getDate() + i);
+            const dateIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+            const dayEvents = allEvents.filter(e => e.date === dateIso);
+
+            const hasCompleted = dayEvents.some(e => e.status === 'done' || e.status === 'completed');
+            const hasDue = dayEvents.some(e => (e.status !== 'done' && e.status !== 'completed') && (e.is_overdue || (e.days_remaining !== undefined && e.days_remaining <= 0)));
+            const hasInProgress = dayEvents.some(e => e.status === 'in_progress' && !e.is_overdue && !(e.days_remaining !== undefined && e.days_remaining <= 0));
+            const hasNotStarted = dayEvents.some(e => (e.status === 'todo' || !e.status) && !e.is_overdue && !(e.days_remaining !== undefined && e.days_remaining <= 0));
+
+            const dots = [];
+            if (hasDue) dots.push('red');
+            if (hasInProgress) dots.push('blue');
+            if (hasNotStarted) dots.push('yellow');
+            if (hasCompleted) dots.push('green');
+
+            days.push({
+                dayName: dayNames[i],
+                dayNum: d.getDate(),
+                year: d.getFullYear(),
+                month: d.getMonth(),
+                dateIso,
+                isToday: dateIso === todayIso,
+                isSelected: dateIso === selectedIso,
+                taskCount: dayEvents.length,
+                dots,
+            });
+        }
+        return days;
+    }
+
+    get mobileCalendarSelectedDayTasks() {
+        const pad = (n) => String(n).padStart(2, "0");
+        const selectedIso = `${this.state.calendarYear}-${pad(this.state.calendarMonth + 1)}-${pad(this.state.calendarDate)}`;
+        let events = this.filteredCalendarEvents.filter(e => e.date === selectedIso);
+
+        if (this.state.mobileCalendarStatusFilter && this.state.mobileCalendarStatusFilter !== 'all') {
+            const f = this.state.mobileCalendarStatusFilter;
+            events = events.filter(e => {
+                const info = this.getMobileTaskStatusInfo(e);
+                return info.status === f || info.color === f;
+            });
+        }
+
+        const fallbackTimes = ["9:00 AM - 10:15 AM", "11:00 AM - 12:20 PM", "12:40 PM - 1:30 PM", "2:00 PM - 3:15 PM", "3:45 PM - 4:45 PM", "5:00 PM - 6:00 PM"];
+
+        return events.map((e, idx) => {
+            const info = this.getMobileTaskStatusInfo(e);
+            const initials = e.responsible_name ? 
+                e.responsible_name.split(' ').map(n => n[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() : 'PM';
+            const displayTime = e.start_date && e.end_date && e.start_date !== e.end_date ?
+                `${e.start_date} - ${e.end_date}` :
+                (fallbackTimes[idx % fallbackTimes.length]);
+            return {
+                ...e,
+                statusInfo: info,
+                initials,
+                displayTime,
+            };
+        });
+    }
+
+    get mobileCalendarTimelineSlots() {
+        const slots = [
+            { hour: '8 AM', timeLabel: '8:00 AM', events: [] },
+            { hour: '9 AM', timeLabel: '9:00 AM', events: [] },
+            { hour: '10 AM', timeLabel: '10:00 AM', events: [] },
+            { hour: '11 AM', timeLabel: '11:00 AM', events: [] },
+            { hour: '12 PM', timeLabel: '12:00 PM', events: [] },
+            { hour: '1 PM', timeLabel: '1:00 PM', events: [] },
+            { hour: '2 PM', timeLabel: '2:00 PM', events: [] },
+            { hour: '3 PM', timeLabel: '3:00 PM', events: [] },
+            { hour: '4 PM', timeLabel: '4:00 PM', events: [] },
+            { hour: '5 PM', timeLabel: '5:00 PM', events: [] },
+        ];
+
+        const dayTasks = this.mobileCalendarSelectedDayTasks;
+        dayTasks.forEach((t, idx) => {
+            const slotIdx = (idx * 2 + 1) % slots.length;
+            slots[slotIdx].events.push(t);
+        });
+
+        return slots;
     }
 
     openScopeForm(scopeId, ev) {

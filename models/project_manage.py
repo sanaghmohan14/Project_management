@@ -1749,6 +1749,16 @@ class ProjectManage(models.Model):
             for s in p.scope_ids:
                 if s.is_creation_approval:
                     continue
+                if role_code == 'consultant':
+                    is_assigned_to_cons = bool(
+                        (user in s.responsible_ids.mapped('user_id')) or
+                        (current_emp and current_emp in s.responsible_ids) or
+                        (s.responsible_id and (
+                            (s.responsible_id.user_id == user) or (current_emp and s.responsible_id == current_emp)
+                        ))
+                    )
+                    if not is_assigned_to_cons:
+                        continue
                 task_date = s.end_date
                 if task_date:
                     is_task_late = bool(s.end_date and today > s.end_date and s.state != 'done')
@@ -1767,6 +1777,14 @@ class ProjectManage(models.Model):
                         'category': s.category or 'Documentation',
                         'item_type': s.item_type or '',
                         'responsible_name': ', '.join(s.responsible_ids.sudo().mapped('name')) if s.responsible_ids else (s.responsible_id.sudo().name if s.responsible_id else (s.responsible or 'Unassigned')),
+                        'is_assigned': bool(s.responsible_ids or s.responsible_id or (s.responsible and str(s.responsible).strip().lower() != 'unassigned')),
+                        'is_assigned_to_me': bool(
+                            (user in s.responsible_ids.mapped('user_id')) or
+                            (current_emp and current_emp in s.responsible_ids) or
+                            (s.responsible_id and (
+                                (s.responsible_id.user_id == user) or (current_emp and s.responsible_id == current_emp)
+                            ))
+                        ),
                         'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else '',
                         'end_date': task_date.strftime('%Y-%m-%d'),
                         'date': task_date.strftime('%Y-%m-%d'),
@@ -2045,6 +2063,21 @@ class ProjectManage(models.Model):
             if s.state == 'done':
                 scope_map[scope_name]['done'] += 1
 
+            resp_uids = s.responsible_ids.mapped('user_id.id')
+            if s.responsible_id and s.responsible_id.user_id:
+                resp_uids.append(s.responsible_id.user_id.id)
+            is_task_assigned_to_me = bool(
+                (user in s.responsible_ids.mapped('user_id')) or
+                (current_emp and current_emp in s.responsible_ids) or
+                (s.responsible_id and (
+                    (s.responsible_id.user_id == user) or (current_emp and s.responsible_id == current_emp)
+                ))
+            )
+            is_task_assigned = bool(
+                s.responsible_ids or s.responsible_id or
+                (s.responsible and str(s.responsible).strip() and str(s.responsible).strip().lower() != 'unassigned')
+            )
+
             scopes_data.append({
                 'id': s.id,
                 'priority': s.priority or '0',
@@ -2072,6 +2105,9 @@ class ProjectManage(models.Model):
                 'responsible_ids': s.responsible_ids.ids if s.responsible_ids else ([s.responsible_id.id] if s.responsible_id else []),
                 'responsible_names': s.responsible_ids.mapped('name') if s.responsible_ids else ([s.responsible_id.name] if s.responsible_id else []),
                 'responsible_name': ', '.join(s.responsible_ids.mapped('name')) if s.responsible_ids else (s.responsible_id.name if s.responsible_id else (s.responsible or 'Unassigned')),
+                'responsible_user_ids': list(set(resp_uids)),
+                'is_assigned': is_task_assigned,
+                'is_assigned_to_me': is_task_assigned_to_me,
                 'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else '',
                 'start_date_str': s.start_date.strftime('%d %b %Y') if s.start_date else '',
                 'end_date': s.end_date.strftime('%Y-%m-%d') if s.end_date else '',

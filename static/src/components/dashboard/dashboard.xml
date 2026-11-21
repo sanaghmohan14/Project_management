@@ -1765,7 +1765,7 @@
                             </div>
 
                             <!-- Scope filter dropdown for mobile -->
-                            <t t-if="state.projectScopesData and state.projectScopesData.unique_scopes and state.projectScopesData.unique_scopes.length > 0">
+                            <t t-if="state.projectScopesData and this.mobileUniqueScopes and this.mobileUniqueScopes.length > 0">
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold text-muted mb-1 text-uppercase d-flex align-items-center gap-1" style="font-size: 0.72rem; letter-spacing: 0.03em;">
                                         <i class="fa fa-filter text-info"></i> Scope Filter
@@ -1774,8 +1774,8 @@
                                             style="font-size: 0.85rem; height: 38px; border-color: var(--pm-border); background-color: var(--pm-card-bg);"
                                             t-on-change="(ev) => this.onScopeSelectChange(ev)"
                                             t-att-value="state.selectedScopeName || ''">
-                                        <option value="">📁 All Scopes (<t t-esc="state.projectScopesData.stats.total_items"/> tasks across <t t-esc="state.projectScopesData.unique_scopes.length"/> scopes)</option>
-                                        <t t-foreach="state.projectScopesData.unique_scopes" t-as="sc" t-key="sc.name">
+                                        <option value="">📁 All Scopes (<t t-esc="this.mobileScopesStats.total_items"/> assigned tasks across <t t-esc="this.mobileUniqueScopes.length"/> scopes)</option>
+                                        <t t-foreach="this.mobileUniqueScopes" t-as="sc" t-key="sc.name">
                                             <option t-att-value="sc.name" t-att-selected="state.selectedScopeName == sc.name ? 'selected' : undefined">
                                                 <t t-esc="sc.name"/> (<t t-esc="sc.done"/>/<t t-esc="sc.total"/> done)
                                             </option>
@@ -1801,49 +1801,63 @@
                         </div>
 
                         <!-- Mobile Tasks List if project selected -->
-                        <t t-if="state.selectedProjectId and filteredScopes and filteredScopes.length > 0">
-                            <div class="pm-mobile-tasks-list mb-4">
-                                <t t-foreach="filteredScopes" t-as="item" t-key="item.id">
-                                    <div class="pm-mobile-task-card">
-                                        <div class="pm-mtask-header">
-                                            <span class="pm-task-code" t-if="item.code"><t t-esc="item.code"/></span>
-                                            <span class="pm-cat-tag" t-att-class="item.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-impl'">
-                                                <t t-esc="item.category"/>
-                                            </span>
-                                            <span class="pm-status-pill ms-auto" t-att-class="'pm-status-' + item.state">
-                                                <t t-esc="item.state_label || item.state"/>
-                                            </span>
-                                        </div>
-                                        <div class="pm-mtask-body" t-on-click="(ev) => this.openScope(item.id, ev)">
-                                            <h4 class="pm-mtask-title"><t t-esc="item.name"/></h4>
-                                            <div class="pm-mtask-scope-name text-muted">
-                                                <i class="fa fa-folder-o me-1"></i><t t-esc="item.scope_name"/>
+                        <t t-if="state.selectedProjectId">
+                            <t t-if="this.mobileFilteredScopes and this.mobileFilteredScopes.length > 0">
+                                <div class="pm-mobile-tasks-list mb-4">
+                                    <t t-foreach="this.mobileFilteredScopes" t-as="item" t-key="item.id">
+                                        <div class="pm-mobile-task-card">
+                                            <div class="pm-mtask-header">
+                                                <span class="pm-task-code" t-if="item.code"><t t-esc="item.code"/></span>
+                                                <span class="pm-cat-tag" t-att-class="item.category === 'Documentation' ? 'pm-cat-doc' : 'pm-cat-impl'">
+                                                    <t t-esc="item.category"/>
+                                                </span>
+                                                <span class="pm-status-pill ms-auto" t-att-class="'pm-status-' + item.state">
+                                                    <t t-esc="item.state_label || item.state"/>
+                                                </span>
                                             </div>
-                                            <div class="pm-mtask-meta">
-                                                <div class="pm-mtask-meta-item" t-if="item.responsible">
-                                                    <i class="fa fa-user-circle me-1 text-primary"></i>
-                                                    <t t-esc="item.responsible"/>
+                                            <div class="pm-mtask-body" t-on-click="(ev) => this.openScope(item.id, ev)">
+                                                <h4 class="pm-mtask-title"><t t-esc="item.name"/></h4>
+                                                <div class="pm-mtask-scope-name text-muted">
+                                                    <i class="fa fa-folder-o me-1"></i><t t-esc="item.scope_name"/>
                                                 </div>
-                                                <div class="pm-mtask-meta-item" t-if="item.end_date">
-                                                    <i class="fa fa-calendar-o me-1" t-att-class="item.is_overdue ? 'text-danger' : 'text-muted'"></i>
-                                                    <span t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''"><t t-esc="item.end_date"/></span>
+                                                <div class="pm-mtask-meta">
+                                                    <div class="pm-mtask-meta-item" t-if="item.responsible_name and item.responsible_name !== 'Unassigned'">
+                                                        <i class="fa fa-user-circle me-1 text-primary"></i>
+                                                        <t t-esc="item.responsible_name"/>
+                                                    </div>
+                                                    <div class="pm-mtask-meta-item" t-elif="item.responsible">
+                                                        <i class="fa fa-user-circle me-1 text-primary"></i>
+                                                        <t t-esc="item.responsible"/>
+                                                    </div>
+                                                    <div class="pm-mtask-meta-item" t-if="item.end_date">
+                                                        <i class="fa fa-calendar-o me-1" t-att-class="item.is_overdue ? 'text-danger' : 'text-muted'"></i>
+                                                        <span t-att-class="item.is_overdue ? 'text-danger fw-bold' : ''"><t t-esc="item.end_date"/></span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <div class="pm-mtask-actions">
+                                                <button type="button" class="btn btn-sm btn-outline-info flex-grow-1"
+                                                        t-on-click="(ev) => this.openScope(item.id, ev)">
+                                                    <i class="fa fa-eye me-1"></i> Details &amp; Documents
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                                        t-on-click="(ev) => this.openScopeWizard(item, ev)"
+                                                        title="Edit in wizard">
+                                                    <i class="fa fa-pencil"></i>
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div class="pm-mtask-actions">
-                                            <button type="button" class="btn btn-sm btn-outline-info flex-grow-1"
-                                                    t-on-click="(ev) => this.openScope(item.id, ev)">
-                                                <i class="fa fa-eye me-1"></i> Details &amp; Documents
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary"
-                                                    t-on-click="(ev) => this.openScopeWizard(item, ev)"
-                                                    title="Edit in wizard">
-                                                <i class="fa fa-pencil"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </t>
-                            </div>
+                                    </t>
+                                </div>
+                            </t>
+                            <t t-elif="!state.projectScopesLoading">
+                                <div class="pm-mobile-empty-scopes text-center py-4 px-3 rounded-3 mb-4 shadow-sm"
+                                     style="background: var(--pm-card-bg, #ffffff); border: 1px dashed var(--pm-border, #e2e8f0);">
+                                    <i class="fa fa-tasks text-muted mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
+                                    <div class="fw-semibold">No Assigned Tasks Found</div>
+                                    <div class="small text-muted">There are no tasks assigned to you in this project.</div>
+                                </div>
+                            </t>
                         </t>
                     </t>
 
@@ -2137,6 +2151,8 @@
 
                 <!-- ==================== 5. CALENDAR VIEW (DASHBOARD SCHEDULE) ==================== -->
                 <t t-if="this.isSectionVisible('calendar')">
+                    <!-- Desktop Calendar View: strictly shown on desktop (!state.isMobile) -->
+                    <t t-if="!state.isMobile">
                     <section class="pm-calendar-section">
                         <!-- Top Header Bar (Matching Image & Asana/Dashboard Controls) -->
                         <div class="pm-cal-header-bar">
@@ -2419,6 +2435,275 @@
                             </div>
                         </t>
                     </section>
+                    </t>
+
+                    <!-- Mobile Calendar View: strictly shown on mobile (state.isMobile) -->
+                    <t t-if="state.isMobile">
+                        <section class="pm-mobile-calendar-view pb-5">
+                            <!-- Top Header Bar matching images -->
+                            <div class="pm-mob-cal-top-bar">
+                                <t t-if="state.mobileCalendarViewMode === 'week'">
+                                    <div class="d-flex align-items-center justify-content-between w-100">
+                                        <button type="button" class="pm-mob-cal-icon-btn" t-on-click="() => this.setMobileCalendarViewMode('month')" title="Switch to Month View">
+                                            <i class="fa fa-arrow-left"></i>
+                                        </button>
+                                        <div class="pm-mob-cal-title-center text-center">
+                                            <div class="pm-mob-cal-sub text-muted">This week</div>
+                                            <div class="pm-mob-cal-heading d-flex align-items-center justify-content-center gap-1 cursor-pointer"
+                                                 t-on-click="toggleMobileCalendarViewMode">
+                                                <span><t t-esc="this.mobileCalendarDateTitle"/></span>
+                                                <i class="fa fa-chevron-down small text-muted"></i>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <button type="button" class="pm-mob-cal-mode-switch-btn" t-on-click="() => this.setMobileCalendarViewMode('month')">
+                                                Month
+                                            </button>
+                                            <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add Task">
+                                                <i class="fa fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </t>
+                                <t t-else="">
+                                    <!-- Month Mode Header matching Image 2 -->
+                                    <div class="d-flex align-items-center justify-content-between w-100">
+                                        <div class="pm-mob-cal-heading-left">
+                                            <div class="pm-mob-cal-heading d-flex align-items-center gap-2 cursor-pointer"
+                                                 t-on-click="toggleMobileCalendarViewMode">
+                                                <span class="fw-bold"><t t-esc="this.mobileCalendarDateTitle"/></span>
+                                                <i class="fa fa-chevron-down small text-muted"></i>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="pm-mob-cal-nav-arrows">
+                                                <button type="button" class="pm-mob-cal-arrow-btn" t-on-click="calendarPrevMonth" title="Previous Month">
+                                                    <i class="fa fa-chevron-left"></i>
+                                                </button>
+                                                <button type="button" class="pm-mob-cal-arrow-btn" t-on-click="calendarNextMonth" title="Next Month">
+                                                    <i class="fa fa-chevron-right"></i>
+                                                </button>
+                                            </div>
+                                            <button type="button" class="pm-mob-cal-mode-switch-btn" t-on-click="() => this.setMobileCalendarViewMode('week')">
+                                                Week
+                                            </button>
+                                            <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add Task">
+                                                <i class="fa fa-plus"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </t>
+                            </div>
+
+                            <!-- ==================== VIEW 1: WEEK TIMELINE VIEW (IMAGE 1) ==================== -->
+                            <t t-if="state.mobileCalendarViewMode === 'week'">
+                                <!-- Horizontal Week Strip -->
+                                <div class="pm-mob-week-strip-wrapper">
+                                    <div class="pm-mob-week-strip">
+                                        <t t-foreach="this.mobileCalendarWeekStripDays" t-as="day" t-key="day.dateIso">
+                                            <div class="pm-mob-week-day-col"
+                                                 t-att-class="day.isSelected ? 'selected' : ''"
+                                                 t-on-click="() => this.selectMobileCalendarDay(day)">
+                                                <span class="pm-mob-week-dayname"><t t-esc="day.dayName"/></span>
+                                                <div class="pm-mob-week-daynum-box">
+                                                    <span class="pm-mob-week-daynum"><t t-esc="day.dayNum"/></span>
+                                                </div>
+                                                <!-- Status Dots (green: completed, red: due, yellow: not started, blue: in progress) -->
+                                                <div class="pm-mob-dots-row">
+                                                    <t t-foreach="day.dots" t-as="color" t-key="color">
+                                                        <span t-att-class="'pm-mob-dot dot-' + color"></span>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </div>
+
+                                <!-- Hourly Timeline -->
+                                <div class="pm-mob-timeline-container">
+                                    <t t-foreach="this.mobileCalendarTimelineSlots" t-as="slot" t-key="slot.hour">
+                                        <div class="pm-mob-timeline-row">
+                                            <!-- Left: Hour Label -->
+                                            <div class="pm-mob-timeline-hour">
+                                                <span><t t-esc="slot.hour"/></span>
+                                            </div>
+
+                                            <!-- Right: Slot Body with tasks -->
+                                            <div class="pm-mob-timeline-slot-body">
+                                                <div class="pm-mob-timeline-line"></div>
+                                                <t t-foreach="slot.events" t-as="task" t-key="task.id">
+                                                    <div class="pm-mob-timeline-card"
+                                                         t-att-class="task.statusInfo.cardClass"
+                                                         t-on-click="(ev) => this.openCalendarItem(task, ev)">
+                                                        <div class="pm-mob-card-header">
+                                                            <h4 class="pm-mob-card-title"><t t-esc="task.title"/></h4>
+                                                            <div class="pm-mob-card-icon">
+                                                                <i t-if="task.statusInfo.color === 'green'" class="fa fa-check-square-o"></i>
+                                                                <i t-elif="task.statusInfo.color === 'red'" class="fa fa-bell-o"></i>
+                                                                <i t-elif="task.statusInfo.color === 'yellow'" class="fa fa-circle-o"></i>
+                                                                <i t-else="" class="fa fa-clock-o"></i>
+                                                            </div>
+                                                        </div>
+                                                        <div class="pm-mob-card-subtitle">
+                                                            <t t-esc="task.category || 'To Do'"/>
+                                                        </div>
+                                                        <div class="pm-mob-card-footer">
+                                                            <div class="pm-mob-card-time">
+                                                                <i class="fa fa-clock-o me-1"></i>
+                                                                <span><t t-esc="task.displayTime"/></span>
+                                                            </div>
+                                                            <div class="pm-mob-card-avatars">
+                                                                <div class="pm-mob-avatar-circle" t-att-title="task.responsible_name">
+                                                                    <t t-esc="task.initials"/>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </t>
+                                            </div>
+                                        </div>
+                                    </t>
+
+                                    <!-- Bottom spacing / add button -->
+                                    <div class="text-center py-4">
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-4"
+                                                t-on-click="createNewTaskForSelectedDate">
+                                            <i class="fa fa-plus me-1"></i> Add Task for this day
+                                        </button>
+                                    </div>
+                                </div>
+                            </t>
+
+                            <!-- ==================== VIEW 2: MONTH VIEW + TODAY'S TASK (IMAGE 2) ==================== -->
+                            <t t-else="">
+                                <!-- Month Grid Card -->
+                                <div class="pm-mob-month-card">
+                                    <div class="pm-mob-month-grid-header">
+                                        <div class="pm-mob-month-col-head">Sun</div>
+                                        <div class="pm-mob-month-col-head">Mon</div>
+                                        <div class="pm-mob-month-col-head">Tue</div>
+                                        <div class="pm-mob-month-col-head">Wed</div>
+                                        <div class="pm-mob-month-col-head">Thu</div>
+                                        <div class="pm-mob-month-col-head">Fri</div>
+                                        <div class="pm-mob-month-col-head">Sat</div>
+                                    </div>
+                                    <div class="pm-mob-month-grid-body">
+                                        <t t-foreach="this.mobileCalendarMonthGrid" t-as="cell" t-key="cell.key">
+                                            <div class="pm-mob-month-cell"
+                                                 t-att-class="(cell.isCurrentMonth ? '' : 'other-month ') + (cell.isSelected ? 'selected ' : '') + (cell.isToday ? 'today ' : '')"
+                                                 t-on-click="() => this.selectMobileCalendarDay(cell)">
+                                                <div class="pm-mob-month-num-wrap">
+                                                    <span class="pm-mob-month-daynum"><t t-esc="cell.dayNum"/></span>
+                                                </div>
+                                                <!-- Status Dots matching user specification -->
+                                                <div class="pm-mob-dots-row">
+                                                    <t t-foreach="cell.dots" t-as="color" t-key="color">
+                                                        <span t-att-class="'pm-mob-dot dot-' + color"></span>
+                                                    </t>
+                                                </div>
+                                            </div>
+                                        </t>
+                                    </div>
+                                </div>
+
+                                <!-- Today's Task / Agenda Section (Image 2 bottom half) -->
+                                <div class="pm-mob-agenda-section">
+                                    <div class="d-flex align-items-center justify-content-between mb-2">
+                                        <div class="d-flex align-items-center gap-2 cursor-pointer"
+                                             t-on-click="() => this.calendarToday()">
+                                            <h3 class="pm-mob-agenda-title mb-0">
+                                                <t t-if="this.mobileCalendarIsSelectedDateToday">Today's Task</t>
+                                                <t t-else="">Tasks for <t t-esc="state.calendarDate"/> <t t-esc="this.mobileCalendarMonthYearTitle"/></t>
+                                            </h3>
+                                            <i class="fa fa-chevron-down text-muted small"></i>
+                                        </div>
+                                        <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add New Task">
+                                            <i class="fa fa-plus"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Legend / Filter Pills -->
+                                    <div class="pm-mob-filter-pills-scroll mb-3">
+                                        <button type="button" class="pm-mob-filter-chip"
+                                                t-att-class="state.mobileCalendarStatusFilter === 'all' ? 'active' : ''"
+                                                t-on-click="() => this.setMobileCalendarStatusFilter('all')">
+                                            All (<t t-esc="this.filteredCalendarEvents.filter(e => e.date === this.calendarSelectedDateIso).length"/>)
+                                        </button>
+                                        <button type="button" class="pm-mob-filter-chip chip-completed"
+                                                t-att-class="state.mobileCalendarStatusFilter === 'completed' ? 'active' : ''"
+                                                t-on-click="() => this.setMobileCalendarStatusFilter('completed')">
+                                            <span class="pm-mob-dot dot-green me-1"></span> Completed
+                                        </button>
+                                        <button type="button" class="pm-mob-filter-chip chip-due"
+                                                t-att-class="state.mobileCalendarStatusFilter === 'due' ? 'active' : ''"
+                                                t-on-click="() => this.setMobileCalendarStatusFilter('due')">
+                                            <span class="pm-mob-dot dot-red me-1"></span> Due
+                                        </button>
+                                        <button type="button" class="pm-mob-filter-chip chip-not-started"
+                                                t-att-class="state.mobileCalendarStatusFilter === 'not_started' ? 'active' : ''"
+                                                t-on-click="() => this.setMobileCalendarStatusFilter('not_started')">
+                                            <span class="pm-mob-dot dot-yellow me-1"></span> Not Started
+                                        </button>
+                                        <button type="button" class="pm-mob-filter-chip chip-in-progress"
+                                                t-att-class="state.mobileCalendarStatusFilter === 'in_progress' ? 'active' : ''"
+                                                t-on-click="() => this.setMobileCalendarStatusFilter('in_progress')">
+                                            <span class="pm-mob-dot dot-blue me-1"></span> In Progress
+                                        </button>
+                                    </div>
+
+                                    <!-- Task List -->
+                                    <div class="pm-mob-task-list">
+                                        <t t-if="!this.mobileCalendarSelectedDayTasks or this.mobileCalendarSelectedDayTasks.length === 0">
+                                            <div class="pm-mob-empty-box text-center py-4">
+                                                <i class="fa fa-calendar-check-o text-muted mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
+                                                <div class="fw-semibold">No Tasks Scheduled</div>
+                                                <div class="small text-muted mb-3">No tasks found for this selected date.</div>
+                                                <button type="button" class="btn btn-sm btn-primary rounded-pill px-3"
+                                                        t-on-click="createNewTaskForSelectedDate">
+                                                    <i class="fa fa-plus me-1"></i> Add Task
+                                                </button>
+                                            </div>
+                                        </t>
+                                        <t t-else="">
+                                            <t t-foreach="this.mobileCalendarSelectedDayTasks" t-as="task" t-key="task.id">
+                                                <div class="pm-mob-agenda-item"
+                                                     t-att-class="task.statusInfo.cardClass"
+                                                     t-on-click="(ev) => this.openCalendarItem(task, ev)">
+                                                    <!-- Left status icon / radio indicator -->
+                                                    <div class="pm-mob-agenda-left-icon">
+                                                        <i t-if="task.statusInfo.color === 'green'" class="fa fa-check-circle text-success fs-5"></i>
+                                                        <i t-elif="task.statusInfo.color === 'red'" class="fa fa-exclamation-circle text-danger fs-5"></i>
+                                                        <i t-elif="task.statusInfo.color === 'yellow'" class="fa fa-circle-o text-warning fs-5"></i>
+                                                        <i t-else="" class="fa fa-clock-o text-primary fs-5"></i>
+                                                    </div>
+
+                                                    <!-- Middle details -->
+                                                    <div class="pm-mob-agenda-body">
+                                                        <div class="pm-mob-agenda-cat">
+                                                            <span class="pm-mob-cat-name"><t t-esc="task.category || 'To Do'"/></span>
+                                                            <span t-if="task.code" class="pm-mob-task-code ms-1"><t t-esc="task.code"/></span>
+                                                        </div>
+                                                        <div class="pm-mob-agenda-task-title"><t t-esc="task.title"/></div>
+                                                        <div class="pm-mob-agenda-subtext">
+                                                            <span class="pm-mob-time-badge"><i class="fa fa-clock-o me-1"></i><t t-esc="task.displayTime"/></span>
+                                                            <span class="pm-mob-proj-name ms-2"><i class="fa fa-folder-o me-1"></i><t t-esc="task.project_name"/></span>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Right: Avatar -->
+                                                    <div class="pm-mob-agenda-right">
+                                                        <div class="pm-mob-avatar-circle" t-att-title="task.responsible_name">
+                                                            <t t-esc="task.initials"/>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </t>
+                                        </t>
+                                    </div>
+                                </div>
+                            </t>
+                        </section>
+                    </t>
                 </t>
 
                 <!-- ==================== 6. CUSTOMER REVIEWS (SIMPLE CARD VIEW) ==================== -->
@@ -4920,60 +5205,60 @@
                 <!-- 1. Home -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('home') ? 'active' : ''"
-                        t-on-click="() => this.setActiveTab('home')">
+                        t-on-click="() => this.setActiveTab('home')"
+                        title="Home" aria-label="Home">
                     <div class="pm-mobile-nav-icon-wrap">
                         <i class="fa fa-home"></i>
                     </div>
-                    <span class="pm-mobile-nav-label">Home</span>
                 </button>
 
                 <!-- 2. Projects -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('projects') ? 'active' : ''"
-                        t-on-click="() => this.setActiveTab('projects')">
+                        t-on-click="() => this.setActiveTab('projects')"
+                        title="Projects" aria-label="Projects">
                     <div class="pm-mobile-nav-icon-wrap">
                         <i class="fa fa-folder-open"></i>
                         <span class="pm-mobile-nav-badge" t-if="state.data.projects and state.data.projects.length">
                             <t t-esc="state.data.projects.length"/>
                         </span>
                     </div>
-                    <span class="pm-mobile-nav-label">Projects</span>
                 </button>
 
                 <!-- 3. Approvals -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('approvals') ? 'active' : ''"
-                        t-on-click="() => this.setActiveTab('approvals')">
+                        t-on-click="() => this.setActiveTab('approvals')"
+                        title="Approvals" aria-label="Approvals">
                     <div class="pm-mobile-nav-icon-wrap">
                         <i class="fa fa-check-circle"></i>
                         <span class="pm-mobile-nav-badge pm-badge-red" t-if="state.data.approvals_summary and state.data.approvals_summary.pending_my_approval_count > 0">
                             <t t-esc="state.data.approvals_summary.pending_my_approval_count"/>
                         </span>
                     </div>
-                    <span class="pm-mobile-nav-label">Approvals</span>
                 </button>
 
                 <!-- 4. Tasks -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('scopes') ? 'active' : ''"
-                        t-on-click="() => this.setActiveTab('scopes')">
+                        t-on-click="() => this.setActiveTab('scopes')"
+                        title="Tasks" aria-label="Tasks">
                     <div class="pm-mobile-nav-icon-wrap">
                         <i class="fa fa-tasks"></i>
                         <span class="pm-mobile-nav-badge" t-if="state.data.tasks_hub and state.data.tasks_hub.pending_count > 0">
                             <t t-esc="state.data.tasks_hub.pending_count"/>
                         </span>
                     </div>
-                    <span class="pm-mobile-nav-label">Tasks</span>
                 </button>
 
                 <!-- 5. Calendar -->
                 <button type="button" class="pm-mobile-nav-item"
                         t-att-class="this.isTabActive('calendar') ? 'active' : ''"
-                        t-on-click="() => this.setActiveTab('calendar')">
+                        t-on-click="() => this.setActiveTab('calendar')"
+                        title="Calendar" aria-label="Calendar">
                     <div class="pm-mobile-nav-icon-wrap">
                         <i class="fa fa-calendar"></i>
                     </div>
-                    <span class="pm-mobile-nav-label">Calendar</span>
                 </button>
             </nav>
 

@@ -6242,12 +6242,12 @@ body.o_dark_theme {
     bottom: 0;
     left: 0;
     right: 0;
-    height: 64px;
+    height: 56px;
     background: #ffffff;
     border-top: 1px solid #e2e8f0;
     z-index: 1050;
     box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.07);
-    padding: 0 6px;
+    padding: 0 8px;
     padding-bottom: env(safe-area-inset-bottom, 2px);
     justify-content: space-around;
     align-items: center;
@@ -6258,10 +6258,10 @@ body.o_dark_theme {
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 3px;
+        height: 100%;
         background: transparent;
         border: none;
-        padding: 6px 2px;
+        padding: 8px 4px;
         color: #64748b;
         cursor: pointer;
         text-decoration: none;
@@ -6274,22 +6274,17 @@ body.o_dark_theme {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 24px;
+            width: 34px;
+            height: 32px;
 
             i {
-                font-size: 1.25rem;
+                font-size: 1.35rem;
                 transition: transform 0.16s ease, color 0.16s ease;
             }
         }
 
         .pm-mobile-nav-label {
-            font-size: 0.68rem;
-            font-weight: 500;
-            line-height: 1;
-            letter-spacing: -0.01em;
-            transition: color 0.16s ease, font-weight 0.16s ease;
-            white-space: nowrap;
+            display: none !important;
         }
 
         .pm-mobile-nav-badge {
@@ -8881,4 +8876,630 @@ body.o_dark_theme {
 .pm-td-rev-title {
     min-width: 0;
     max-width: 320px;
+}
+
+/* =========================================================
+   MOBILE CALENDAR VIEW (WEEK TIMELINE & MONTH GRID)
+   Strictly active on mobile view (max-width: 991.98px).
+   Desktop view remains 100% untouched.
+   ========================================================= */
+@media (max-width: 991.98px) {
+    .pm-mobile-calendar-view {
+        width: 100%;
+        box-sizing: border-box;
+
+        .pm-mob-cal-top-bar {
+            background: var(--pm-card-bg, #ffffff);
+            border: 1px solid var(--pm-border, #e2e8f0);
+            border-radius: 14px;
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            box-shadow: var(--pm-shadow, 0 1px 3px rgba(0,0,0,0.05));
+
+            .pm-mob-cal-heading {
+                font-size: 1rem;
+                font-weight: 700;
+                color: var(--pm-text-heading, #0f172a);
+                user-select: none;
+            }
+
+            .pm-mob-cal-sub {
+                font-size: 0.72rem;
+                color: var(--pm-text-muted, #64748b);
+                margin-bottom: 1px;
+            }
+
+            .pm-mob-cal-icon-btn {
+                background: none;
+                border: none;
+                color: var(--pm-text-heading, #0f172a);
+                font-size: 0.95rem;
+                padding: 4px 8px;
+                cursor: pointer;
+            }
+
+            .pm-mob-cal-mode-switch-btn {
+                padding: 5px 12px;
+                border-radius: 16px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                border: 1px solid var(--pm-border, #e2e8f0);
+                background: var(--pm-card-bg, #ffffff);
+                color: var(--pm-text-body, #334155);
+                cursor: pointer;
+                transition: all 0.15s ease;
+
+                &:hover, &:active {
+                    background: var(--pm-border-light, #f1f5f9);
+                }
+            }
+
+            .pm-mob-cal-nav-arrows {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+
+                .pm-mob-cal-arrow-btn {
+                    width: 28px;
+                    height: 28px;
+                    border-radius: 50%;
+                    border: 1px solid var(--pm-border, #e2e8f0);
+                    background: var(--pm-card-bg, #ffffff);
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 0.72rem;
+                    color: var(--pm-text-body, #334155);
+                    cursor: pointer;
+
+                    &:active {
+                        background: var(--pm-border-light, #f1f5f9);
+                    }
+                }
+            }
+
+            .pm-mob-cal-add-fab {
+                width: 32px;
+                height: 32px;
+                border-radius: 50%;
+                background: #6d28d9;
+                color: #ffffff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                box-shadow: 0 2px 6px rgba(109, 40, 217, 0.35);
+                font-size: 0.82rem;
+                cursor: pointer;
+                transition: background 0.15s ease, transform 0.1s ease;
+
+                &:active {
+                    transform: scale(0.92);
+                    background: #5b21b6;
+                }
+            }
+        }
+
+        /* 1. Week Strip */
+        .pm-mob-week-strip-wrapper {
+            background: var(--pm-card-bg, #ffffff);
+            border-radius: 16px;
+            padding: 12px 6px;
+            margin-bottom: 14px;
+            border: 1px solid var(--pm-border, #e2e8f0);
+            box-shadow: var(--pm-shadow, 0 1px 3px rgba(0,0,0,0.05));
+
+            .pm-mob-week-strip {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                text-align: center;
+                gap: 2px;
+            }
+
+            .pm-mob-week-day-col {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                cursor: pointer;
+                padding: 4px 0;
+                border-radius: 12px;
+                transition: background 0.15s ease;
+
+                .pm-mob-week-dayname {
+                    font-size: 0.7rem;
+                    color: var(--pm-text-muted, #64748b);
+                    font-weight: 500;
+                    margin-bottom: 4px;
+                    position: relative;
+                }
+
+                .pm-mob-week-daynum-box {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    color: var(--pm-text-heading, #0f172a);
+                    transition: all 0.2s ease;
+                }
+
+                &.selected {
+                    .pm-mob-week-dayname {
+                        color: var(--pm-text-heading, #0f172a);
+                        font-weight: 700;
+
+                        &::after {
+                            content: '';
+                            position: absolute;
+                            bottom: -3px;
+                            left: 10%;
+                            right: 10%;
+                            height: 2px;
+                            background: var(--pm-text-heading, #0f172a);
+                            border-radius: 2px;
+                        }
+                    }
+
+                    .pm-mob-week-daynum-box {
+                        background: #0f172a;
+                        color: #ffffff;
+                        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+                    }
+                }
+            }
+        }
+
+        /* Status Dots */
+        .pm-mob-dots-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            margin-top: 3px;
+            min-height: 6px;
+        }
+
+        .pm-mob-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            display: inline-block;
+
+            &.dot-green {
+                background-color: #16a34a !important; /* Completed */
+            }
+            &.dot-red {
+                background-color: #dc2626 !important; /* Due / Overdue */
+            }
+            &.dot-yellow {
+                background-color: #eab308 !important; /* Not Started */
+            }
+            &.dot-blue {
+                background-color: #2563eb !important; /* In Progress */
+            }
+        }
+
+        /* 2. Month Grid Card */
+        .pm-mob-month-card {
+            background: var(--pm-card-bg, #ffffff);
+            border-radius: 16px;
+            padding: 12px 8px;
+            margin-bottom: 14px;
+            border: 1px solid var(--pm-border, #e2e8f0);
+            box-shadow: var(--pm-shadow, 0 1px 3px rgba(0,0,0,0.05));
+
+            .pm-mob-month-grid-header {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                text-align: center;
+                margin-bottom: 8px;
+
+                .pm-mob-month-col-head {
+                    font-size: 0.72rem;
+                    font-weight: 600;
+                    color: var(--pm-text-muted, #64748b);
+                    text-transform: uppercase;
+                }
+            }
+
+            .pm-mob-month-grid-body {
+                display: grid;
+                grid-template-columns: repeat(7, 1fr);
+                row-gap: 6px;
+                column-gap: 2px;
+                text-align: center;
+            }
+
+            .pm-mob-month-cell {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                padding: 3px 0;
+                border-radius: 10px;
+                cursor: pointer;
+                min-height: 46px;
+
+                .pm-mob-month-num-wrap {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 0.85rem;
+                    font-weight: 500;
+                    color: var(--pm-text-heading, #0f172a);
+                    transition: all 0.15s ease;
+                }
+
+                &.other-month {
+                    opacity: 0.3;
+                }
+
+                &.today:not(.selected) {
+                    .pm-mob-month-num-wrap {
+                        border: 1.5px solid #6366f1;
+                        color: #4f46e5;
+                        font-weight: 600;
+                    }
+                }
+
+                &.selected {
+                    .pm-mob-month-num-wrap {
+                        background: #0f172a;
+                        color: #ffffff;
+                        font-weight: 700;
+                        box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
+                    }
+                }
+            }
+        }
+
+        /* 3. Today's Task Agenda */
+        .pm-mob-agenda-section {
+            .pm-mob-agenda-title {
+                font-size: 1.05rem;
+                font-weight: 700;
+                color: var(--pm-text-heading, #0f172a);
+            }
+
+            .pm-mob-cal-add-fab {
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                background: #6d28d9;
+                color: #ffffff;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                border: none;
+                font-size: 0.8rem;
+                box-shadow: 0 2px 6px rgba(109, 40, 217, 0.3);
+                cursor: pointer;
+            }
+
+            .pm-mob-filter-pills-scroll {
+                display: flex;
+                gap: 6px;
+                overflow-x: auto;
+                padding-bottom: 4px;
+                scrollbar-width: none;
+                &::-webkit-scrollbar {
+                    display: none;
+                }
+
+                .pm-mob-filter-chip {
+                    padding: 4px 10px;
+                    border-radius: 20px;
+                    font-size: 0.72rem;
+                    font-weight: 500;
+                    border: 1px solid var(--pm-border, #e2e8f0);
+                    background: var(--pm-card-bg, #ffffff);
+                    color: var(--pm-text-muted, #64748b);
+                    cursor: pointer;
+                    white-space: nowrap;
+                    display: inline-flex;
+                    align-items: center;
+
+                    &.active {
+                        background: var(--pm-text-heading, #0f172a);
+                        color: #ffffff;
+                        border-color: var(--pm-text-heading, #0f172a);
+                    }
+                }
+            }
+
+            .pm-mob-agenda-item {
+                border-radius: 14px;
+                padding: 12px 14px;
+                margin-bottom: 10px;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                cursor: pointer;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+                transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+                &:active {
+                    transform: scale(0.98);
+                }
+
+                /* Color Variations */
+                &.pm-mob-cal-card-green {
+                    background: #ecfdf5;
+                    border: 1px solid #a7f3d0;
+                    .pm-mob-agenda-task-title { color: #065f46; }
+                    .pm-mob-cat-name { color: #059669; }
+                }
+
+                &.pm-mob-cal-card-red {
+                    background: #fef2f2;
+                    border: 1px solid #fecaca;
+                    .pm-mob-agenda-task-title { color: #991b1b; }
+                    .pm-mob-cat-name { color: #dc2626; }
+                }
+
+                &.pm-mob-cal-card-yellow {
+                    background: #fffbeb;
+                    border: 1px solid #fef08a;
+                    .pm-mob-agenda-task-title { color: #92400e; }
+                    .pm-mob-cat-name { color: #d97706; }
+                }
+
+                &.pm-mob-cal-card-blue {
+                    background: #eff6ff;
+                    border: 1px solid #bfdbfe;
+                    .pm-mob-agenda-task-title { color: #1e40af; }
+                    .pm-mob-cat-name { color: #2563eb; }
+                }
+
+                .pm-mob-agenda-left-icon {
+                    width: 28px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    flex-shrink: 0;
+                }
+
+                .pm-mob-agenda-body {
+                    flex: 1;
+                    min-width: 0;
+
+                    .pm-mob-agenda-cat {
+                        font-size: 0.72rem;
+                        font-weight: 600;
+                        margin-bottom: 2px;
+
+                        .pm-mob-task-code {
+                            font-size: 0.68rem;
+                            background: rgba(0, 0, 0, 0.06);
+                            padding: 1px 5px;
+                            border-radius: 4px;
+                            color: var(--pm-text-muted, #64748b);
+                        }
+                    }
+
+                    .pm-mob-agenda-task-title {
+                        font-size: 0.88rem;
+                        font-weight: 700;
+                        line-height: 1.25;
+                        margin: 0 0 4px 0;
+                        white-space: normal;
+                    }
+
+                    .pm-mob-agenda-subtext {
+                        font-size: 0.72rem;
+                        color: var(--pm-text-muted, #64748b);
+                        display: flex;
+                        align-items: center;
+                        flex-wrap: wrap;
+
+                        .pm-mob-time-badge {
+                            font-weight: 500;
+                        }
+                    }
+                }
+
+                .pm-mob-agenda-right {
+                    flex-shrink: 0;
+                }
+            }
+        }
+
+        /* 4. Hourly Timeline */
+        .pm-mob-timeline-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
+
+            .pm-mob-timeline-row {
+                display: flex;
+                gap: 12px;
+                position: relative;
+                min-height: 60px;
+
+                .pm-mob-timeline-hour {
+                    width: 44px;
+                    text-align: right;
+                    font-size: 0.75rem;
+                    font-weight: 600;
+                    color: var(--pm-text-muted, #64748b);
+                    padding-top: 2px;
+                    flex-shrink: 0;
+                }
+
+                .pm-mob-timeline-slot-body {
+                    flex: 1;
+                    position: relative;
+                    padding-bottom: 6px;
+
+                    .pm-mob-timeline-line {
+                        position: absolute;
+                        top: 10px;
+                        left: 0;
+                        right: 0;
+                        border-top: 1px dashed var(--pm-border, #e2e8f0);
+                        z-index: 1;
+                    }
+                }
+
+                .pm-mob-timeline-card {
+                    position: relative;
+                    z-index: 2;
+                    border-radius: 14px;
+                    padding: 12px 14px;
+                    margin-bottom: 8px;
+                    cursor: pointer;
+                    box-shadow: var(--pm-shadow, 0 1px 3px rgba(0,0,0,0.05));
+                    transition: transform 0.15s ease;
+
+                    &:active {
+                        transform: scale(0.98);
+                    }
+
+                    &.pm-mob-cal-card-green {
+                        background: #ecfdf5;
+                        border: 1px solid #a7f3d0;
+                        .pm-mob-card-title { color: #065f46; }
+                        .pm-mob-card-subtitle { color: #059669; }
+                        .pm-mob-card-icon { color: #10b981; }
+                    }
+
+                    &.pm-mob-cal-card-red {
+                        background: #fef2f2;
+                        border: 1px solid #fecaca;
+                        .pm-mob-card-title { color: #991b1b; }
+                        .pm-mob-card-subtitle { color: #dc2626; }
+                        .pm-mob-card-icon { color: #ef4444; }
+                    }
+
+                    &.pm-mob-cal-card-yellow {
+                        background: #fffbeb;
+                        border: 1px solid #fef08a;
+                        .pm-mob-card-title { color: #92400e; }
+                        .pm-mob-card-subtitle { color: #d97706; }
+                        .pm-mob-card-icon { color: #f59e0b; }
+                    }
+
+                    &.pm-mob-cal-card-blue {
+                        background: #eff6ff;
+                        border: 1px solid #bfdbfe;
+                        .pm-mob-card-title { color: #1e40af; }
+                        .pm-mob-card-subtitle { color: #2563eb; }
+                        .pm-mob-card-icon { color: #3b82f6; }
+                    }
+
+                    .pm-mob-card-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: flex-start;
+                        margin-bottom: 2px;
+
+                        .pm-mob-card-title {
+                            font-size: 0.9rem;
+                            font-weight: 700;
+                            margin: 0;
+                        }
+
+                        .pm-mob-card-icon {
+                            font-size: 0.95rem;
+                        }
+                    }
+
+                    .pm-mob-card-subtitle {
+                        font-size: 0.74rem;
+                        font-weight: 500;
+                        margin-bottom: 8px;
+                    }
+
+                    .pm-mob-card-footer {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        font-size: 0.72rem;
+                        color: var(--pm-text-muted, #64748b);
+                    }
+                }
+            }
+        }
+
+        .pm-mob-avatar-circle {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #e0e7ff;
+            color: #4338ca;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.68rem;
+            font-weight: 700;
+            flex-shrink: 0;
+            border: 1.5px solid #ffffff;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        }
+    }
+
+    /* Dark Mode Adjustments */
+    .pm-theme-dark .pm-mobile-calendar-view,
+    [data-color-scheme="dark"] .pm-mobile-calendar-view,
+    body.o_dark_theme .pm-mobile-calendar-view {
+        .pm-mob-cal-top-bar,
+        .pm-mob-week-strip-wrapper,
+        .pm-mob-month-card {
+            background: #111827 !important;
+            border-color: #1f2937 !important;
+        }
+
+        .pm-mob-week-day-col.selected {
+            .pm-mob-week-dayname::after {
+                background: #f8fafc !important;
+            }
+            .pm-mob-week-daynum-box {
+                background: #f8fafc !important;
+                color: #0f172a !important;
+            }
+        }
+
+        .pm-mob-month-cell.selected .pm-mob-month-num-wrap {
+            background: #f8fafc !important;
+            color: #0f172a !important;
+        }
+
+        .pm-mob-agenda-item,
+        .pm-mob-timeline-card {
+            &.pm-mob-cal-card-green {
+                background: rgba(16, 185, 129, 0.15) !important;
+                border-color: rgba(16, 185, 129, 0.3) !important;
+                .pm-mob-agenda-task-title, .pm-mob-card-title { color: #6ee7b7 !important; }
+                .pm-mob-cat-name, .pm-mob-card-subtitle { color: #a7f3d0 !important; }
+            }
+
+            &.pm-mob-cal-card-red {
+                background: rgba(239, 68, 68, 0.15) !important;
+                border-color: rgba(239, 68, 68, 0.3) !important;
+                .pm-mob-agenda-task-title, .pm-mob-card-title { color: #fca5a5 !important; }
+                .pm-mob-cat-name, .pm-mob-card-subtitle { color: #fecaca !important; }
+            }
+
+            &.pm-mob-cal-card-yellow {
+                background: rgba(245, 158, 11, 0.15) !important;
+                border-color: rgba(245, 158, 11, 0.3) !important;
+                .pm-mob-agenda-task-title, .pm-mob-card-title { color: #fde047 !important; }
+                .pm-mob-cat-name, .pm-mob-card-subtitle { color: #fef08a !important; }
+            }
+
+            &.pm-mob-cal-card-blue {
+                background: rgba(59, 130, 246, 0.15) !important;
+                border-color: rgba(59, 130, 246, 0.3) !important;
+                .pm-mob-agenda-task-title, .pm-mob-card-title { color: #93c5fd !important; }
+                .pm-mob-cat-name, .pm-mob-card-subtitle { color: #bfdbfe !important; }
+            }
+        }
+    }
 }
