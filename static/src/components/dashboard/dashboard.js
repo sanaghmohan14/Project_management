@@ -1067,6 +1067,12 @@ export class ProjectManageDashboard extends Component {
 
     setCalendarViewMode(mode) {
         this.state.calendarViewMode = mode;
+        if (mode === 'today' || mode === 'today_tasks') {
+            const now = new Date();
+            this.state.calendarYear = now.getFullYear();
+            this.state.calendarMonth = now.getMonth();
+            this.state.calendarDate = now.getDate();
+        }
     }
 
     setCalendarCategoryFilter(cat) {
@@ -1089,6 +1095,11 @@ export class ProjectManageDashboard extends Component {
             } else {
                 this.state.calendarMonth -= 1;
             }
+        } else if (this.state.calendarViewMode === 'today_tasks') {
+            this.state.calendarViewMode = 'today';
+            this.calendarPrevDay();
+        } else if (this.state.calendarViewMode === 'today') {
+            this.calendarPrevDay();
         } else {
             this.calendarPrevWeek();
         }
@@ -1102,6 +1113,11 @@ export class ProjectManageDashboard extends Component {
             } else {
                 this.state.calendarMonth += 1;
             }
+        } else if (this.state.calendarViewMode === 'today_tasks') {
+            this.state.calendarViewMode = 'today';
+            this.calendarNextDay();
+        } else if (this.state.calendarViewMode === 'today') {
+            this.calendarNextDay();
         } else {
             this.calendarNextWeek();
         }
@@ -1308,7 +1324,7 @@ export class ProjectManageDashboard extends Component {
         this.actionService.doAction("project_manage.action_project_manage_scope_calendar");
     }
 
-    createNewTaskForDate(dateIso) {
+    async createNewTaskForDate(dateIso) {
         if (!this.state.data?.user_info?.is_manager) {
             if (this.notification) {
                 this.notification.add(_t("Only Project Managers can create new scopes or schedule tasks."), {
@@ -1318,25 +1334,18 @@ export class ProjectManageDashboard extends Component {
             return;
         }
         const selIso = dateIso || this.calendarSelectedDateIso;
-        this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "project.manage.scope",
-            views: [[false, "form"]],
-            target: "new",
-            context: {
-                default_start_date: selIso,
-                default_end_date: selIso,
-                default_category: this.state.calendarCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation',
-            },
-        }, {
-            onClose: () => {
-                this.loadData();
-            }
+        const defaultCat = this.state.calendarCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation';
+        await this.openScopeWizard(null, null, {
+            startDate: selIso,
+            endDate: selIso,
+            category: defaultCat,
+            isCalendarSchedule: true,
+            projectId: this.state.selectedProjectId || null,
         });
     }
 
-    createNewTaskForSelectedDate() {
-        this.createNewTaskForDate(this.calendarSelectedDateIso);
+    async createNewTaskForSelectedDate() {
+        await this.createNewTaskForDate(this.calendarSelectedDateIso);
     }
 
     getEventPillClass(evt) {
@@ -1382,6 +1391,12 @@ export class ProjectManageDashboard extends Component {
 
     get calendarWeekRangeTitle() {
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        if (this.state.calendarViewMode === 'today_tasks') {
+            return `Showing all tasks scheduled or due for today`;
+        }
+        if (this.state.calendarViewMode === 'today') {
+            return this.calendarIsSelectedDateToday ? "Today's Schedule & Deliverables" : `Schedule for ${this.calendarSelectedDateTitle}`;
+        }
         if (this.state.calendarViewMode === 'month') {
             const year = this.state.calendarYear;
             const month = this.state.calendarMonth;
@@ -1421,15 +1436,24 @@ export class ProjectManageDashboard extends Component {
 
     get calendarPeriodTitle() {
         const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
         const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+
+        if (this.state.calendarViewMode === 'today_tasks') {
+            const now = new Date();
+            return `Today's Tasks – ${dayNames[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+        }
+        if (this.state.calendarViewMode === 'today') {
+            return `${dayNames[cur.getDay()]}, ${cur.getDate()} ${months[cur.getMonth()]} ${cur.getFullYear()}`;
+        }
+        if (this.state.calendarViewMode === 'month') {
+            return `${months[this.state.calendarMonth]} ${this.state.calendarYear}`;
+        }
         const dayOfWeek = cur.getDay();
         const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
         const mon = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + diffToMon);
         const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
 
-        if (this.state.calendarViewMode === 'month') {
-            return `${months[this.state.calendarMonth]} ${this.state.calendarYear}`;
-        }
         if (mon.getMonth() === sun.getMonth()) {
             return `${months[mon.getMonth()]} ${mon.getFullYear()}`;
         }
@@ -1445,29 +1469,49 @@ export class ProjectManageDashboard extends Component {
         // Strictly show tasks only
         events = events.filter(e => e.type === 'task');
 
-        // 1. Team filter
+        // 1. Project filter
+        if (this.state.selectedProjectId) {
+            events = events.filter(e => e.project_id === this.state.selectedProjectId);
+        }
+
+        // 2. Team filter
         if (this.state.selectedTeamId) {
             events = events.filter(e => e.team_id === this.state.selectedTeamId);
         }
 
-        // 2. Category filter (All / Documentation / Implementation)
+        // 3. Category filter (All / Documentation / Implementation)
         if (this.state.calendarCategoryFilter && this.state.calendarCategoryFilter !== 'all') {
             const cat = this.state.calendarCategoryFilter.toLowerCase();
             events = events.filter(e => (e.category || '').toLowerCase().includes(cat));
         }
 
-        // 3. Status filter
-        if (this.state.calendarStatusFilter === 'overdue') {
-            events = events.filter(e => e.is_overdue);
-        } else if (this.state.calendarStatusFilter === 'in_progress') {
-            events = events.filter(e => e.status === 'in_progress');
-        } else if (this.state.calendarStatusFilter === 'under_review') {
-            events = events.filter(e => e.status === 'under_review' || e.approval_state === 'submitted');
-        } else if (this.state.calendarStatusFilter === 'done') {
-            events = events.filter(e => e.status === 'done');
+        // 4. Status filter
+        if (this.state.calendarStatusFilter && this.state.calendarStatusFilter !== 'all') {
+            if (this.state.calendarStatusFilter === 'overdue' || this.state.calendarStatusFilter === 'due') {
+                events = events.filter(e => e.is_overdue || e.days_remaining <= 0);
+            } else if (this.state.calendarStatusFilter === 'done' || this.state.calendarStatusFilter === 'completed') {
+                events = events.filter(e => e.status === 'done');
+            } else if (this.state.calendarStatusFilter === 'todo' || this.state.calendarStatusFilter === 'not_started') {
+                events = events.filter(e => e.status === 'todo');
+            } else if (this.state.calendarStatusFilter === 'in_progress') {
+                events = events.filter(e => e.status === 'in_progress');
+            } else if (this.state.calendarStatusFilter === 'under_review') {
+                events = events.filter(e => e.status === 'under_review' || e.approval_state === 'submitted');
+            }
         }
 
-        // 4. Time filter (Today, Tomorrow, Week, Month, All)
+        // 5. Search query
+        if (this.state.calendarSearchQuery && this.state.calendarSearchQuery.trim()) {
+            const q = this.state.calendarSearchQuery.trim().toLowerCase();
+            events = events.filter(e => 
+                (e.title || '').toLowerCase().includes(q) ||
+                (e.code || '').toLowerCase().includes(q) ||
+                (e.project_name || '').toLowerCase().includes(q) ||
+                (e.responsible_name || '').toLowerCase().includes(q)
+            );
+        }
+
+        // 6. Time filter (Today, Tomorrow, Week, Month, All)
         const now = new Date();
         const pad = (n) => String(n).padStart(2, "0");
         const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
@@ -1493,6 +1537,132 @@ export class ProjectManageDashboard extends Component {
         }
 
         return events;
+    }
+
+    get calendarTodayTasks() {
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+        let allEvents = (this.state.data && this.state.data.calendar_events) ? 
+                        this.state.data.calendar_events.filter(e => e.type === 'task') : [];
+
+        // Project filter
+        if (this.state.selectedProjectId) {
+            allEvents = allEvents.filter(e => e.project_id === this.state.selectedProjectId);
+        }
+        // Team filter
+        if (this.state.selectedTeamId) {
+            allEvents = allEvents.filter(e => e.team_id === this.state.selectedTeamId);
+        }
+        // Category filter
+        if (this.state.calendarCategoryFilter && this.state.calendarCategoryFilter !== 'all') {
+            const cat = this.state.calendarCategoryFilter.toLowerCase();
+            allEvents = allEvents.filter(e => (e.category || '').toLowerCase().includes(cat));
+        }
+        // Status filter
+        if (this.state.calendarStatusFilter && this.state.calendarStatusFilter !== 'all') {
+            if (this.state.calendarStatusFilter === 'overdue' || this.state.calendarStatusFilter === 'due') {
+                allEvents = allEvents.filter(e => e.is_overdue || e.days_remaining <= 0);
+            } else if (this.state.calendarStatusFilter === 'done' || this.state.calendarStatusFilter === 'completed') {
+                allEvents = allEvents.filter(e => e.status === 'done');
+            } else if (this.state.calendarStatusFilter === 'todo' || this.state.calendarStatusFilter === 'not_started') {
+                allEvents = allEvents.filter(e => e.status === 'todo');
+            } else if (this.state.calendarStatusFilter === 'in_progress') {
+                allEvents = allEvents.filter(e => e.status === 'in_progress');
+            } else if (this.state.calendarStatusFilter === 'under_review') {
+                allEvents = allEvents.filter(e => e.status === 'under_review' || e.approval_state === 'submitted');
+            }
+        }
+        // Search query
+        if (this.state.calendarSearchQuery && this.state.calendarSearchQuery.trim()) {
+            const q = this.state.calendarSearchQuery.trim().toLowerCase();
+            allEvents = allEvents.filter(e => 
+                (e.title || '').toLowerCase().includes(q) ||
+                (e.code || '').toLowerCase().includes(q) ||
+                (e.project_name || '').toLowerCase().includes(q) ||
+                (e.responsible_name || '').toLowerCase().includes(q)
+            );
+        }
+
+        return allEvents.filter(e => e.date === todayIso || (e.is_overdue && e.status !== 'done'));
+    }
+
+    get calendarTodayTasksStats() {
+        const events = this.calendarTodayTasks;
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, "0");
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+        return {
+            total: events.length,
+            dueToday: events.filter(e => e.date === todayIso && !e.is_overdue && e.status !== 'done').length,
+            overdue: events.filter(e => e.is_overdue && e.status !== 'done').length,
+            inProgress: events.filter(e => e.status === 'in_progress').length,
+            todo: events.filter(e => e.status === 'todo').length,
+            completed: events.filter(e => e.status === 'done').length,
+        };
+    }
+
+    get calendarDayTasks() {
+        const pad = (n) => String(n).padStart(2, "0");
+        const selIso = `${this.state.calendarYear}-${pad(this.state.calendarMonth + 1)}-${pad(this.state.calendarDate)}`;
+
+        let allEvents = (this.state.data && this.state.data.calendar_events) ? 
+                        this.state.data.calendar_events.filter(e => e.type === 'task') : [];
+
+        // Project filter
+        if (this.state.selectedProjectId) {
+            allEvents = allEvents.filter(e => e.project_id === this.state.selectedProjectId);
+        }
+        // Team filter
+        if (this.state.selectedTeamId) {
+            allEvents = allEvents.filter(e => e.team_id === this.state.selectedTeamId);
+        }
+        // Category filter
+        if (this.state.calendarCategoryFilter && this.state.calendarCategoryFilter !== 'all') {
+            const cat = this.state.calendarCategoryFilter.toLowerCase();
+            allEvents = allEvents.filter(e => (e.category || '').toLowerCase().includes(cat));
+        }
+        // Status filter
+        if (this.state.calendarStatusFilter && this.state.calendarStatusFilter !== 'all') {
+            if (this.state.calendarStatusFilter === 'overdue' || this.state.calendarStatusFilter === 'due') {
+                allEvents = allEvents.filter(e => e.is_overdue || e.days_remaining <= 0);
+            } else if (this.state.calendarStatusFilter === 'done' || this.state.calendarStatusFilter === 'completed') {
+                allEvents = allEvents.filter(e => e.status === 'done');
+            } else if (this.state.calendarStatusFilter === 'todo' || this.state.calendarStatusFilter === 'not_started') {
+                allEvents = allEvents.filter(e => e.status === 'todo');
+            } else if (this.state.calendarStatusFilter === 'in_progress') {
+                allEvents = allEvents.filter(e => e.status === 'in_progress');
+            } else if (this.state.calendarStatusFilter === 'under_review') {
+                allEvents = allEvents.filter(e => e.status === 'under_review' || e.approval_state === 'submitted');
+            }
+        }
+        // Search query
+        if (this.state.calendarSearchQuery && this.state.calendarSearchQuery.trim()) {
+            const q = this.state.calendarSearchQuery.trim().toLowerCase();
+            allEvents = allEvents.filter(e => 
+                (e.title || '').toLowerCase().includes(q) ||
+                (e.code || '').toLowerCase().includes(q) ||
+                (e.project_name || '').toLowerCase().includes(q) ||
+                (e.responsible_name || '').toLowerCase().includes(q)
+            );
+        }
+
+        return allEvents.filter(e => e.date === selIso);
+    }
+
+    get calendarDayViewInfo() {
+        const cur = new Date(this.state.calendarYear, this.state.calendarMonth, this.state.calendarDate);
+        const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+        const dayNamesShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        return {
+            dayName: dayNamesShort[cur.getDay()],
+            dayFullName: dayNames[cur.getDay()],
+            dayNum: cur.getDate(),
+            fullDate: `${dayNames[cur.getDay()]}, ${cur.getDate()} ${months[cur.getMonth()]} ${cur.getFullYear()}`,
+        };
     }
 
     get calendarStats() {
@@ -2077,7 +2247,34 @@ export class ProjectManageDashboard extends Component {
         }
     }
 
-    openScopeWizard(item = null, ev) {
+    get wizardProjectName() {
+        const curProjId = this.state.wizardData?.project_id;
+        if (curProjId && this.state.data?.all_projects_filter) {
+            const found = this.state.data.all_projects_filter.find(p => p.id === parseInt(curProjId));
+            if (found) return found.name;
+        }
+        return this.state.projectScopesData?.project?.name || (this.state.data?.all_projects_filter?.[0]?.name) || '';
+    }
+
+    async onWizardProjectChange(ev) {
+        const val = ev.target.value;
+        const projId = val ? parseInt(val) : null;
+        if (!projId) return;
+        this.state.wizardData.project_id = projId;
+        try {
+            const scopesRes = await this.orm.call("project.manage", "get_project_scopes_dashboard", [projId]);
+            this.state.projectScopesData = scopesRes;
+            if (scopesRes && scopesRes.available_scopes && scopesRes.available_scopes.length > 0) {
+                if (!scopesRes.available_scopes.includes(this.state.wizardData.scope)) {
+                    this.state.wizardData.scope = scopesRes.available_scopes[0];
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load project scopes on project change:", err);
+        }
+    }
+
+    async openScopeWizard(item = null, ev = null, options = {}) {
         if (ev) ev.stopPropagation();
         if (!item && !this.state.data?.user_info?.is_manager) {
             if (this.notification) {
@@ -2096,6 +2293,7 @@ export class ProjectManageDashboard extends Component {
             }
             this.state.wizardData = {
                 id: item.id,
+                project_id: item.project_id || this.state.selectedProjectId || (this.state.projectScopesData && this.state.projectScopesData.project && this.state.projectScopesData.project.id) || null,
                 scope: item.scope || item.scope_name || '',
                 category: item.category || 'Documentation',
                 name: item.name || '',
@@ -2106,21 +2304,43 @@ export class ProjectManageDashboard extends Component {
                 start_date: item.start_date || '',
                 end_date: item.end_date || '',
                 state: item.state || 'todo',
+                isCalendarSchedule: false,
             };
         } else {
+            let targetProjId = options.projectId || this.state.selectedProjectId;
+            if (!targetProjId && this.state.projectScopesData?.project?.id) {
+                targetProjId = this.state.projectScopesData.project.id;
+            }
+            if (!targetProjId && this.state.data?.all_projects_filter && this.state.data.all_projects_filter.length > 0) {
+                targetProjId = this.state.data.all_projects_filter[0].id;
+            }
+
+            if (targetProjId && (!this.state.projectScopesData || this.state.projectScopesData.project?.id !== targetProjId)) {
+                try {
+                    const scopesRes = await this.orm.call("project.manage", "get_project_scopes_dashboard", [targetProjId]);
+                    this.state.projectScopesData = scopesRes;
+                } catch (err) {
+                    console.error("Failed to load project scopes for wizard:", err);
+                }
+            }
+
             const defaultScope = this.state.selectedScopeName || (this.state.projectScopesData && this.state.projectScopesData.available_scopes && this.state.projectScopesData.available_scopes[0]) || 'Scope 0 Project Initiation & Governance';
+            const cat = options.category || (this.state.activeCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation');
+
             this.state.wizardData = {
                 id: null,
+                project_id: targetProjId || null,
                 scope: defaultScope,
-                category: this.state.activeCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation',
+                category: cat,
                 name: '',
                 item_type: '',
                 priority: '0',
                 responsible_ids: [],
                 responsible_id: '',
-                start_date: '',
-                end_date: '',
+                start_date: options.startDate || '',
+                end_date: options.endDate || options.startDate || '',
                 state: 'todo',
+                isCalendarSchedule: Boolean(options.isCalendarSchedule),
             };
         }
         this.state.scopeWizardOpen = true;
@@ -2242,20 +2462,28 @@ export class ProjectManageDashboard extends Component {
                 start_date: this.state.wizardData.start_date,
                 end_date: this.state.wizardData.end_date,
                 state: this.state.wizardData.state,
+                is_calendar_schedule: Boolean(this.state.wizardData.isCalendarSchedule),
             };
 
             let updated = null;
             if (this.state.wizardData.id) {
                 updated = await this.orm.call("project.manage", "save_scope_inline", [this.state.wizardData.id, vals]);
             } else {
-                const projectId = this.state.projectScopesData.project.id;
+                const projectId = this.state.wizardData.project_id || (this.state.projectScopesData && this.state.projectScopesData.project && this.state.projectScopesData.project.id);
+                if (!projectId) {
+                    if (this.notification) {
+                        this.notification.add("Please select a project.", { type: "warning" });
+                    }
+                    this.state.savingScope = false;
+                    return;
+                }
                 updated = await this.orm.call("project.manage", "create_scope_from_dashboard", [projectId, vals]);
             }
 
             if (updated && !updated.error) {
                 this.state.projectScopesData = updated;
                 if (this.notification) {
-                    const msg = updated.message || (this.state.wizardData.id ? "Scope task saved!" : "New scope task created!");
+                    const msg = updated.message || (this.state.wizardData.id ? "Scope task saved!" : (this.state.wizardData.isCalendarSchedule ? "Task scheduled successfully!" : "New scope task created!"));
                     this.notification.add(msg, { type: "success" });
                 }
 
@@ -2270,6 +2498,7 @@ export class ProjectManageDashboard extends Component {
                     }
                 }
                 this.closeScopeWizard();
+                await this.loadData();
             } else if (updated && updated.error) {
                 if (this.notification) {
                     this.notification.add(updated.error, { type: "danger" });
@@ -3252,7 +3481,7 @@ export class ProjectManageDashboard extends Component {
     async saveScopeDetailNotes() {
         if (!this.state.scopeDetailData || !this.state.scopeDetailData.id) return;
         if (this.state.scopeDetailData.can_modify_documents === false) {
-            if (this.notification) this.notification.add("Task description and notes cannot be edited after approval by Team Leads or Consultants.", { type: "danger" });
+            if (this.notification) this.notification.add("You are not authorized to edit this task at the current approval stage.", { type: "danger" });
             return;
         }
         this.state.scopeDetailNotesSaving = true;
@@ -3315,7 +3544,7 @@ export class ProjectManageDashboard extends Component {
             return;
         }
         if (this.state.scopeDetailData && this.state.scopeDetailData.can_modify_documents === false) {
-            if (this.notification) this.notification.add("Approved deliverables and documents cannot be modified or added by Team Leads or Consultants.", { type: "danger" });
+            if (this.notification) this.notification.add("You are not authorized to upload files for this task at the current approval stage.", { type: "danger" });
             return;
         }
         const file = this.state.scopeDetailUploadFile;
@@ -3356,17 +3585,18 @@ export class ProjectManageDashboard extends Component {
         reader.readAsDataURL(file);
     }
 
-    async deleteModalDocument(scopeId, docId) {
+    async deleteModalDocument(scopeId, docId, isAttachment = false) {
         if (!scopeId || !docId) return;
         if (this.state.scopeDetailData && this.state.scopeDetailData.can_modify_documents === false) {
-            if (this.notification) this.notification.add("Approved deliverables and documents cannot be deleted by Team Leads or Consultants.", { type: "danger" });
+            if (this.notification) this.notification.add("You are not authorized to delete documents for this task at the current approval stage.", { type: "danger" });
             return;
         }
         if (!confirm("Are you sure you want to delete this document?")) return;
         try {
             const res = await this.orm.call("project.manage.scope", "delete_scope_document_dashboard", [
                 scopeId,
-                docId
+                docId,
+                Boolean(isAttachment)
             ]);
             if (res && !res.error) {
                 this.state.scopeDetailData = res;
@@ -3379,7 +3609,8 @@ export class ProjectManageDashboard extends Component {
             }
         } catch (err) {
             console.error("Failed to delete document:", err);
-            if (this.notification) this.notification.add("Failed to delete document.", { type: "danger" });
+            const msg = (err && err.data && err.data.message) || (err && err.message) || "Failed to delete document.";
+            if (this.notification) this.notification.add(msg, { type: "danger" });
         }
     }
 

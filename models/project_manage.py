@@ -1747,7 +1747,7 @@ class ProjectManage(models.Model):
         calendar_events = []
         for p in projects:
             for s in p.scope_ids:
-                if s.is_creation_approval:
+                if s.is_creation_approval and not s.end_date:
                     continue
                 if role_code == 'consultant':
                     is_assigned_to_cons = bool(
@@ -2295,7 +2295,8 @@ class ProjectManage(models.Model):
         if not is_manager:
             return {'error': _("Access Denied: Only Project Managers can create new scopes or tasks.")}
 
-        requires_approval = not is_admin_or_ceo
+        is_cal_sched = bool(vals.get('is_calendar_schedule'))
+        requires_approval = (not is_admin_or_ceo) and (not is_cal_sched)
         if requires_approval:
             initial_approval_stage = 'pending_ceo' if is_vp else 'pending_vp'
             valid_states = dict(self.env['project.manage.scope']._fields['state'].selection)
@@ -2306,7 +2307,7 @@ class ProjectManage(models.Model):
             create_state = vals.get('state') or 'todo'
             initial_approval_stage = 'approved' if create_state == 'done' else ('in_progress' if create_state == 'in_progress' else 'draft')
             is_creation_approval = False
-            notification_msg = _("New scope task created successfully.")
+            notification_msg = _("Task scheduled successfully on calendar.") if is_cal_sched else _("New scope task created successfully.")
 
         project = self.browse(project_id)
         if not project.exists():
@@ -2365,6 +2366,11 @@ class ProjectManage(models.Model):
             name=vals.get('name'),
         ) or 'TL'
 
+        start_d = vals.get('start_date') or False
+        end_d = vals.get('end_date') or start_d
+        if not start_d and end_d:
+            start_d = end_d
+
         create_vals = {
             'project_id': project.id,
             'scope': scope_str,
@@ -2379,8 +2385,8 @@ class ProjectManage(models.Model):
             'responsible_id': emp_ids[0] if emp_ids else False,
             'responsible_ids': [(6, 0, emp_ids)] if emp_ids else False,
             'responsible': emp_name,
-            'start_date': vals.get('start_date') or False,
-            'end_date': vals.get('end_date') or False,
+            'start_date': start_d,
+            'end_date': end_d,
             'state': create_state,
             'approval_state': initial_approval_stage,
             'is_creation_approval': is_creation_approval,

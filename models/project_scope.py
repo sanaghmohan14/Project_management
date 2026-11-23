@@ -1,9 +1,12 @@
 import base64
+import logging
 from datetime import datetime, date, timedelta
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, AccessError
 from odoo.fields import Domain
 from .scope_master_data import get_default_approval_authority
+
+_logger = logging.getLogger(__name__)
 
 try:
     import dateutil.parser
@@ -344,13 +347,74 @@ class ProjectManageScope(models.Model):
             (hasattr(user, '_is_admin') and user._is_admin())
         )
 
-    @api.depends('approval_state', 'state')
+    @api.depends('approval_state', 'state', 'can_user_approve')
     def _compute_can_modify_documents(self):
-        is_manager = self._is_manager_or_above()
+        user = self.env.user
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
         for rec in self:
-            is_approved = bool(rec.approval_state == 'approved' or rec.state == 'done')
-            # Higher roles can always manage documents; Team Leads and Consultants are locked out once approved
-            rec.can_modify_documents = bool(is_manager or not is_approved)
+            st = rec.approval_state or 'draft'
+            is_approved = bool(st == 'approved' or rec.state == 'done')
+            is_rejected = bool(st == 'rejected')
+            is_submitted = bool(
+                st in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo') or
+                rec.state == 'under_review'
+            )
+            if is_approved:
+                # Fully approved deliverables are locked; only system administrator can modify if needed
+                rec.can_modify_documents = bool(is_admin)
+            elif is_rejected:
+                # Rejected for re-work: editable by assigned worker / team
+                rec.can_modify_documents = True
+            elif is_submitted:
+                # Under approval review: strictly the current active stage approver (or admin) can edit/upload!
+                # Submitter (consultant) and previous-stage approvers are locked out.
+                rec.can_modify_documents = bool(rec.can_user_approve or is_admin)
+            else:
+                # Draft / In-Progress before submission: editable
+                rec.can_modify_documents = True
+
+    def _can_current_user_modify(self):
+        """Check whether current user can edit notes, upload files, or delete files on this scope record:
+        - Approved: locked (admin only)
+        - Rejected: editable for re-work
+        - Submitted (pending_tl, pending_pm, pending_vp, pending_ceo): ONLY the current stage approver (or admin) can edit/upload!
+        - Draft / In-Progress before submission: editable
+        """
+        self.ensure_one()
+        user = self.env.user
+        is_admin = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator')
+        )
+        if is_admin:
+            return True
+
+        st = self.approval_state or 'draft'
+        is_approved = bool(st == 'approved' or self.state == 'done')
+        if is_approved:
+            return False
+
+        if st == 'rejected':
+            return True
+
+        is_submitted = bool(
+            st in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo') or
+            self.state == 'under_review'
+        )
+        if is_submitted:
+            # During approval review: strictly the current stage approver can edit/upload!
+            return bool(self.can_user_approve)
+
+        return True
 
     def _compute_can_current_user_complete(self):
         user = self.env.user
@@ -503,22 +567,25 @@ class ProjectManageScope(models.Model):
         self._sync_attachments_to_documents()
 
     def _sync_attachments_to_documents(self):
-        """Automatically create/sync document_ids from attachment_ids so upload details (uploader, date, size)
+        """Automatically create/sync document_ids from attachment_ids and scope attachments so upload details (uploader, date, size)
         are visible in the document register.
         """
         Doc = self.env['project.manage.scope.document'].sudo()
         for scope in self:
             if not scope.id:
                 continue
+            all_atts = scope.attachment_ids | self.env['ir.attachment'].sudo().search([
+                ('res_model', '=', 'project.manage.scope'), ('res_id', '=', scope.id)
+            ])
             existing_doc_files = set(scope.document_ids.mapped('filename')) | set(scope.document_ids.mapped('name'))
-            for att in scope.attachment_ids:
+            for att in all_atts:
                 fname = att.name
                 if not fname:
                     continue
                 if fname not in existing_doc_files:
                     uploader = att.create_uid or self.env.user
                     upload_dt = att.create_date or fields.Datetime.now()
-                    raw_data = att.datas
+                    raw_data = att.datas or base64.b64encode(b'')
                     sz = att.file_size or 0
                     if not sz and raw_data:
                         try:
@@ -533,17 +600,20 @@ class ProjectManageScope(models.Model):
                         sz_str = f"{sz / (1024 * 1024):.1f} MB"
 
                     cat_val = 'proof' if 'proof' in (scope.evidence_proof or '').lower() or 'evidence' in (scope.evidence_proof or '').lower() else 'deliverable'
-                    Doc.create({
-                        'scope_id': scope.id,
-                        'name': fname,
-                        'filename': fname,
-                        'file': raw_data,
-                        'doc_type': cat_val,
-                        'file_size': sz,
-                        'file_size_display': sz_str,
-                        'uploaded_by': uploader.id,
-                        'upload_date': upload_dt,
-                    })
+                    try:
+                        Doc.create({
+                            'scope_id': scope.id,
+                            'name': fname,
+                            'filename': fname,
+                            'file': raw_data,
+                            'doc_type': cat_val,
+                            'file_size': sz,
+                            'file_size_display': sz_str,
+                            'uploaded_by': uploader.id,
+                            'upload_date': upload_dt,
+                        })
+                    except Exception as e:
+                        _logger.warning("Could not sync attachment %s to document: %s", fname, e)
                     existing_doc_files.add(fname)
 
     @api.depends('document_ids', 'attachment_ids')
@@ -1270,6 +1340,7 @@ class ProjectManageScope(models.Model):
                 'upload_date_str': upload_dt_str,
                 'notes': doc.notes or '',
                 'download_url': f"/web/content?model=project.manage.scope.document&id={doc.id}&field=file&download=true&filename={fname}",
+                'is_attachment': False,
             })
 
         for att in (scope.attachment_ids | self.env['ir.attachment'].sudo().search([('res_model', '=', 'project.manage.scope'), ('res_id', '=', scope.id)])):
@@ -1292,6 +1363,7 @@ class ProjectManageScope(models.Model):
                     'upload_date_str': upload_dt_str,
                     'notes': '',
                     'download_url': f"/web/content/{att.id}?download=true",
+                    'is_attachment': True,
                 })
 
         resp_names = ', '.join(scope.responsible_ids.sudo().mapped('name')) if scope.responsible_ids else (scope.responsible_id.sudo().name if scope.responsible_id else (scope.responsible or 'Unassigned'))
@@ -1324,8 +1396,23 @@ class ProjectManageScope(models.Model):
         )
         can_approve = bool(scope.can_user_approve or is_admin)
         is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
-        is_manager = self._is_manager_or_above()
-        can_modify_documents = bool(is_manager or not is_approved)
+        is_submitted = bool(
+            scope.approval_state in ('pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo') or
+            scope.state == 'under_review'
+        )
+        is_rejected = bool(scope.approval_state == 'rejected')
+
+        if is_approved:
+            can_modify_documents = bool(is_admin)
+        elif is_rejected:
+            can_modify_documents = True
+        elif is_submitted:
+            # During approval review: strictly the current active stage approver (or admin) can edit/upload!
+            can_modify_documents = bool(can_approve)
+        else:
+            # Draft / in-progress before submit:
+            can_modify_documents = True
+
         can_submit = bool(
             is_assigned and
             scope.state not in ('done', 'cancelled') and
@@ -1358,12 +1445,15 @@ class ProjectManageScope(models.Model):
             'submission_notes': scope.evidence_proof or scope.notes or '',
             'notes': scope.notes or '',
             'evidence_proof': scope.evidence_proof or '',
+            'rejection_reason': scope.rejection_reason or '',
             'approval_authority': scope.approval_authority or 'tl',
             'approval_authority_label': dict(scope._fields['approval_authority'].selection).get(scope.approval_authority, 'Team Lead'),
             'is_assigned': is_assigned,
             'can_approve': can_approve,
             'can_submit': can_submit,
             'is_approved': is_approved,
+            'is_submitted': is_submitted,
+            'is_rejected': is_rejected,
             'can_modify_documents': can_modify_documents,
             'documents': docs,
             'doc_count': len(docs),
@@ -1376,9 +1466,8 @@ class ProjectManageScope(models.Model):
         if not scope.exists():
             return {'error': _("Task not found.")}
 
-        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
-        if is_approved and not self._is_manager_or_above():
-            return {'error': _("Approved deliverables and documents cannot be modified or added by Team Leads or Consultants.")}
+        if not scope._can_current_user_modify():
+            return {'error': _("You are not authorized to upload documents for this task at the current approval stage.")}
 
         clean_file = file_data
         if isinstance(clean_file, str) and ',' in clean_file and ';base64' in clean_file.split(',')[0]:
@@ -1405,31 +1494,83 @@ class ProjectManageScope(models.Model):
         if not scope.exists():
             return {'error': _("Task not found.")}
 
-        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
-        if is_approved and not self._is_manager_or_above():
-            return {'error': _("Task description and notes cannot be edited after approval by Team Leads or Consultants.")}
+        if not scope._can_current_user_modify():
+            return {'error': _("You are not authorized to edit task description and notes at the current approval stage.")}
 
         scope.sudo().write({'notes': notes or ''})
         return self.get_scope_details_dashboard(scope.id)
 
     @api.model
-    def delete_scope_document_dashboard(self, scope_id, document_id):
-        """Delete an uploaded document/deliverable from the scope item."""
+    def delete_scope_document_dashboard(self, scope_id, document_id, is_attachment=False):
+        """Delete an uploaded document/deliverable or attachment from the scope item."""
         scope = self.browse(int(scope_id))
         if not scope.exists():
             return {'error': _("Task not found.")}
 
-        is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
-        if is_approved and not self._is_manager_or_above():
-            return {'error': _("Approved deliverables and documents cannot be deleted by Team Leads or Consultants.")}
+        if not scope._can_current_user_modify():
+            return {'error': _("You are not authorized to delete documents for this task at the current approval stage.")}
 
-        doc = self.env['project.manage.scope.document'].sudo().browse(int(document_id))
-        if doc.exists() and doc.scope_id.id == scope.id:
-            doc.unlink()
+        doc_id = int(document_id)
+        target_fnames = set()
+
+        if is_attachment:
+            att = self.env['ir.attachment'].sudo().browse(doc_id)
+            if att.exists():
+                if att.name:
+                    target_fnames.add(att.name)
+                scope.sudo().write({'attachment_ids': [(3, att.id)]})
+                try:
+                    att.unlink()
+                except Exception as e:
+                    _logger.warning("Failed to unlink attachment %s: %s", att.id, e)
         else:
-            att = self.env['ir.attachment'].sudo().browse(int(document_id))
-            if att.exists() and att.res_model == 'project.manage.scope' and att.res_id == scope.id:
-                att.unlink()
+            doc = self.env['project.manage.scope.document'].sudo().browse(doc_id)
+            if doc.exists() and doc.scope_id.id == scope.id:
+                fname = doc.filename or doc.name
+                if fname:
+                    target_fnames.add(fname)
+                try:
+                    doc.unlink()
+                except Exception as e:
+                    _logger.warning("Failed to unlink scope document %s: %s", doc.id, e)
+            else:
+                att = self.env['ir.attachment'].sudo().browse(doc_id)
+                if att.exists():
+                    if att.name:
+                        target_fnames.add(att.name)
+                    scope.sudo().write({'attachment_ids': [(3, att.id)]})
+                    try:
+                        att.unlink()
+                    except Exception as e:
+                        _logger.warning("Failed to unlink attachment %s: %s", att.id, e)
+
+        # Clean up any lingering docs/attachments with the same filename on this scope
+        for fname in target_fnames:
+            if not fname:
+                continue
+            matching_docs = self.env['project.manage.scope.document'].sudo().search([
+                ('scope_id', '=', scope.id),
+                '|', ('filename', '=', fname), ('name', '=', fname)
+            ])
+            if matching_docs:
+                try:
+                    matching_docs.unlink()
+                except Exception:
+                    pass
+
+            matching_atts = self.env['ir.attachment'].sudo().search([
+                '|',
+                '&', ('res_model', '=', 'project.manage.scope'), ('res_id', '=', scope.id),
+                ('id', 'in', scope.attachment_ids.ids),
+                ('name', '=', fname)
+            ])
+            if matching_atts:
+                scope.sudo().write({'attachment_ids': [(3, a.id) for a in matching_atts]})
+                try:
+                    matching_atts.unlink()
+                except Exception:
+                    pass
+
         return self.get_scope_details_dashboard(scope.id)
 
     @api.model
@@ -1446,7 +1587,13 @@ class ProjectManageScopeDocument(models.Model):
     def check_access(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
+        if operation in ('read', 'create', 'write', 'unlink') and (
+            self.env.user.has_group('project_manage.group_project_manage_consultant') or
+            self.env.user.has_group('project_manage.group_project_manage_team_lead') or
+            self.env.user.has_group('project_manage.group_project_manage_manager') or
+            self.env.user.has_group('project_manage.group_project_manage_vp') or
+            self.env.user.has_group('project_manage.group_project_manage_ceo')
+        ):
             return True
         return super().check_access(operation, raise_exception=raise_exception)
 
@@ -1454,7 +1601,13 @@ class ProjectManageScopeDocument(models.Model):
     def check_access_rights(self, operation, raise_exception=True):
         if self.env.is_superuser() or self.env.user.id in (1, 2) or self.env.user.has_group('base.group_system') or self.env.user.has_group('project_manage.group_project_manage_administrator'):
             return True
-        if operation in ('read', 'create', 'write') and self.env.user.has_group('project_manage.group_project_manage_consultant'):
+        if operation in ('read', 'create', 'write', 'unlink') and (
+            self.env.user.has_group('project_manage.group_project_manage_consultant') or
+            self.env.user.has_group('project_manage.group_project_manage_team_lead') or
+            self.env.user.has_group('project_manage.group_project_manage_manager') or
+            self.env.user.has_group('project_manage.group_project_manage_vp') or
+            self.env.user.has_group('project_manage.group_project_manage_ceo')
+        ):
             return True
         return super().check_access_rights(operation, raise_exception=raise_exception)
 
@@ -1534,24 +1687,31 @@ class ProjectManageScopeDocument(models.Model):
         return records
 
     def write(self, vals):
-        is_manager = self.env['project.manage.scope']._is_manager_or_above()
         for doc in self:
             scope = doc.scope_id
-            if scope and (scope.approval_state == 'approved' or scope.state == 'done') and not is_manager:
-                raise UserError(_("Approved deliverables and documents cannot be modified by Team Leads or Consultants."))
+            if scope and not scope._can_current_user_modify():
+                raise UserError(_("You are not authorized to modify documents for this task at the current approval stage."))
         return super().write(vals)
 
     def unlink(self):
-        is_manager = self.env['project.manage.scope']._is_manager_or_above()
         for doc in self:
             scope = doc.scope_id
-            if scope and (scope.approval_state == 'approved' or scope.state == 'done') and not is_manager:
-                raise UserError(_("Approved deliverables and documents cannot be deleted by Team Leads or Consultants."))
+            if scope and not scope._can_current_user_modify():
+                raise UserError(_("You are not authorized to delete documents for this task at the current approval stage."))
             if doc.scope_id and (doc.filename or doc.name):
                 fname = doc.filename or doc.name
-                to_remove = doc.scope_id.attachment_ids.filtered(lambda a: a.name == fname)
-                if to_remove:
-                    doc.scope_id.sudo().write({'attachment_ids': [(3, a.id) for a in to_remove]})
+                matching_atts = self.env['ir.attachment'].sudo().search([
+                    '|',
+                    '&', ('res_model', '=', 'project.manage.scope'), ('res_id', '=', doc.scope_id.id),
+                    ('id', 'in', doc.scope_id.attachment_ids.ids),
+                    ('name', '=', fname)
+                ])
+                if matching_atts:
+                    doc.scope_id.sudo().write({'attachment_ids': [(3, a.id) for a in matching_atts]})
+                    try:
+                        matching_atts.unlink()
+                    except Exception:
+                        pass
         return super().unlink()
 
 

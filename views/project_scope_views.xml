@@ -212,7 +212,7 @@
                             </group>
                         </page>
                         <page string="Notes &amp; Details" name="notes">
-                            <field name="notes" placeholder="Notes, instructions or deliverables..."/>
+                            <field name="notes" placeholder="Notes, instructions or deliverables..." readonly="not can_modify_documents"/>
                         </page>
                         <page string="Approval History &amp; Audit Trail" name="approval_history">
                             <field name="approval_log_ids" readonly="1">
