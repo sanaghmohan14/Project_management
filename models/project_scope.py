@@ -354,19 +354,11 @@ class ProjectManageScope(models.Model):
 
     def _compute_can_current_user_complete(self):
         user = self.env.user
-        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
-        is_lead_or_above = bool(
-            self.env.is_superuser() or
-            user.id in (1, 2) or
-            user.has_group('base.group_system') or
-            user.has_group('base.group_erp_manager') or
-            user.has_group('project_manage.group_project_manage_administrator') or
-            user.has_group('project_manage.group_project_manage_ceo') or
-            user.has_group('project_manage.group_project_manage_vp') or
-            user.has_group('project_manage.group_project_manage_manager') or
-            user.has_group('project_manage.group_project_manage_team_lead') or
-            (hasattr(user, '_is_admin') and user._is_admin())
-        )
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
+
         for rec in self:
             if rec.state in ('done', 'cancelled') or rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 rec.can_current_user_complete = False
@@ -382,9 +374,11 @@ class ProjectManageScope(models.Model):
 
             is_assigned = bool(
                 (user in all_resp_users) or
-                (current_emp and current_emp in all_resp_emps)
+                (current_emps and bool(current_emps & all_resp_emps)) or
+                (user.name and any(r.name and r.name.lower() == user.name.lower() for r in all_resp_emps))
             )
-            rec.can_current_user_complete = bool(is_assigned or is_lead_or_above)
+            # Only assigned employee(s) have the right to complete or submit the task
+            rec.can_current_user_complete = is_assigned
 
     def _search_can_user_approve(self, operator, value):
         user = self.env.user
@@ -988,34 +982,28 @@ class ProjectManageScope(models.Model):
         The hierarchy begins with Team Lead review (pending_tl).
         """
         user = self.env.user
-        current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
-        is_lead_or_above = bool(
-            self.env.is_superuser() or
-            user.id in (1, 2) or
-            user.has_group('base.group_system') or
-            user.has_group('base.group_erp_manager') or
-            user.has_group('project_manage.group_project_manage_administrator') or
-            user.has_group('project_manage.group_project_manage_ceo') or
-            user.has_group('project_manage.group_project_manage_vp') or
-            user.has_group('project_manage.group_project_manage_manager') or
-            user.has_group('project_manage.group_project_manage_team_lead') or
-            (hasattr(user, '_is_admin') and user._is_admin())
-        )
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
 
         for rec in self:
-            if not is_lead_or_above:
-                if not rec.responsible_ids and not rec.responsible_id:
-                    raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
-                all_resp_users = rec.responsible_ids.mapped('user_id')
-                if rec.responsible_id and rec.responsible_id.user_id:
-                    all_resp_users |= rec.responsible_id.user_id
-                all_resp_emps = rec.responsible_ids
-                if rec.responsible_id:
-                    all_resp_emps |= rec.responsible_id
-                is_assigned = (user in all_resp_users) or (current_emp and current_emp in all_resp_emps)
-                if not is_assigned:
-                    names = ', '.join(rec.responsible_ids.mapped('name')) or (rec.responsible_id.name if rec.responsible_id else '')
-                    raise UserError(_("Only the task assigned employee(s) (%s) have the right to complete this task.", names))
+            if not rec.responsible_ids and not rec.responsible_id:
+                raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
+            all_resp_users = rec.responsible_ids.mapped('user_id')
+            if rec.responsible_id and rec.responsible_id.user_id:
+                all_resp_users |= rec.responsible_id.user_id
+            all_resp_emps = rec.responsible_ids
+            if rec.responsible_id:
+                all_resp_emps |= rec.responsible_id
+            is_assigned = bool(
+                (user in all_resp_users) or
+                (current_emps and bool(current_emps & all_resp_emps)) or
+                (user.name and any(r.name and r.name.lower() == user.name.lower() for r in all_resp_emps))
+            )
+            if not is_assigned:
+                names = ', '.join(rec.responsible_ids.mapped('name')) or (rec.responsible_id.name if rec.responsible_id else '')
+                raise UserError(_("Only the task assigned employee(s) (%s) have the right to complete this task.", names))
 
             if rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 continue
@@ -1309,6 +1297,24 @@ class ProjectManageScope(models.Model):
         resp_names = ', '.join(scope.responsible_ids.sudo().mapped('name')) if scope.responsible_ids else (scope.responsible_id.sudo().name if scope.responsible_id else (scope.responsible or 'Unassigned'))
         is_late = bool(scope.end_date and today > scope.end_date and scope.state != 'done')
 
+        all_resp_users = scope.responsible_ids.mapped('user_id')
+        if scope.responsible_id and scope.responsible_id.user_id:
+            all_resp_users |= scope.responsible_id.user_id
+        all_resp_emps = scope.responsible_ids
+        if scope.responsible_id:
+            all_resp_emps |= scope.responsible_id
+
+        emp_domain = [('user_id', '=', user.id)]
+        if user.email:
+            emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
+        current_emps = self.env['hr.employee'].sudo().search(emp_domain)
+
+        is_assigned = bool(
+            (user in all_resp_users) or
+            (current_emps and bool(current_emps & all_resp_emps)) or
+            (user.name and any(r.name and r.name.lower() == user.name.lower() for r in all_resp_emps))
+        )
+
         is_admin = bool(
             self.env.is_superuser() or
             user.id in (1, 2) or
@@ -1320,7 +1326,11 @@ class ProjectManageScope(models.Model):
         is_approved = bool(scope.approval_state == 'approved' or scope.state == 'done')
         is_manager = self._is_manager_or_above()
         can_modify_documents = bool(is_manager or not is_approved)
-        can_submit = bool(scope.can_current_user_complete)
+        can_submit = bool(
+            is_assigned and
+            scope.state not in ('done', 'cancelled') and
+            scope.approval_state not in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')
+        )
 
         return {
             'id': scope.id,
@@ -1350,6 +1360,7 @@ class ProjectManageScope(models.Model):
             'evidence_proof': scope.evidence_proof or '',
             'approval_authority': scope.approval_authority or 'tl',
             'approval_authority_label': dict(scope._fields['approval_authority'].selection).get(scope.approval_authority, 'Team Lead'),
+            'is_assigned': is_assigned,
             'can_approve': can_approve,
             'can_submit': can_submit,
             'is_approved': is_approved,

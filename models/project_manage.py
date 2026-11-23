@@ -1917,7 +1917,12 @@ class ProjectManage(models.Model):
         scope = self.env['project.manage.scope'].browse(int(sid))
         if not scope.exists():
             return {'error': _("Task not found.")}
-        scope.action_submit_for_approval()
+        try:
+            scope.action_submit_for_approval()
+        except UserError as e:
+            return {'error': e.name}
+        except Exception as e:
+            return {'error': str(e)}
         return {'success': True}
 
     @api.model

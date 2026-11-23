@@ -4544,7 +4544,8 @@
                                         <i class="fa fa-shield text-primary me-1"></i> Managed directly in dashboard
                                     </div>
                                     <div class="pm-modal-footer-actions">
-                                        <t t-if="state.scopeDetailData and state.scopeDetailData.can_submit">
+                                        <!-- Only assigned employee(s) have the Submit for Approval button in this wizard -->
+                                        <t t-if="state.scopeDetailData and state.scopeDetailData.can_submit and state.scopeDetailData.is_assigned">
                                             <button type="button" class="btn btn-sm btn-primary fw-semibold px-4 py-2 rounded-pill pm-btn-modal-submit d-inline-flex align-items-center justify-content-center gap-1 shadow-sm"
                                                     t-att-disabled="state.scopeDetailSubmitting"
                                                     t-on-click="() => this.submitTaskFromModal(state.scopeDetailData.id)"
