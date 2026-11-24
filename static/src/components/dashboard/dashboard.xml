@@ -556,7 +556,7 @@
                     </div>
                 </section>
 
-                <!-- ==================== 3. THIRD ROW: TEAMS + TEAM COMPARISON ==================== -->
+                <!-- ==================== 3. THIRD ROW: TEAMS ==================== -->
                 <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants - not others performance) -->
                 <t t-if="!state.data.user_info.is_consultant">
                 <section class="pm-teams-row">
@@ -628,50 +628,6 @@
                             </div>
                         </div>
                     </t>
-
-                    <!-- Team Comparison Widget -->
-                    <div class="pm-team-card pm-comparison-card">
-                        <div class="pm-team-card-header">
-                            <div>
-                                <h4 class="pm-team-title">Team comparison</h4>
-                                <p class="pm-team-lead">Higher is better</p>
-                            </div>
-                        </div>
-                        <div class="pm-comparison-body">
-                            <div class="pm-comp-legend">
-                                <span><span class="pm-legend-sq bg-blue-dark"></span> Productivity</span>
-                                <span><span class="pm-legend-sq bg-blue-mid"></span> Completed tasks</span>
-                                <span><span class="pm-legend-sq bg-blue-light"></span> On-time</span>
-                            </div>
-
-                            <div class="pm-comp-bars-container">
-                                <div class="pm-comp-grid-lines">
-                                    <div class="pm-grid-line"><span>100</span></div>
-                                    <div class="pm-grid-line"><span>75</span></div>
-                                    <div class="pm-grid-line"><span>50</span></div>
-                                </div>
-                                <div class="pm-comp-groups-row">
-                                    <t t-if="!state.data.teams or state.data.teams.length === 0">
-                                        <div class="text-center text-muted w-100 py-3" style="font-size: 0.75rem;">
-                                            No team comparison data
-                                        </div>
-                                    </t>
-                                    <t t-else="">
-                                        <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
-                                            <div class="pm-comp-group">
-                                                <div class="pm-group-bars">
-                                                    <div class="pm-group-bar bg-blue-dark" t-attf-style="height: {{ (tm.productivity / 100) * 85 }}%;" t-att-title="'Productivity: ' + tm.productivity + '%'"></div>
-                                                    <div class="pm-group-bar bg-blue-mid" t-attf-style="height: {{ (tm.completed_tasks_pct / 100) * 85 }}%;" t-att-title="'Completed tasks: ' + tm.completed_tasks_pct + '%'"></div>
-                                                    <div class="pm-group-bar bg-blue-light" t-attf-style="height: {{ (tm.on_time / 100) * 85 }}%;" t-att-title="'On-time: ' + tm.on_time + '%'"></div>
-                                                </div>
-                                                <span class="pm-group-name" t-esc="tm.name"/>
-                                            </div>
-                                        </t>
-                                    </t>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </section>
                 </t>
 
