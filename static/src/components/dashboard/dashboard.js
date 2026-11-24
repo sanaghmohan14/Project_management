@@ -69,6 +69,11 @@ export class ProjectManageDashboard extends Component {
             projectCardsWizardFilterType: "all",
             projectCardsWizardFilterValue: "",
             projectCardsWizardSearch: "",
+            teamPerformanceWizardOpen: false,
+            teamPerformanceLoading: false,
+            teamPerformanceData: null,
+            selectedPerformanceTeamId: 'all',
+            teamPerformanceSearch: "",
             calendarTimeFilter: 'all',    // 'all', 'today', 'tomorrow', 'week', 'month'
             calendarViewMode: 'week',     // 'week' (7-col grid), 'month', 'agenda'
             calendarCategoryFilter: 'all', // 'all', 'documentation', 'implementation'
@@ -111,6 +116,8 @@ export class ProjectManageDashboard extends Component {
                 project_coordinator_id: "",
                 consultant_ids: [],
                 load_standard_scopes: true,
+                selected_scopes: Array.from({length: 30}, (_, i) => i),
+                scope_search_query: "",
                 import_file: null,
                 import_filename: "",
             },
@@ -172,6 +179,8 @@ export class ProjectManageDashboard extends Component {
             taskConsultantFilter: 'all', // 'all' or consultant id
             taskProjectFilter: 'all', // 'all' or project id
             taskSearchQuery: "",
+            taskPage: 1,
+            taskPageSize: 20,
             data: {
                 company_name: "Benac Business Solutions",
                 current_date_str: "Loading...",
@@ -602,26 +611,32 @@ export class ProjectManageDashboard extends Component {
     // ==================== UNIVERSAL TASKS HUB METHODS & GETTER ====================
     setTaskTab(tab) {
         this.state.taskTab = tab;
+        this.state.taskPage = 1;
     }
 
     setTaskCategoryFilter(cat) {
         this.state.taskCategoryFilter = cat;
+        this.state.taskPage = 1;
     }
 
     setTaskPriorityFilter(ev) {
         this.state.taskPriorityFilter = ev.target.value;
+        this.state.taskPage = 1;
     }
 
     setTaskConsultantFilter(ev) {
         this.state.taskConsultantFilter = ev.target.value;
+        this.state.taskPage = 1;
     }
 
     setTaskProjectFilter(ev) {
         this.state.taskProjectFilter = ev.target.value;
+        this.state.taskPage = 1;
     }
 
     onTaskSearchChange(ev) {
         this.state.taskSearchQuery = ev.target.value.toLowerCase().trim();
+        this.state.taskPage = 1;
     }
 
     clearTaskFilters() {
@@ -631,6 +646,8 @@ export class ProjectManageDashboard extends Component {
         this.state.taskConsultantFilter = 'all';
         this.state.taskProjectFilter = 'all';
         this.state.taskSearchQuery = '';
+        this.state.taskPage = 1;
+        this.state.taskPageSize = 20;
     }
 
     scrollToApprovals() {
@@ -727,6 +744,70 @@ export class ProjectManageDashboard extends Component {
         });
 
         return list;
+    }
+
+    get paginatedTasks() {
+        const tasks = this.filteredTasks;
+        const page = this.state.taskPage || 1;
+        const size = this.state.taskPageSize || 20;
+        const start = (page - 1) * size;
+        return tasks.slice(start, start + size);
+    }
+
+    get totalTaskPages() {
+        const total = this.filteredTasks.length;
+        const size = this.state.taskPageSize || 20;
+        return Math.max(1, Math.ceil(total / size));
+    }
+
+    get taskPaginationInfo() {
+        const total = this.filteredTasks.length;
+        if (!total) {
+            return { start: 0, end: 0, total: 0 };
+        }
+        const page = this.state.taskPage || 1;
+        const size = this.state.taskPageSize || 20;
+        const start = (page - 1) * size + 1;
+        const end = Math.min(page * size, total);
+        return { start, end, total };
+    }
+
+    get hasMoreTasks() {
+        const total = this.filteredTasks.length;
+        const page = this.state.taskPage || 1;
+        const size = this.state.taskPageSize || 20;
+        return (page * size) < total;
+    }
+
+    nextTaskPage() {
+        if (this.state.taskPage < this.totalTaskPages) {
+            this.state.taskPage++;
+            this.scrollToTasksTable();
+        }
+    }
+
+    prevTaskPage() {
+        if (this.state.taskPage > 1) {
+            this.state.taskPage--;
+            this.scrollToTasksTable();
+        }
+    }
+
+    loadMoreTasks() {
+        const total = this.filteredTasks.length;
+        const currentLimit = (this.state.taskPage || 1) * (this.state.taskPageSize || 20);
+        if (currentLimit < total) {
+            this.state.taskPageSize = (this.state.taskPageSize || 20) + 20;
+        }
+    }
+
+    scrollToTasksTable() {
+        if (typeof document !== 'undefined') {
+            const el = document.querySelector(".pm-mytasks-table-wrap");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        }
     }
 
     // ==================== 5-VIEW TAB NAVIGATION METHODS ====================
@@ -992,6 +1073,101 @@ export class ProjectManageDashboard extends Component {
     closeProjectCardsWizard() {
         this.state.projectCardsWizardOpen = false;
         this.state.projectCardsWizardSearch = "";
+    }
+
+    get topThreeTeams() {
+        const rawTeams = (this.state.data && this.state.data.teams) || [];
+        if (!rawTeams.length) {
+            return { p1: null, p2: null, p3: null, hasTeams: false, totalTeamsCount: 0 };
+        }
+        const teams = [...rawTeams];
+        teams.sort((a, b) => {
+            const bDone = b.completed_tasks_count || 0;
+            const aDone = a.completed_tasks_count || 0;
+            if (bDone !== aDone) return bDone - aDone;
+            const bPct = b.completed_tasks_pct || 0;
+            const aPct = a.completed_tasks_pct || 0;
+            if (bPct !== aPct) return bPct - aPct;
+            return (b.productivity || 0) - (a.productivity || 0);
+        });
+
+        const formatTeam = (tm, rank) => {
+            if (!tm) return null;
+            const done = tm.completed_tasks_count || 0;
+            const pct = tm.completed_tasks_pct || 0;
+            const score = (done * 10.0 + pct * 0.5).toFixed(1);
+            return {
+                ...tm,
+                rank,
+                score,
+            };
+        };
+
+        const p1 = formatTeam(teams[0], 1);
+        const p2 = formatTeam(teams[1], 2);
+        const p3 = formatTeam(teams[2], 3);
+
+        return {
+            p1,
+            p2,
+            p3,
+            hasTeams: true,
+            totalTeamsCount: teams.length,
+        };
+    }
+
+    get teamPodiumTop3() {
+        const emps = (this.state.teamPerformanceData && this.state.teamPerformanceData.employees) || [];
+        const p1 = emps.find(e => e.rank === 1) || emps[0] || null;
+        const p2 = emps.find(e => e.rank === 2) || (emps.length > 1 ? emps[1] : null);
+        const p3 = emps.find(e => e.rank === 3) || (emps.length > 2 ? emps[2] : null);
+        return { p1, p2, p3 };
+    }
+
+    get filteredPerformanceEmployees() {
+        const emps = (this.state.teamPerformanceData && this.state.teamPerformanceData.employees) || [];
+        const query = (this.state.teamPerformanceSearch || "").trim().toLowerCase();
+        if (!query) return emps;
+        return emps.filter(e =>
+            (e.name && e.name.toLowerCase().includes(query)) ||
+            (e.job_title && e.job_title.toLowerCase().includes(query)) ||
+            (e.team_str && e.team_str.toLowerCase().includes(query))
+        );
+    }
+
+    async openTeamPerformanceWizard(teamId = 'all', ev = null) {
+        if (ev) ev.stopPropagation();
+        const targetTeamId = teamId || 'all';
+        this.state.selectedPerformanceTeamId = targetTeamId;
+        this.state.teamPerformanceWizardOpen = true;
+        this.state.teamPerformanceLoading = true;
+        try {
+            const res = await this.orm.call("project.manage", "get_team_employee_performance", [targetTeamId]);
+            if (res && !res.error) {
+                this.state.teamPerformanceData = res;
+            } else {
+                if (this.notification) {
+                    this.notification.add(res?.error || "Failed to load consultant performance.", { type: "danger" });
+                }
+            }
+        } catch (err) {
+            console.error("Failed to load consultant performance:", err);
+            if (this.notification) {
+                this.notification.add("Failed to load consultant performance.", { type: "danger" });
+            }
+        } finally {
+            this.state.teamPerformanceLoading = false;
+        }
+    }
+
+    filterPerformanceTeam(teamId) {
+        this.openTeamPerformanceWizard(teamId);
+    }
+
+    closeTeamPerformanceWizard() {
+        this.state.teamPerformanceWizardOpen = false;
+        this.state.teamPerformanceData = null;
+        this.state.teamPerformanceSearch = "";
     }
 
     openProjectScopesFromCardWizard(projectId) {
@@ -2324,7 +2500,7 @@ export class ProjectManageDashboard extends Component {
                 }
             }
 
-            const defaultScope = this.state.selectedScopeName || (this.state.projectScopesData && this.state.projectScopesData.available_scopes && this.state.projectScopesData.available_scopes[0]) || 'Scope 0 Project Initiation & Governance';
+            const defaultScope = this.state.selectedScopeName || (this.state.projectScopesData && this.state.projectScopesData.available_scopes && this.state.projectScopesData.available_scopes[0]) || 'Project Initiation & Governance';
             const cat = options.category || (this.state.activeCategoryFilter === 'implementation' ? 'Implementation' : 'Documentation');
 
             this.state.wizardData = {
@@ -2440,6 +2616,12 @@ export class ProjectManageDashboard extends Component {
 
     async saveScopeWizard(andNext = false) {
         if (this.state.savingScope) return;
+        if (!this.state.wizardData.scope || !this.state.wizardData.scope.trim()) {
+            if (this.notification) {
+                this.notification.add("Scope (Functional Area) is required.", { type: "warning" });
+            }
+            return;
+        }
         if (!this.state.wizardData.name || !this.state.wizardData.name.trim()) {
             if (this.notification) {
                 this.notification.add("Task / Document Name is required.", { type: "warning" });
@@ -2855,6 +3037,8 @@ export class ProjectManageDashboard extends Component {
                 project_coordinator_id: "",
                 consultant_ids: [],
                 load_standard_scopes: true,
+                selected_scopes: (meta.standard_scopes && meta.standard_scopes.length > 0) ? meta.standard_scopes.map(s => s.scope_no) : Array.from({length: 30}, (_, i) => i),
+                scope_search_query: "",
                 import_file: null,
                 import_filename: "",
             };
@@ -2987,6 +3171,49 @@ export class ProjectManageDashboard extends Component {
         }
     }
 
+    get filteredStandardScopes() {
+        const scopes = (this.state.projectFormData && this.state.projectFormData.standard_scopes) || [];
+        const q = (this.state.newProjectData && this.state.newProjectData.scope_search_query || "").toLowerCase().trim();
+        if (!q) return scopes;
+        return scopes.filter(s =>
+            (s.name && s.name.toLowerCase().includes(q)) ||
+            String(s.scope_no).includes(q)
+        );
+    }
+
+    isStandardScopeSelected(scopeNo) {
+        const selected = (this.state.newProjectData && this.state.newProjectData.selected_scopes) || [];
+        return selected.includes(scopeNo);
+    }
+
+    toggleStandardScope(scopeNo) {
+        if (!this.state.newProjectData.selected_scopes) {
+            this.state.newProjectData.selected_scopes = [];
+        }
+        const idx = this.state.newProjectData.selected_scopes.indexOf(scopeNo);
+        if (idx === -1) {
+            this.state.newProjectData.selected_scopes.push(scopeNo);
+        } else {
+            this.state.newProjectData.selected_scopes.splice(idx, 1);
+        }
+    }
+
+    selectAllStandardScopes() {
+        const scopes = (this.state.projectFormData && this.state.projectFormData.standard_scopes) || [];
+        this.state.newProjectData.selected_scopes = scopes.map(s => s.scope_no);
+    }
+
+    deselectAllStandardScopes() {
+        this.state.newProjectData.selected_scopes = [];
+    }
+
+    get selectedStandardScopesTasksCount() {
+        const scopes = (this.state.projectFormData && this.state.projectFormData.standard_scopes) || [];
+        const selected = (this.state.newProjectData && this.state.newProjectData.selected_scopes) || [];
+        const selSet = new Set(selected);
+        return scopes.filter(s => selSet.has(s.scope_no)).reduce((acc, s) => acc + (s.tasks_count || 0), 0);
+    }
+
     async saveNewProject() {
         const data = this.state.newProjectData;
         if (!data.name || !data.name.trim()) {
@@ -3015,6 +3242,10 @@ export class ProjectManageDashboard extends Component {
         }
         if (!data.consultant_ids || data.consultant_ids.length === 0) {
             data.consultant_ids = [parseInt(data.team_lead_id, 10)];
+        }
+        if (data.load_standard_scopes && (!data.selected_scopes || data.selected_scopes.length === 0)) {
+            if (this.notification) this.notification.add("Please select at least one standard scope or turn off the pre-populate toggle.", { type: "warning" });
+            return;
         }
 
         this.state.savingNewProject = true;

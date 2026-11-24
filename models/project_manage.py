@@ -1,4 +1,5 @@
 import base64
+import collections
 import datetime
 import re
 import uuid
@@ -694,7 +695,7 @@ class ProjectManage(models.Model):
             }
         }
 
-    def action_load_standard_scopes(self):
+    def action_load_standard_scopes(self, selected_scopes=None):
         self.ensure_one()
         import os
         from odoo import tools
@@ -715,7 +716,7 @@ class ProjectManage(models.Model):
             'filename': 'default_scope_data.csv',
             'import_mode': 'append',
         })
-        return wizard.action_import()
+        return wizard.action_import(selected_scopes=selected_scopes)
 
     @api.model
     def _group_expand_states(self, states, domain=None, *args, **kwargs):
@@ -1228,6 +1229,14 @@ class ProjectManage(models.Model):
                     'project_ids': lead_projects.ids,
                 })
 
+        # Calculate scores and rank teams strictly based on task completion
+        for tm in teams_data:
+            tm['score'] = round(((tm.get('completed_tasks_count') or 0) * 10.0) + ((tm.get('completed_tasks_pct') or 0) * 0.5), 1)
+        teams_data.sort(key=lambda x: (x.get('completed_tasks_count', 0), x.get('completed_tasks_pct', 0), x.get('productivity', 0)), reverse=True)
+        for idx, tm in enumerate(teams_data, 1):
+            tm['rank'] = idx
+        top_3_teams = [dict(tm) for tm in teams_data[:3]]
+
         # Build real project rows
         projects_list = []
         for p in projects:
@@ -1276,7 +1285,14 @@ class ProjectManage(models.Model):
             task_emps = (selected_proj.scope_ids.mapped('responsible_ids') | selected_proj.scope_ids.mapped('responsible_id'))
             all_consultants = len(assigned_emps | task_emps)
         elif can_see_all_teams:
-            all_consultants = self.env['hr.employee'].sudo().search_count([])
+            all_scopes = self.env['project.manage.scope'].sudo().search([
+                ('project_id', 'in', projects.ids),
+                ('is_creation_approval', '=', False),
+                ('state', '!=', 'draft'),
+            ])
+            task_emps = all_scopes.mapped('responsible_ids') | all_scopes.mapped('responsible_id')
+            proj_leads = projects.mapped('team_lead_id')
+            all_consultants = len((proj_consultants | task_emps | proj_leads).filtered(lambda e: e.exists()))
         else:
             all_consultants = len(team_member_emps | proj_consultants)
 
@@ -1869,6 +1885,7 @@ class ProjectManage(models.Model):
             'donut_poor_offset': donut_poor_offset,
             'risk_needle_angle': risk_needle_angle,
             'teams': teams_data,
+            'top_3_teams': top_3_teams,
             'all_teams_filter': filter_teams,
             'projects': projects_list,
             'all_projects_filter': filter_projects,
@@ -2484,8 +2501,47 @@ class ProjectManage(models.Model):
         return self.get_project_scopes_dashboard(project.id)
 
     @api.model
+    def get_standard_scopes_list(self):
+        """Read default_scope_data.csv and return metadata for all 30 standard scopes."""
+        import os
+        import csv
+        from collections import OrderedDict
+        from odoo import tools
+        try:
+            csv_path = tools.file_path('project_manage/data/default_scope_data.csv')
+        except Exception:
+            csv_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', 'data', 'default_scope_data.csv'))
+
+        scopes_map = OrderedDict()
+        if csv_path and os.path.exists(csv_path):
+            try:
+                with open(csv_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        s_no = row.get('Scope_No')
+                        s_name = row.get('Scope')
+                        if s_no is not None and s_name:
+                            try:
+                                s_no_int = int(s_no.strip())
+                            except ValueError:
+                                continue
+                            s_name = s_name.strip()
+                            if s_no_int not in scopes_map:
+                                scopes_map[s_no_int] = {
+                                    'scope_no': s_no_int,
+                                    'name': s_name,
+                                    'display_name': f"Scope {s_no_int}: {s_name}",
+                                    'tasks_count': 0,
+                                }
+                            scopes_map[s_no_int]['tasks_count'] += 1
+            except Exception:
+                pass
+
+        return list(scopes_map.values())
+
+    @api.model
     def get_new_project_form_data(self):
-        """Return lists of Partners, Teams, Employees, and Tags for in-dashboard project creation."""
+        """Return lists of Partners, Teams, Employees, Tags, and Standard Scopes for in-dashboard project creation."""
         user = self.env.user
         today = fields.Date.context_today(self)
         current_emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
@@ -2542,6 +2598,9 @@ class ProjectManage(models.Model):
         tags = self.env['project.manage.tag'].sudo().search_read([], ['id', 'name', 'color'], order='name asc')
         tags_list = [{'id': t['id'], 'name': t['name'], 'color': t.get('color', 0)} for t in tags]
 
+        # 30 Standard Pre-populated Scopes
+        standard_scopes = self.get_standard_scopes_list()
+
         end_date = today + datetime.timedelta(days=90)
 
         return {
@@ -2550,6 +2609,7 @@ class ProjectManage(models.Model):
             'teams': teams_data,
             'employees': employees_list,
             'tags': tags_list,
+            'standard_scopes': standard_scopes,
             'default_manager_id': current_emp.id if current_emp else (employees_list[0]['id'] if employees_list else False),
             'default_date_start': today.strftime('%Y-%m-%d'),
             'default_date_end': end_date.strftime('%Y-%m-%d'),
@@ -2665,7 +2725,8 @@ class ProjectManage(models.Model):
                 raise UserError(_("Project created, but scope file import failed: %s") % str(e))
         elif load_standard_scopes:
             try:
-                new_project.action_load_standard_scopes()
+                selected_scopes = vals.get('selected_scopes')
+                new_project.action_load_standard_scopes(selected_scopes=selected_scopes)
             except Exception:
                 pass
 
@@ -3217,6 +3278,250 @@ class ProjectManage(models.Model):
             return {'error': _('Review not found.')}
         except Exception as e:
             return {'error': str(e)}
+
+
+    @api.model
+    def get_team_employee_performance(self, team_id='all'):
+        """
+        Return task-completion-based performance leaderboard and member breakdown.
+        When team_id is 'all', None, False, or '0', returns global performance for ALL consultants
+        across all tasks irrespective of teams or projects.
+        When team_id is specified, filters to that specific team.
+        """
+        Team = self.env['project.manage.team'].sudo()
+        Project = self.env['project.manage'].sudo()
+        Scope = self.env['project.manage.scope'].sudo()
+        Employee = self.env['hr.employee'].sudo()
+
+        is_all = not team_id or team_id in ('all', 'all_consultants', '0', 0, False)
+
+        team = False
+        team_name = "All Consultants"
+        lead_name = "Global Performance"
+        lead_user = False
+        projects = Project.browse([])
+
+        if is_all:
+            projects = Project.search([])
+            scopes = Scope.search([
+                ('project_id', 'in', projects.ids),
+                ('is_creation_approval', '=', False),
+                ('state', '!=', 'draft'),
+            ])
+            # Only consultants explicitly assigned to projects, tasks in projects, or project leads
+            proj_consultants = projects.mapped('consultant_ids')
+            scope_consultants = scopes.mapped('responsible_ids') | scopes.mapped('responsible_id')
+            proj_leads = projects.mapped('team_lead_id')
+            relevant_emps = (proj_consultants | scope_consultants | proj_leads).filtered(
+                lambda e: e.exists() and (e.active if 'active' in e else True)
+            )
+        else:
+            if isinstance(team_id, int) or (isinstance(team_id, str) and team_id.isdigit()):
+                team = Team.browse(int(team_id))
+                if team.exists():
+                    team_name = team.name
+                    if team.team_lead_id:
+                        lead_name = team.team_lead_id.name
+                        lead_user = team.team_lead_id
+                    projects = team.project_ids
+            elif isinstance(team_id, str) and team_id.startswith('lead_'):
+                try:
+                    lead_user_id = int(team_id.replace('lead_', ''))
+                    lead_user = self.env['res.users'].sudo().browse(lead_user_id)
+                    if lead_user.exists():
+                        lead_name = lead_user.name
+                        team_name = f"Team {lead_user.name}"
+                        projects = Project.search([('team_lead_id', '=', lead_user.id)])
+                except Exception:
+                    pass
+
+            if not projects and isinstance(team_id, str) and not team_id.isdigit() and not team_id.startswith('lead_'):
+                team_search = Team.search([('name', '=', team_id)], limit=1)
+                if team_search:
+                    team = team_search
+                    team_name = team.name
+                    if team.team_lead_id:
+                        lead_name = team.team_lead_id.name
+                        lead_user = team.team_lead_id
+                    projects = team.project_ids
+
+            scopes = Scope.search([
+                ('project_id', 'in', projects.ids),
+                ('is_creation_approval', '=', False),
+                ('state', '!=', 'draft'),
+            ])
+
+            relevant_emps = Employee.browse([])
+            if lead_user:
+                lead_emp = Employee.search([('user_id', '=', lead_user.id)], limit=1)
+                if lead_emp:
+                    relevant_emps |= lead_emp
+            if team and team.team_lead_id:
+                lead_emp = Employee.search([('user_id', '=', team.team_lead_id.id)], limit=1)
+                if lead_emp:
+                    relevant_emps |= lead_emp
+            for p in projects:
+                if p.team_lead_id:
+                    relevant_emps |= p.team_lead_id
+                if p.consultant_ids:
+                    relevant_emps |= p.consultant_ids
+            if team and team.member_ids:
+                mem_emps = Employee.search([('user_id', 'in', team.member_ids.ids)])
+                relevant_emps |= mem_emps
+            assigned_emps = scopes.mapped('responsible_ids') | scopes.mapped('responsible_id')
+            relevant_emps |= assigned_emps
+            relevant_emps = relevant_emps.filtered(lambda e: e.exists() and (e.active if 'active' in e else True))
+
+        today = fields.Date.context_today(self)
+
+        # Map user_id to employee IDs for rapid matching
+        user_to_emp_ids = collections.defaultdict(set)
+        for emp in relevant_emps:
+            if emp.user_id:
+                user_to_emp_ids[emp.user_id.id].add(emp.id)
+
+        # Precompute project names for each employee
+        emp_project_names_map = collections.defaultdict(set)
+        for p in projects:
+            p_name = p.name or 'Project'
+            for c in p.consultant_ids:
+                emp_project_names_map[c.id].add(p_name)
+            if p.team_lead_id:
+                emp_project_names_map[p.team_lead_id.id].add(p_name)
+                if p.team_lead_id.user_id:
+                    for eid in user_to_emp_ids.get(p.team_lead_id.user_id.id, ()):
+                        emp_project_names_map[eid].add(p_name)
+
+        # Group scopes by employee ID in a single fast pass O(N)
+        emp_scopes_dict = collections.defaultdict(list)
+        for s in scopes:
+            assigned_emp_ids = set()
+            if s.responsible_ids:
+                assigned_emp_ids.update(s.responsible_ids.ids)
+            if s.responsible_id:
+                assigned_emp_ids.add(s.responsible_id.id)
+            for uid in s.responsible_ids.mapped('user_id').ids:
+                assigned_emp_ids.update(user_to_emp_ids.get(uid, ()))
+            if s.responsible_id and s.responsible_id.user_id:
+                assigned_emp_ids.update(user_to_emp_ids.get(s.responsible_id.user_id.id, ()))
+
+            for eid in assigned_emp_ids:
+                emp_scopes_dict[eid].append(s)
+                if s.project_id and s.project_id.name:
+                    emp_project_names_map[eid].add(s.project_id.name)
+
+        emp_stats_list = []
+        for emp in relevant_emps:
+            if not emp or not emp.id:
+                continue
+
+            emp_projects = emp_project_names_map.get(emp.id, set())
+            emp_scopes = emp_scopes_dict.get(emp.id, [])
+            tot = len(emp_scopes)
+
+            # Strictly show ONLY consultants assigned to projects or active tasks
+            if not emp_projects and tot == 0:
+                continue
+
+            done = 0
+            in_prog = 0
+            todo = 0
+            overdue = 0
+            on_time_done = 0
+
+            for s in emp_scopes:
+                if s.state == 'done':
+                    done += 1
+                    if not s.end_date or not s.last_approval_date or s.last_approval_date.date() <= s.end_date:
+                        on_time_done += 1
+                elif s.state in ('in_progress', 'under_review'):
+                    in_prog += 1
+                elif s.state == 'todo':
+                    todo += 1
+
+                if s.state != 'done' and s.end_date and today > s.end_date:
+                    overdue += 1
+
+            comp_rate = round((done / tot) * 100) if tot else 0
+            on_time_rate = round((on_time_done / done) * 100) if done else 100
+            pts = round((done * 10.0) + (comp_rate * 0.5), 1)
+
+            sorted_projs = sorted(list(emp_projects))
+            if sorted_projs:
+                team_str = ", ".join(sorted_projs[:2])
+                if len(sorted_projs) > 2:
+                    team_str += f" (+{len(sorted_projs) - 2} more)"
+            else:
+                team_str = "Assigned Consultant"
+
+            avatar_url = f"/web/image/hr.employee/{emp.id}/avatar_128"
+            has_image = bool(emp.image_128)
+            initial = (emp.name[:1] if emp.name else 'U').upper()
+
+            badge = '🏆 Top Performer' if (done >= 5 or (comp_rate >= 80 and done > 0)) else ('⭐ High Achiever' if done >= 2 else ('🚀 Active Member' if tot > 0 else '⏳ Standby'))
+            badge_class = 'pm-badge-gold' if (done >= 5 or (comp_rate >= 80 and done > 0)) else ('pm-badge-silver' if done >= 2 else ('pm-badge-bronze' if tot > 0 else 'pm-badge-neutral'))
+
+            emp_stats_list.append({
+                'id': emp.id,
+                'name': emp.name,
+                'job_title': emp.job_title or 'Consultant',
+                'team_str': team_str,
+                'avatar_url': avatar_url,
+                'has_image': has_image,
+                'initial': initial,
+                'total_tasks': tot,
+                'completed_tasks': done,
+                'in_progress_tasks': in_prog,
+                'todo_tasks': todo,
+                'overdue_tasks': overdue,
+                'completion_rate': comp_rate,
+                'on_time_rate': on_time_rate,
+                'score': pts,
+                'badge': badge,
+                'badge_class': badge_class,
+            })
+
+        # Sort strictly by task completion count, then completion percentage, then total tasks
+        emp_stats_list.sort(key=lambda x: (x['completed_tasks'], x['completion_rate'], x['total_tasks'], x['score']), reverse=True)
+        for idx, item in enumerate(emp_stats_list, 1):
+            item['rank'] = idx
+
+        # Available team filter options for the modal tabs
+        teams_filter = [{'id': 'all', 'name': 'All Consultants', 'count': len(emp_stats_list)}]
+        all_teams = Team.search([])
+        for tm in all_teams:
+            teams_filter.append({
+                'id': tm.id,
+                'name': tm.name,
+                'lead_name': tm.team_lead_id.name if tm.team_lead_id else '',
+            })
+        if not all_teams:
+            leads = Project.search([('team_lead_id', '!=', False)]).mapped('team_lead_id')
+            for lead in leads:
+                teams_filter.append({
+                    'id': f'lead_{lead.id}',
+                    'name': f"Team {lead.name}",
+                    'lead_name': lead.name,
+                })
+
+        total_team_tasks = len(scopes)
+        total_team_done = len(scopes.filtered(lambda s: s.state == 'done'))
+        overall_comp_pct = round((total_team_done / total_team_tasks) * 100) if total_team_tasks else 0
+
+        return {
+            'team_id': 'all' if is_all else (team.id if team else team_id),
+            'team_name': 'All Consultants' if is_all else team_name,
+            'is_all_consultants': is_all,
+            'lead_name': lead_name,
+            'projects_count': len(projects),
+            'members_count': len(emp_stats_list),
+            'total_tasks': total_team_tasks,
+            'completed_tasks': total_team_done,
+            'completion_pct': overall_comp_pct,
+            'employees': emp_stats_list,
+            'top_3': emp_stats_list[:3],
+            'teams_filter': teams_filter,
+        }
 
 
 class IrUiMenu(models.Model):

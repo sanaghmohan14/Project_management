@@ -52,7 +52,7 @@ class ProjectScopeImportWizard(models.TransientModel):
         """Robust date parsing for Excel dates, serials, and date strings."""
         return robust_parse_date(val)
 
-    def action_import(self):
+    def action_import(self, selected_scopes=None):
         self.ensure_one()
         if not self.file:
             raise UserError(_('Please choose a file to import.'))
@@ -156,7 +156,8 @@ class ProjectScopeImportWizard(models.TransientModel):
             rows,
             excel_auth_map=excel_auth_map,
             excel_date_map=excel_date_map,
-            excel_resp_map=excel_resp_map
+            excel_resp_map=excel_resp_map,
+            selected_scopes=selected_scopes,
         )
 
         # Guarantee all scopes in the target project have approval_authority pre-filled automatically
@@ -177,12 +178,26 @@ class ProjectScopeImportWizard(models.TransientModel):
             }
         }
 
-    def _process_rows(self, rows, excel_auth_map=None, excel_date_map=None, excel_resp_map=None):
+    def _process_rows(self, rows, excel_auth_map=None, excel_date_map=None, excel_resp_map=None, selected_scopes=None):
         Scope = self.env['project.manage.scope'].sudo().with_context(import_file=True, bypass_creation_approval=True)
         Employee = self.env['hr.employee'].sudo()
         excel_auth_map = excel_auth_map or {}
         excel_date_map = excel_date_map or {}
         excel_resp_map = excel_resp_map or {}
+
+        # Prepare scope filtering if selected_scopes is provided
+        selected_scope_nos = None
+        selected_scope_names = None
+        if selected_scopes is not None:
+            selected_scope_nos = set()
+            selected_scope_names = set()
+            for s in selected_scopes:
+                if isinstance(s, int):
+                    selected_scope_nos.add(s)
+                elif isinstance(s, str) and s.strip().isdigit():
+                    selected_scope_nos.add(int(s.strip()))
+                elif isinstance(s, str):
+                    selected_scope_names.add(s.strip().lower())
 
         # Cache existing scopes for this project to prevent duplicate creation
         existing_by_item_id = {}
@@ -279,6 +294,18 @@ class ProjectScopeImportWizard(models.TransientModel):
                     is_init = any(k in scope_str.lower() for k in ('initiation', 'governance'))
                     if not is_init and self.project_id:
                         scope_no = self.project_id._assign_next_scope_no(scope_str)
+
+                # Filter row if specific standard scopes were selected
+                if selected_scopes is not None:
+                    in_nos = scope_no in selected_scope_nos
+                    in_names = (
+                        scope_str and any(
+                            (s_name == scope_str.strip().lower() or s_name in scope_str.strip().lower())
+                            for s_name in selected_scope_names
+                        )
+                    )
+                    if not in_nos and not in_names:
+                        continue
 
                 cand_key = (scope_str.strip().lower(), cand_name.strip().lower(), cat_val)
 

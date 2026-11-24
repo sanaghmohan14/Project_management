@@ -570,8 +570,8 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-charts-row,
 .pm-widgets-row {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    grid-template-columns: 0.82fr 0.82fr 2fr 0.82fr 0.82fr;
+    gap: 12px;
     margin-bottom: 20px;
 }
 
@@ -579,12 +579,13 @@ body.o_dark_theme .pm-dashboard-wrapper {
     background: var(--pm-card-bg);
     border: 1px solid var(--pm-border);
     border-radius: 12px;
-    padding: 16px;
+    padding: 12px 10px;
     box-shadow: var(--pm-shadow);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    min-height: 200px;
+    min-height: 205px;
+    min-width: 0;
     box-sizing: border-box;
 
     &.pm-card-clickable {
@@ -625,22 +626,22 @@ body.o_dark_theme .pm-dashboard-wrapper {
     display: flex;
     align-items: center;
     justify-content: space-around;
-    padding: 10px 0;
+    padding: 6px 0;
     flex: 1;
 }
 
 .pm-donut-container {
     position: relative;
-    width: 110px !important;
-    height: 110px !important;
-    max-width: 110px !important;
-    max-height: 110px !important;
+    width: 76px !important;
+    height: 76px !important;
+    max-width: 76px !important;
+    max-height: 76px !important;
     flex-shrink: 0;
 }
 
 .pm-donut-svg {
-    width: 110px;
-    height: 110px;
+    width: 76px;
+    height: 76px;
     transform: rotate(-90deg);
 }
 
@@ -672,14 +673,14 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-donut-score {
-    font-size: 1.25rem;
+    font-size: 1.12rem;
     font-weight: 800;
     color: var(--pm-text-heading);
     line-height: 1;
 }
 
 .pm-donut-lbl {
-    font-size: 0.65rem;
+    font-size: 0.58rem;
     color: var(--pm-text-muted);
     margin-top: 2px;
 }
@@ -687,19 +688,19 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-donut-legend {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .pm-legend-row {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 0.82rem;
+    gap: 6px;
+    font-size: 0.76rem;
 
     &.pm-clickable-sub {
         cursor: pointer;
         border-radius: 4px;
-        padding: 2px 4px;
+        padding: 1px 3px;
         transition: background-color 0.15s ease, transform 0.15s ease;
 
         &:hover {
@@ -710,8 +711,8 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-legend-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
 }
 
@@ -721,7 +722,7 @@ body.o_dark_theme .pm-dashboard-wrapper {
 
 .pm-legend-label {
     color: var(--pm-text-body);
-    width: 38px;
+    width: 32px;
 }
 
 .pm-legend-val {
@@ -741,15 +742,15 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-status-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    padding-top: 4px;
+    gap: 4px;
+    padding-top: 2px;
 }
 
 .pm-status-tile {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
+    gap: 4px;
+    padding: 5px 6px;
     border-radius: 8px;
     background: var(--pm-tile-bg);
     border: 1px solid var(--pm-border);
@@ -768,13 +769,14 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-tile-icon-box {
-    width: 26px;
-    height: 26px;
-    border-radius: 6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.75rem;
+    font-size: 0.65rem;
+    flex-shrink: 0;
 }
 
 .bg-blue { background: #2563eb; }
@@ -783,19 +785,24 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-tile-info {
     display: flex;
     align-items: baseline;
-    gap: 5px;
+    gap: 4px;
+    min-width: 0;
 }
 
 .pm-tile-count {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
     font-weight: 700;
     color: var(--pm-text-heading);
+    line-height: 1;
 }
 
 .pm-tile-label {
-    font-size: 0.76rem;
+    font-size: 0.68rem;
     color: var(--pm-text-muted);
     font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 /* Widget 3: Gauge Speedometer */
@@ -809,10 +816,10 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-gauge-container {
-    width: 145px !important;
-    height: 75px !important;
-    max-width: 145px !important;
-    max-height: 75px !important;
+    width: 98px !important;
+    height: 50px !important;
+    max-width: 98px !important;
+    max-height: 50px !important;
     position: relative;
 }
 
@@ -822,27 +829,27 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-gauge-status-text {
-    font-size: 0.85rem;
+    font-size: 0.72rem;
     font-weight: 700;
     color: var(--pm-text-heading);
-    margin: 6px 0 8px 0;
+    margin: 2px 0 4px 0;
     text-align: center;
 }
 
 .pm-risk-chips-row {
     display: flex;
-    gap: 8px;
+    gap: 3px;
     width: 100%;
     justify-content: center;
 }
 
 .pm-risk-chip {
-    padding: 4px 10px;
-    border-radius: 6px;
+    padding: 2px 4px;
+    border-radius: 5px;
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 0.75rem;
+    gap: 2px;
+    font-size: 0.64rem;
     font-weight: 600;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 
@@ -873,15 +880,15 @@ body.o_dark_theme .pm-dashboard-wrapper {
     display: flex;
     align-items: flex-end;
     justify-content: space-around;
-    height: 125px;
-    padding-top: 10px;
+    height: 95px;
+    padding-top: 4px;
 }
 
 .pm-cond-col {
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 22%;
+    width: 23%;
     height: 100%;
     justify-content: flex-end;
     transition: transform 0.15s ease, background-color 0.15s ease;
@@ -889,7 +896,7 @@ body.o_dark_theme .pm-dashboard-wrapper {
     &.pm-col-clickable {
         cursor: pointer;
         border-radius: 6px;
-        padding: 4px 2px;
+        padding: 3px 1px;
 
         &:hover {
             transform: translateY(-2px);
@@ -905,15 +912,15 @@ body.o_dark_theme .pm-dashboard-wrapper {
 }
 
 .pm-cond-val {
-    font-size: 0.85rem;
+    font-size: 0.72rem;
     font-weight: 700;
     color: var(--pm-text-heading);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
 }
 
 .pm-cond-bar-track {
-    width: 18px;
-    height: 80px;
+    width: 11px;
+    height: 58px;
     display: flex;
     align-items: flex-end;
 }
@@ -934,9 +941,9 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-theme-dark .bg-overdue { background: #f43f5e; }
 
 .pm-cond-lbl {
-    font-size: 0.7rem;
+    font-size: 0.64rem;
     color: var(--pm-text-muted);
-    margin-top: 6px;
+    margin-top: 5px;
     text-align: center;
 }
 
@@ -1336,6 +1343,436 @@ body.o_dark_theme .pm-dashboard-wrapper {
 .pm-trend-success { color: #059669; }
 .pm-trend-danger { color: #dc2626; }
 .pm-trend-info { color: #2563eb; }
+
+/* =========================================================
+   EXECUTIVE LEADERBOARD & PODIUM COMPONENT (TOP 3 & WIZARD)
+   ========================================================= */
+/* Mini Podium Widget (Card 3 in Charts Row) */
+.pm-team-perf-card {
+    background: #0b1329 !important;
+    background: linear-gradient(180deg, #101c38 0%, #0a1022 100%) !important;
+    border: 1px solid #1e293b !important;
+    border-radius: 12px !important;
+    color: #ffffff !important;
+    padding: 12px 14px 0 14px !important; /* Flush at bottom for pedestals */
+    position: relative;
+    overflow: hidden;
+
+    .pm-widget-header {
+        margin-bottom: 4px !important;
+    }
+
+    .pm-widget-title {
+        color: #ffffff !important;
+        font-size: 0.92rem !important;
+        font-weight: 700;
+    }
+    .pm-widget-sub {
+        color: #94a3b8 !important;
+        font-size: 0.70rem !important;
+    }
+}
+
+.pm-team-perf-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    flex: 1;
+    padding-top: 2px;
+    padding-bottom: 0;
+    height: 100%;
+}
+
+/* =========================================================
+   STEP-PODIUM LEADERBOARD (OLYMPIC 1-2-3 PEDESTAL DESIGN)
+   ========================================================= */
+.pm-step-podium {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    flex: 1;
+    padding: 0 4px;
+}
+
+.pm-podium-step-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+        transform: translateY(-4px);
+
+        .pm-podium-pedestal {
+            background: #283247 !important;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+            border-color: rgba(255, 255, 255, 0.22);
+        }
+    }
+}
+
+.pm-podium-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    width: 100%;
+    margin-bottom: 5px;
+}
+
+/* Ribbon Medal SVG */
+.pm-podium-medal {
+    width: 26px;
+    height: 30px;
+    margin-bottom: 3px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.pm-col-1 .pm-podium-medal {
+    width: 30px;
+    height: 34px;
+    filter: drop-shadow(0 2px 8px rgba(245, 158, 11, 0.45));
+}
+
+.pm-podium-name {
+    font-weight: 700;
+    font-size: 0.78rem;
+    color: #f8fafc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+    line-height: 1.2;
+    margin-bottom: 1px;
+}
+
+.pm-name-gold {
+    color: #ffffff !important;
+    font-weight: 800;
+    font-size: 0.84rem;
+}
+
+/* Percentage - Prominent vivid green for #1, bold white for #2 and #3 */
+.pm-podium-pct {
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+
+    &.pm-pct-green {
+        color: #22c55e !important;
+        font-size: 1.35rem;
+        font-weight: 900;
+        filter: drop-shadow(0 0 10px rgba(34, 197, 94, 0.4));
+    }
+}
+
+.pm-podium-sub {
+    font-size: 0.62rem;
+    color: #94a3b8;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 110px;
+    margin-top: 1px;
+}
+
+/* Pedestal Blocks */
+.pm-podium-pedestal {
+    width: 100%;
+    background: #1e2433; /* Dark charcoal block */
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+}
+
+.pm-pedestal-1 {
+    height: 58px;
+    background: #232b3d;
+    border-color: rgba(245, 158, 11, 0.3);
+    border-radius: 10px 10px 0 0;
+}
+
+.pm-pedestal-2 {
+    height: 40px;
+    background: #1c2230;
+    border-radius: 8px 8px 0 0;
+}
+
+.pm-pedestal-3 {
+    height: 25px;
+    background: #181d2a;
+    border-radius: 8px 8px 0 0;
+}
+
+.pm-pedestal-num {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    user-select: none;
+}
+
+.pm-pedestal-1 .pm-pedestal-num {
+    font-size: 1.7rem;
+}
+
+.pm-pedestal-3 .pm-pedestal-num {
+    font-size: 1.1rem;
+}
+
+/* Modal Podium Scaled Up */
+.pm-modal-podium {
+    padding: 10px 24px 0 24px !important;
+    min-height: 250px;
+    gap: 16px;
+
+    .pm-modal-medal {
+        width: 38px;
+        height: 44px;
+        margin-bottom: 6px;
+    }
+
+    .pm-col-1 .pm-modal-medal {
+        width: 44px;
+        height: 50px;
+    }
+
+    .pm-podium-name {
+        font-size: 0.95rem;
+        margin-bottom: 3px;
+        max-width: 180px;
+    }
+
+    .pm-name-gold {
+        font-size: 1.05rem;
+    }
+
+    .pm-podium-pct {
+        font-size: 1.5rem;
+        margin-bottom: 3px;
+
+        &.pm-pct-green {
+            font-size: 1.85rem;
+        }
+    }
+
+    .pm-podium-sub {
+        font-size: 0.74rem;
+        max-width: 160px;
+    }
+
+    .pm-modal-pedestal-1 {
+        height: 110px !important;
+        border-radius: 12px 12px 0 0;
+        .pm-pedestal-num {
+            font-size: 2.8rem;
+        }
+    }
+
+    .pm-modal-pedestal-2 {
+        height: 75px !important;
+        border-radius: 10px 10px 0 0;
+        .pm-pedestal-num {
+            font-size: 2.2rem;
+        }
+    }
+
+    .pm-modal-pedestal-3 {
+        height: 48px !important;
+        border-radius: 8px 8px 0 0;
+        .pm-pedestal-num {
+            font-size: 1.8rem;
+        }
+    }
+}
+
+.pm-team-leaderboard-section {
+    margin-bottom: 24px;
+}
+
+.pm-leaderboard-card {
+    background: #0b1329;
+    background: linear-gradient(180deg, #101c38 0%, #0a1022 100%);
+    border: 1px solid #1e293b;
+    border-radius: 16px;
+    padding: 22px 28px 18px 28px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    color: #ffffff;
+    position: relative;
+    overflow: hidden;
+}
+
+.pm-leaderboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.pm-leaderboard-trophy {
+    font-size: 1.35rem;
+    filter: drop-shadow(0 2px 4px rgba(234, 179, 8, 0.4));
+}
+
+.pm-leaderboard-title {
+    font-size: 0.96rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #f8fafc;
+}
+
+.pm-leaderboard-badge {
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    color: #93c5fd;
+    font-weight: 600;
+    font-size: 0.78rem;
+    padding: 5px 12px;
+    border-radius: 20px;
+}
+
+
+
+.pm-leaderboard-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 0.8rem;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pm-leaderboard-members {
+    color: #818cf8;
+    font-weight: 600;
+}
+
+.pm-leaderboard-action {
+    color: #818cf8;
+    font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s ease, transform 0.2s ease;
+
+    &:hover {
+        color: #a5b4fc;
+        transform: translateX(3px);
+    }
+}
+
+.pm-btn-team-filter {
+    padding: 2px 7px;
+    font-size: 0.72rem;
+    border-radius: 6px;
+    color: var(--pm-text-muted);
+    border-color: var(--pm-border);
+    transition: all 0.2s ease;
+
+    &:hover {
+        background-color: var(--pm-primary);
+        color: #ffffff;
+        border-color: var(--pm-primary);
+    }
+}
+
+.pm-team-emp-table-card {
+    background: var(--pm-card-bg);
+    border: 1px solid var(--pm-border);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.pm-emp-rankings-table {
+    thead th {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--pm-text-muted);
+        background: var(--pm-card-bg-subtle, #f8fafc);
+        border-bottom: 1px solid var(--pm-border);
+        padding: 10px 14px;
+    }
+    tbody td {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--pm-border);
+        font-size: 0.85rem;
+    }
+}
+
+.pm-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.pm-rank-gold {
+    background: rgba(245, 158, 11, 0.15);
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.pm-rank-silver {
+    background: rgba(148, 163, 184, 0.15);
+    color: #475569;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+}
+
+.pm-rank-bronze {
+    background: rgba(217, 119, 6, 0.15);
+    color: #b45309;
+    border: 1px solid rgba(217, 119, 6, 0.4);
+}
+
+.pm-rank-regular {
+    background: rgba(100, 116, 139, 0.08);
+    color: #64748b;
+}
+
+@media (max-width: 768px) {
+    .pm-step-podium {
+        gap: 6px;
+    }
+    .pm-podium-name {
+        font-size: 0.72rem;
+    }
+    .pm-podium-pct {
+        font-size: 1.05rem;
+        &.pm-pct-green {
+            font-size: 1.2rem;
+        }
+    }
+}
 
 /* Team Comparison Card */
 .pm-comparison-card {
@@ -2322,7 +2759,7 @@ body.o_dark_theme .pm-select-priority.pm-priority-filter-active {
 }
 
 /* ---------------- RESPONSIVE BREAKPOINTS ---------------- */
-@media (max-width: 1400px) {
+@media (max-width: 1200px) {
     .pm-kpi-row {
         grid-template-columns: repeat(3, 1fr);
     }
@@ -10397,6 +10834,62 @@ body.o_dark_theme {
                 border-color: rgba(59, 130, 246, 0.3) !important;
                 .pm-mob-agenda-task-title, .pm-mob-card-title { color: #93c5fd !important; }
                 .pm-mob-cat-name, .pm-mob-card-subtitle { color: #bfdbfe !important; }
+            }
+        }
+    }
+}
+
+/* ==================== 30 STANDARD SCOPES SELECTOR PANEL ==================== */
+.pm-standard-scopes-selector {
+    background: #f8fafc;
+    border: 1px solid var(--pm-border, #e2e8f0);
+    border-radius: 10px;
+    padding: 14px;
+
+    .pm-scope-select-card {
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        user-select: none;
+
+        &:hover {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 2px 6px rgba(59, 130, 246, 0.1);
+        }
+
+        &.pm-scope-selected {
+            border-color: #3b82f6 !important;
+            background: #eff6ff !important;
+
+            .form-check-input {
+                background-color: #3b82f6;
+                border-color: #3b82f6;
+            }
+        }
+    }
+}
+
+/* Dark Mode for Scopes Selector */
+[data-bs-theme="dark"], body.dark, .dark-mode {
+    .pm-standard-scopes-selector {
+        background: #1e293b !important;
+        border-color: #334155 !important;
+
+        .pm-scope-select-card {
+            background: #0f172a !important;
+            border-color: #334155 !important;
+            color: #e2e8f0 !important;
+
+            &:hover {
+                border-color: #60a5fa !important;
+            }
+
+            &.pm-scope-selected {
+                border-color: #3b82f6 !important;
+                background: rgba(59, 130, 246, 0.15) !important;
             }
         }
     }
