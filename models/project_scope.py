@@ -994,6 +994,9 @@ class ProjectManageScope(models.Model):
                 vals['submitted_date'] = fields.Datetime.now()
         elif vals.get('state') == 'done' and not vals.get('approval_state'):
             vals['approval_state'] = 'approved'
+            if not any(r.submitted_by_id for r in self) and not vals.get('submitted_by_id'):
+                vals['submitted_by_id'] = self.env.user.id
+                vals['submitted_date'] = fields.Datetime.now()
         elif vals.get('state') == 'todo' and not vals.get('approval_state'):
             vals['approval_state'] = 'draft'
 
@@ -1057,6 +1060,17 @@ class ProjectManageScope(models.Model):
             emp_domain = ['|', ('user_id', '=', user.id), ('work_email', '=ilike', user.email.strip())]
         current_emps = self.env['hr.employee'].sudo().search(emp_domain)
 
+        is_admin_or_manager = bool(
+            self.env.is_superuser() or
+            user.id in (1, 2) or
+            user.has_group('base.group_system') or
+            user.has_group('base.group_erp_manager') or
+            user.has_group('project_manage.group_project_manage_administrator') or
+            user.has_group('project_manage.group_project_manage_manager') or
+            user.has_group('project_manage.group_project_manage_ceo') or
+            user.has_group('project_manage.group_project_manage_vp')
+        )
+
         for rec in self:
             if not rec.responsible_ids and not rec.responsible_id:
                 raise UserError(_("This task cannot be completed because no responsible employee is assigned."))
@@ -1071,9 +1085,17 @@ class ProjectManageScope(models.Model):
                 (current_emps and bool(current_emps & all_resp_emps)) or
                 (user.name and any(r.name and r.name.lower() == user.name.lower() for r in all_resp_emps))
             )
-            if not is_assigned:
+            is_project_lead = bool(
+                rec.project_id and (
+                    (rec.project_id.manager_id and rec.project_id.manager_id.user_id == user) or
+                    (rec.project_id.team_lead_id and rec.project_id.team_lead_id.user_id == user) or
+                    (rec.project_id.team_id and rec.project_id.team_id.team_lead_id == user) or
+                    (current_emps and rec.project_id.team_lead_id and rec.project_id.team_lead_id in current_emps)
+                )
+            )
+            if not is_assigned and not is_admin_or_manager and not is_project_lead:
                 names = ', '.join(rec.responsible_ids.mapped('name')) or (rec.responsible_id.name if rec.responsible_id else '')
-                raise UserError(_("Only the task assigned employee(s) (%s) have the right to complete this task.", names))
+                raise UserError(_("Only the task assigned employee(s) (%s) or project management have the right to complete this task.", names))
 
             if rec.approval_state in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo'):
                 continue
@@ -1414,7 +1436,7 @@ class ProjectManageScope(models.Model):
             can_modify_documents = True
 
         can_submit = bool(
-            is_assigned and
+            (is_assigned or is_admin) and
             scope.state not in ('done', 'cancelled') and
             scope.approval_state not in ('approved', 'pending_tl', 'pending_pm', 'pending_vp', 'pending_ceo')
         )

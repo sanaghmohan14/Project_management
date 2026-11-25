@@ -95,6 +95,8 @@ export class ProjectManageDashboard extends Component {
             activeStatusFilter: 'all',    // 'all', 'completed', 'in_progress', 'pending', 'overdue'
             selectedScopeName: null,      // specific scope filter if clicked
             searchQuery: "",
+            scopePage: 1,
+            scopePageSize: 10,
             editingScopeId: null,
             editRowData: {},
             scopeWizardOpen: false,
@@ -341,9 +343,6 @@ export class ProjectManageDashboard extends Component {
     }
 
     async onSelectTeam(teamId) {
-        if (!this.state.data.user_info.can_see_all_teams) {
-            return;
-        }
         if (this.state.selectedTeamId === teamId) {
             this.state.selectedTeamId = null;
         } else {
@@ -362,6 +361,8 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
         if (projId) {
             await Promise.all([
                 this.loadData(),
@@ -380,6 +381,8 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
         await this.loadData();
     }
 
@@ -390,6 +393,8 @@ export class ProjectManageDashboard extends Component {
         if (this.state.selectedProjectId === projectId) {
             this.state.selectedProjectId = null;
             this.state.projectScopesData = null;
+            this.state.scopePage = 1;
+            this.state.scopePageSize = 10;
             await this.loadData();
             return;
         }
@@ -398,6 +403,8 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
         await Promise.all([
             this.loadData(),
             this.loadProjectScopes(projectId),
@@ -409,6 +416,12 @@ export class ProjectManageDashboard extends Component {
         try {
             const res = await this.orm.call("project.manage", "get_project_scopes_dashboard", [projectId]);
             this.state.projectScopesData = res;
+            if (this.state.scopePage > 1 && res && res.scopes) {
+                const maxPage = Math.max(1, Math.ceil(res.scopes.length / (this.state.scopePageSize || 10)));
+                if (this.state.scopePage > maxPage) {
+                    this.state.scopePage = maxPage;
+                }
+            }
         } catch (err) {
             console.error("Failed to load project scopes:", err);
             if (this.notification) {
@@ -421,10 +434,12 @@ export class ProjectManageDashboard extends Component {
 
     setCategoryFilter(cat) {
         this.state.activeCategoryFilter = cat;
+        this.state.scopePage = 1;
     }
 
     setStatusFilter(status) {
         this.state.activeStatusFilter = status;
+        this.state.scopePage = 1;
     }
 
     setScopeNameFilter(scopeName) {
@@ -433,11 +448,13 @@ export class ProjectManageDashboard extends Component {
         } else {
             this.state.selectedScopeName = scopeName;
         }
+        this.state.scopePage = 1;
     }
 
     onScopeSelectChange(ev) {
         const val = ev.target.value;
         this.state.selectedScopeName = val ? val : null;
+        this.state.scopePage = 1;
     }
 
     onScopeDropdownChange(ev) {
@@ -446,6 +463,7 @@ export class ProjectManageDashboard extends Component {
 
     onSearchChange(ev) {
         this.state.searchQuery = ev.target.value.toLowerCase().trim();
+        this.state.scopePage = 1;
     }
 
     clearFilters() {
@@ -453,6 +471,8 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
     }
 
     get filteredScopes() {
@@ -496,6 +516,87 @@ export class ProjectManageDashboard extends Component {
         }
 
         return list;
+    }
+
+    get paginatedScopes() {
+        const list = this.filteredScopes;
+        const page = this.state.scopePage || 1;
+        const size = this.state.scopePageSize || 10;
+        const start = (page - 1) * size;
+        return list.slice(start, start + size);
+    }
+
+    get totalScopePages() {
+        const total = this.filteredScopes.length;
+        const size = this.state.scopePageSize || 10;
+        return Math.max(1, Math.ceil(total / size));
+    }
+
+    get scopePaginationInfo() {
+        const total = this.filteredScopes.length;
+        if (!total) {
+            return { start: 0, end: 0, total: 0 };
+        }
+        const page = this.state.scopePage || 1;
+        const size = this.state.scopePageSize || 10;
+        const start = (page - 1) * size + 1;
+        const end = Math.min(page * size, total);
+        return { start, end, total };
+    }
+
+    get hasMoreScopes() {
+        const total = this.filteredScopes.length;
+        const page = this.state.scopePage || 1;
+        const size = this.state.scopePageSize || 10;
+        return (page * size) < total;
+    }
+
+    nextScopePage() {
+        if (this.state.scopePage < this.totalScopePages) {
+            this.state.scopePage++;
+            this.scrollToScopesTable();
+        }
+    }
+
+    prevScopePage() {
+        if (this.state.scopePage > 1) {
+            this.state.scopePage--;
+            this.scrollToScopesTable();
+        }
+    }
+
+    loadMoreScopes() {
+        const total = this.filteredScopes.length;
+        const currentEnd = (this.state.scopePage || 1) * (this.state.scopePageSize || 10);
+        if (currentEnd < total) {
+            if (this.state.scopePage > 1) {
+                this.state.scopePageSize = currentEnd + 10;
+                this.state.scopePage = 1;
+            } else {
+                this.state.scopePageSize = (this.state.scopePageSize || 10) + 10;
+            }
+        }
+    }
+
+    setScopePageSize(size) {
+        this.state.scopePageSize = parseInt(size) || 10;
+        this.state.scopePage = 1;
+    }
+
+    scrollToScopesTable() {
+        if (typeof document !== 'undefined') {
+            const el = document.querySelector(".pm-scope-table-wrap");
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+            }
+        }
+    }
+
+    // ==================== ROLE PERMISSIONS & GETTERS ====================
+    get canSeeTeamsRow() {
+        const u = this.state.data?.user_info;
+        if (!u) return false;
+        return Boolean(u.is_ceo || u.is_vp || u.is_manager || u.is_admin || u.is_executive || u.can_see_all_teams);
     }
 
     // ==================== MOBILE ASSIGNED SCOPES & TASKS GETTERS ====================
@@ -606,6 +707,27 @@ export class ProjectManageDashboard extends Component {
         }
 
         return list;
+    }
+
+    get paginatedMobileScopes() {
+        const list = this.mobileFilteredScopes;
+        const page = this.state.scopePage || 1;
+        const size = this.state.scopePageSize || 10;
+        const start = (page - 1) * size;
+        return list.slice(start, start + size);
+    }
+
+    get totalMobileScopePages() {
+        const total = this.mobileFilteredScopes.length;
+        const size = this.state.scopePageSize || 10;
+        return Math.max(1, Math.ceil(total / size));
+    }
+
+    get hasMoreMobileScopes() {
+        const total = this.mobileFilteredScopes.length;
+        const page = this.state.scopePage || 1;
+        const size = this.state.scopePageSize || 10;
+        return (page * size) < total;
     }
 
     // ==================== UNIVERSAL TASKS HUB METHODS & GETTER ====================
@@ -865,6 +987,8 @@ export class ProjectManageDashboard extends Component {
         this.state.activeStatusFilter = 'all';
         this.state.selectedScopeName = null;
         this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
         await this.loadProjectScopes(projectId);
     }
 
@@ -1076,7 +1200,8 @@ export class ProjectManageDashboard extends Component {
     }
 
     get topThreeTeams() {
-        const rawTeams = (this.state.data && this.state.data.teams) || [];
+        const backendTop3 = (this.state.data && this.state.data.top_3_teams) || [];
+        const rawTeams = (backendTop3 && backendTop3.length >= 3) ? backendTop3 : ((this.state.data && this.state.data.teams) || []);
         if (!rawTeams.length) {
             return { p1: null, p2: null, p3: null, hasTeams: false, totalTeamsCount: 0 };
         }
@@ -2675,6 +2800,8 @@ export class ProjectManageDashboard extends Component {
                     const idx = scopes.findIndex(s => s.id === curId);
                     if (idx !== -1 && idx < scopes.length - 1) {
                         const nextItem = scopes[idx + 1];
+                        const nextPage = Math.floor((idx + 1) / (this.state.scopePageSize || 10)) + 1;
+                        this.state.scopePage = nextPage;
                         this.openScopeWizard(nextItem);
                         return;
                     }
@@ -2910,7 +3037,13 @@ export class ProjectManageDashboard extends Component {
     async submitScopeDashboard(scopeId, ev) {
         if (ev) ev.stopPropagation();
         try {
-            await this.orm.call("project.manage", "action_dashboard_submit_scope", [], { scope_id: scopeId });
+            const res = await this.orm.call("project.manage", "action_dashboard_submit_scope", [], { scope_id: scopeId });
+            if (res && res.error) {
+                if (this.notification) {
+                    this.notification.add(res.error, { type: "danger" });
+                }
+                return;
+            }
             if (this.notification) {
                 this.notification.add("Task marked complete and submitted for review", { type: "success" });
             }
@@ -2921,7 +3054,7 @@ export class ProjectManageDashboard extends Component {
         } catch (err) {
             console.error("Failed to submit task:", err);
             if (this.notification) {
-                this.notification.add("Could not submit task.", { type: "danger" });
+                this.notification.add(err.message || "Could not submit task.", { type: "danger" });
             }
         }
     }
@@ -3460,9 +3593,9 @@ export class ProjectManageDashboard extends Component {
     }
 
     createNewTeam() {
-        if (!this.state.data.user_info.can_see_all_teams) {
+        if (!this.state.data.user_info.is_manager && !this.state.data.user_info.is_admin && !this.state.data.user_info.is_executive) {
             if (this.notification) {
-                this.notification.add("Team Leads cannot create new teams.", { type: "warning" });
+                this.notification.add("Team Leads and Consultants cannot create new teams.", { type: "warning" });
             }
             return;
         }
@@ -3592,7 +3725,13 @@ export class ProjectManageDashboard extends Component {
     async submitTask(taskId) {
         if (!taskId) return;
         try {
-            await this.orm.call("project.manage", "action_dashboard_submit_scope", [], { scope_id: taskId });
+            const res = await this.orm.call("project.manage", "action_dashboard_submit_scope", [], { scope_id: taskId });
+            if (res && res.error) {
+                if (this.notification) {
+                    this.notification.add(res.error, { type: "danger" });
+                }
+                return;
+            }
             if (this.notification) {
                 this.notification.add("Task marked complete and submitted for review", { type: "success" });
             }
@@ -3600,7 +3739,7 @@ export class ProjectManageDashboard extends Component {
         } catch (err) {
             console.error("Failed to submit task:", err);
             if (this.notification) {
-                this.notification.add("Could not submit task.", { type: "danger" });
+                this.notification.add(err.message || "Could not submit task.", { type: "danger" });
             }
         }
     }

@@ -371,6 +371,7 @@
                       hide_time="true"
                       event_open_popup="true"
                       quick_create="0"
+                      create="false"
                       scales="day,week,month,year">
                 <field name="name" string="Task"/>
                 <field name="project_id"/>

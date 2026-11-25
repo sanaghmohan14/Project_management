@@ -827,9 +827,10 @@ class ProjectManage(models.Model):
         else:
             raise AccessError(_("You do not have access rights to the Project Management module."))
 
-        # Only Project Manager, CEO, VP, and Admin can see all teams' data and create projects
-        can_see_all_teams = target_role in ('admin', 'ceo', 'vp', 'manager')
-        can_create_project = target_role in ('admin', 'ceo', 'vp', 'manager')
+        # Only CEO, VP, Project Manager, and Admin can see all team performance cards and quick filter pills
+        is_management = target_role in ('admin', 'ceo', 'vp', 'manager')
+        can_see_all_teams = is_management
+        can_create_project = is_management
 
         if target_role == 'ceo':
             role_code = 'ceo'
@@ -865,15 +866,14 @@ class ProjectManage(models.Model):
         emp = self.env['hr.employee'].sudo().search([('user_id', '=', user.id)], limit=1)
         emp_ids = emp.ids if emp else []
 
-        # Team Scope: Executives & Managers see all teams; Team Leads see only their team; Consultants see their team
-        if can_see_all_teams:
-            all_teams = self.env['project.manage.team'].search([])
+        # Team Scope: All teams are accessible for global leaderboard; user_teams identifies user's personal team
+        all_teams = self.env['project.manage.team'].sudo().search([])
+        if role_code == 'consultant':
+            user_teams = self.env['project.manage.team'].sudo().search([('member_ids', 'in', [user.id])])
+        elif is_management:
             user_teams = all_teams
-        elif role_code == 'consultant':
-            user_teams = self.env['project.manage.team'].search([('member_ids', 'in', [user.id])])
-            all_teams = user_teams
         else:
-            user_teams = self.env['project.manage.team'].search([
+            user_teams = self.env['project.manage.team'].sudo().search([
                 '|',
                 ('team_lead_id', '=', user.id),
                 ('member_ids', 'in', [user.id])
@@ -885,7 +885,8 @@ class ProjectManage(models.Model):
                     ('consultant_ids', 'in', [emp.id])
                 ])
                 user_teams = assigned_projects.mapped('team_id')
-            all_teams = user_teams
+        if not user_teams:
+            user_teams = all_teams
 
         if user_teams:
             user_team_name = user_teams[0].name
@@ -907,8 +908,17 @@ class ProjectManage(models.Model):
                 ('consultant_ids', 'in', emp_ids) if emp_ids else ('id', 'in', assigned_project_ids),
                 ('team_id.member_ids', 'in', [user.id])
             ]
+            if team_id:
+                if str(team_id).isdigit():
+                    proj_domain = [('team_id', '=', int(team_id))] + proj_domain
+                elif str(team_id).startswith('lead_'):
+                    try:
+                        lead_emp_id = int(str(team_id).replace('lead_', ''))
+                        proj_domain = [('team_lead_id', '=', lead_emp_id)] + proj_domain
+                    except (ValueError, TypeError):
+                        pass
             all_base_projects = self.sudo().search(proj_domain)
-        elif can_see_all_teams:
+        elif is_management:
             domain = []
             if team_id:
                 if str(team_id).startswith('lead_'):
@@ -922,8 +932,8 @@ class ProjectManage(models.Model):
             all_base_projects = self.search(domain)
         else:
             domain = []
-            if all_teams:
-                if team_id and str(team_id).isdigit() and int(team_id) in all_teams.ids:
+            if user_teams:
+                if team_id and str(team_id).isdigit() and int(team_id) in user_teams.ids:
                     domain.append(('team_id', '=', int(team_id)))
                 elif team_id and str(team_id).startswith('lead_'):
                     try:
@@ -932,7 +942,7 @@ class ProjectManage(models.Model):
                     except (ValueError, TypeError):
                         pass
                 else:
-                    domain.append(('team_id', 'in', all_teams.ids))
+                    domain.append(('team_id', 'in', user_teams.ids))
             elif team_id and str(team_id).startswith('lead_'):
                 try:
                     lead_emp_id = int(str(team_id).replace('lead_', ''))
@@ -1071,22 +1081,15 @@ class ProjectManage(models.Model):
                     'name': tm.name,
                     'lead_name': tm.team_lead_id.name if tm.team_lead_id else '',
                 })
-                if can_see_all_teams and team_id:
-                    if str(team_id).isdigit() and tm.id != int(team_id):
-                        continue
-                    elif str(team_id).startswith('lead_'):
-                        continue
 
-                tm_projects = tm.project_ids
-                if not can_see_all_teams:
-                    tm_projects = tm_projects.filtered(lambda p: p in projects)
+                tm_projects = tm.project_ids.sudo()
                 tm_tot = len(tm_projects)
                 tm_healthy = len(tm_projects.filtered(lambda p: p.health == 'good'))
                 tm_progress = round(sum(tm_projects.mapped('progress')) / tm_tot) if tm_tot else 0
                 tm_on_time = round((len(tm_projects.filtered(lambda p: p.condition in ('ahead', 'on_plan'))) / tm_tot) * 100) if tm_tot else 0
 
                 # Completed Tasks: percentage of completed tasks in this team's projects
-                tm_scopes = tm_projects.mapped('scope_ids').filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
+                tm_scopes = tm_projects.mapped('scope_ids').sudo().filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
                 if tm_scopes:
                     done_scopes = len(tm_scopes.filtered(lambda s: s.state == 'done'))
                     tm_completed_tasks_pct = round((done_scopes / len(tm_scopes)) * 100)
@@ -1158,21 +1161,16 @@ class ProjectManage(models.Model):
         else:
             # If no Project Teams have been created in project.manage.team yet,
             # derive actual teams dynamically from assigned Team Leads on projects
-            leads = projects.mapped('team_lead_id')
+            leads = self.sudo().search([]).mapped('team_lead_id')
             for idx, lead in enumerate(leads, 1):
-                lead_projects = projects.filtered(lambda p: p.team_lead_id == lead)
-                if can_see_all_teams and team_id:
-                    if str(team_id).startswith('lead_') and str(team_id) != f"lead_{lead.id}":
-                        continue
-                    elif str(team_id).isdigit():
-                        continue
+                lead_projects = self.sudo().search([('team_lead_id', '=', lead.id)])
                 tm_tot = len(lead_projects)
                 tm_healthy = len(lead_projects.filtered(lambda p: p.health == 'good'))
                 tm_progress = round(sum(lead_projects.mapped('progress')) / tm_tot) if tm_tot else 0
                 tm_on_time = round((len(lead_projects.filtered(lambda p: p.condition in ('ahead', 'on_plan'))) / tm_tot) * 100) if tm_tot else 0
 
                 # Completed Tasks: percentage of completed tasks in this team's projects
-                tm_scopes = lead_projects.mapped('scope_ids').filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
+                tm_scopes = lead_projects.mapped('scope_ids').sudo().filtered(lambda s: not s.is_creation_approval and s.state != 'draft')
                 if tm_scopes:
                     done_scopes = len(tm_scopes.filtered(lambda s: s.state == 'done'))
                     tm_completed_tasks_pct = round((done_scopes / len(tm_scopes)) * 100)
@@ -1236,6 +1234,17 @@ class ProjectManage(models.Model):
         for idx, tm in enumerate(teams_data, 1):
             tm['rank'] = idx
         top_3_teams = [dict(tm) for tm in teams_data[:3]]
+
+        # If filtered by team_id, filter teams_data cards while top_3_teams preserves the full top 3 podium
+        if team_id:
+            filtered_teams_data = []
+            for tm in teams_data:
+                if str(team_id).isdigit() and tm['id'] == int(team_id):
+                    filtered_teams_data.append(tm)
+                elif str(team_id).startswith('lead_') and str(tm['id']) == str(team_id):
+                    filtered_teams_data.append(tm)
+            if filtered_teams_data:
+                teams_data = filtered_teams_data
 
         # Build real project rows
         projects_list = []
@@ -1637,25 +1646,54 @@ class ProjectManage(models.Model):
                 '|', ('responsible_ids', '!=', False), ('responsible_id', '!=', False),
                 ('project_id', 'in', projects.ids)
             ])
+
+        all_sys_emps = self.env['hr.employee'].sudo().search([])
+        u_to_emp_map = collections.defaultdict(set)
+        name_to_emp_map = collections.defaultdict(set)
+        email_to_emp_map = collections.defaultdict(set)
+        for e in all_sys_emps:
+            if e.user_id:
+                u_to_emp_map[e.user_id.id].add(e.id)
+            if e.work_email:
+                email_to_emp_map[e.work_email.strip().lower()].add(e.id)
+            if e.name:
+                name_to_emp_map[e.name.strip().lower()].add(e.id)
+
         emp_stats = {}
         for sc in all_emp_scopes:
-            emps = sc.sudo().responsible_ids or sc.sudo().responsible_id
-            for emp in emps:
-                if not emp or not emp.id:
-                    continue
-                if emp.id not in emp_stats:
-                    emp_stats[emp.id] = {
-                        'id': emp.id,
-                        'name': emp.sudo().name or 'Consultant',
-                        'job': emp.sudo().job_title or 'Consultant',
+            assigned_emps = sc.sudo().responsible_ids or sc.sudo().responsible_id
+            assigned_eids = set(assigned_emps.ids)
+            sub_eid = self._resolve_scope_submitter_employee_id(
+                sc,
+                candidate_emp_ids=assigned_eids,
+                user_to_emp=u_to_emp_map,
+                name_to_emp=name_to_emp_map,
+                email_to_emp=email_to_emp_map
+            )
+            involved_eids = set(assigned_eids)
+            if sub_eid:
+                involved_eids.add(sub_eid)
+
+            for eid in involved_eids:
+                if eid not in emp_stats:
+                    e_rec = self.env['hr.employee'].sudo().browse(eid)
+                    emp_stats[eid] = {
+                        'id': eid,
+                        'name': e_rec.sudo().name or 'Consultant',
+                        'job': e_rec.sudo().job_title or 'Consultant',
                         'total': 0,
                         'completed': 0,
+                        'submitted_count': 0,
                         'on_time': 0,
                         'in_review': 0,
                     }
-                st = emp_stats[emp.id]
+                st = emp_stats[eid]
                 st['total'] += 1
+                if sub_eid == eid:
+                    st['submitted_count'] += 1
+
                 if sc.state == 'done':
+                    # All consultants assigned to the task receive task completion credit
                     st['completed'] += 1
                     if not sc.end_date or not sc.last_approval_date or sc.last_approval_date.date() <= sc.end_date:
                         st['on_time'] += 1
@@ -1668,15 +1706,16 @@ class ProjectManage(models.Model):
             comp = st['completed']
             comp_rate = round((comp / tot) * 100) if tot else 0
             on_time_rate = round((st['on_time'] / comp) * 100) if comp else 100
-            score = round((comp_rate * 0.6) + (on_time_rate * 0.4))
-            badge = '🏆 Top Performer' if score >= 85 else ('⭐ High Achiever' if score >= 65 else '🚀 Rising Star')
-            badge_class = 'pm-badge-gold' if score >= 85 else ('pm-badge-silver' if score >= 65 else 'pm-badge-bronze')
+            score = round((comp * 10.0) + (st.get('submitted_count', 0) * 2.0) + (comp_rate * 0.5))
+            badge = '🏆 Top Performer' if (comp >= 5 or (comp_rate >= 80 and comp > 0)) else ('⭐ High Achiever' if comp >= 2 else ('🚀 Active Member' if tot > 0 else '⏳ Standby'))
+            badge_class = 'pm-badge-gold' if (comp >= 5 or (comp_rate >= 80 and comp > 0)) else ('pm-badge-silver' if comp >= 2 else ('pm-badge-bronze' if tot > 0 else 'pm-badge-neutral'))
             top_performers.append({
                 'id': emp_id,
                 'name': st['name'],
                 'role': st['job'],
                 'total_tasks': tot,
                 'completed_tasks': comp,
+                'submitted_count': st.get('submitted_count', 0),
                 'in_review_tasks': st['in_review'],
                 'completion_rate': comp_rate,
                 'on_time_rate': on_time_rate,
@@ -1700,6 +1739,7 @@ class ProjectManage(models.Model):
                     'role': emp.sudo().job_title or 'Consultant',
                     'total_tasks': 0,
                     'completed_tasks': 0,
+                    'submitted_count': 0,
                     'in_review_tasks': 0,
                     'completion_rate': 0,
                     'on_time_rate': 100,
@@ -1708,11 +1748,15 @@ class ProjectManage(models.Model):
                     'badge_class': 'pm-badge-bronze',
                 })
 
-        top_performers.sort(key=lambda x: (x['score'], x['completed_tasks']), reverse=True)
+        top_performers.sort(key=lambda x: (
+            x['completed_tasks'],
+            x['completion_rate'],
+            x.get('submitted_count', 0),
+            x['score'],
+            x['on_time_rate']
+        ), reverse=True)
         for idx, tp in enumerate(top_performers, 1):
             tp['rank'] = idx
-        if role_code == 'consultant':
-            top_performers = []
 
         # ---- Consultant Task Stats for Bar Charts & Condition Breakdown ----
         total_cons_tasks = len(all_hub_scopes)
@@ -1937,7 +1981,7 @@ class ProjectManage(models.Model):
         try:
             scope.action_submit_for_approval()
         except UserError as e:
-            return {'error': e.name}
+            return {'error': str(e)}
         except Exception as e:
             return {'error': str(e)}
         return {'success': True}
@@ -2280,6 +2324,9 @@ class ProjectManage(models.Model):
             write_vals['state'] = new_st
             if new_st == 'done':
                 write_vals['approval_state'] = 'approved'
+                if not scope.submitted_by_id:
+                    write_vals['submitted_by_id'] = self.env.user.id
+                    write_vals['submitted_date'] = fields.Datetime.now()
             elif new_st == 'under_review':
                 write_vals['approval_state'] = 'pending_tl'
                 write_vals['submitted_by_id'] = self.env.user.id
@@ -2485,6 +2532,9 @@ class ProjectManage(models.Model):
             write_vals['state'] = new_st
             if new_st == 'done':
                 write_vals['approval_state'] = 'approved'
+                if not scope.submitted_by_id:
+                    write_vals['submitted_by_id'] = self.env.user.id
+                    write_vals['submitted_date'] = fields.Datetime.now()
             elif new_st == 'under_review':
                 write_vals['approval_state'] = 'pending_tl'
                 write_vals['submitted_by_id'] = self.env.user.id
@@ -3279,6 +3329,134 @@ class ProjectManage(models.Model):
         except Exception as e:
             return {'error': str(e)}
 
+    @api.model
+    def _resolve_scope_submitter_employee_id(self, scope, candidate_emp_ids=None, user_to_emp=None, name_to_emp=None, email_to_emp=None):
+        """
+        Identify the hr.employee who actually completed and submitted the task.
+        Priority:
+        1. Direct submitted_by_id field (Many2one to res.users)
+        2. Approval history log with 'submit' action
+        3. Uploaded deliverable documents (uploaded_by)
+        4. Chatter message logs containing submission confirmation
+        5. write_uid if among candidate assigned employees
+        6. Single assigned responsible employee
+        """
+        Employee = self.env['hr.employee'].sudo()
+        if user_to_emp is None:
+            user_to_emp = collections.defaultdict(set)
+            name_to_emp = collections.defaultdict(set)
+            email_to_emp = collections.defaultdict(set)
+            for e in Employee.search([]):
+                if e.user_id:
+                    user_to_emp[e.user_id.id].add(e.id)
+                if e.work_email:
+                    email_to_emp[e.work_email.strip().lower()].add(e.id)
+                if e.name:
+                    name_to_emp[e.name.strip().lower()].add(e.id)
+
+        def _resolve_user(user_obj):
+            if not user_obj:
+                return None
+            uid = user_obj.id if hasattr(user_obj, 'id') else user_obj
+            eids = user_to_emp.get(uid)
+            if eids:
+                if candidate_emp_ids:
+                    matches = [eid for eid in eids if eid in candidate_emp_ids]
+                    if matches:
+                        return matches[0]
+                return list(eids)[0]
+            email = getattr(user_obj, 'email', None)
+            if email and email.strip().lower() in email_to_emp:
+                eids = email_to_emp[email.strip().lower()]
+                if candidate_emp_ids:
+                    matches = [eid for eid in eids if eid in candidate_emp_ids]
+                    if matches:
+                        return matches[0]
+                return list(eids)[0]
+            uname = getattr(user_obj, 'name', None)
+            if uname and uname.strip().lower() in name_to_emp:
+                eids = name_to_emp[uname.strip().lower()]
+                if candidate_emp_ids:
+                    matches = [eid for eid in eids if eid in candidate_emp_ids]
+                    if matches:
+                        return matches[0]
+                return list(eids)[0]
+            return None
+
+        # 1. Direct submitted_by_id field
+        if scope.submitted_by_id:
+            eid = _resolve_user(scope.submitted_by_id)
+            if eid:
+                return eid
+
+        # 2. Approval log 'submit' action
+        if scope.approval_log_ids:
+            sub_logs = scope.approval_log_ids.filtered(lambda l: l.action == 'submit')
+            for l in sub_logs:
+                if l.user_id:
+                    eid = _resolve_user(l.user_id)
+                    if eid:
+                        return eid
+                if l.role_name and l.role_name.strip().lower() in name_to_emp:
+                    eids = name_to_emp[l.role_name.strip().lower()]
+                    if candidate_emp_ids:
+                        matches = [e for e in eids if e in candidate_emp_ids]
+                        if matches:
+                            return matches[0]
+                    return list(eids)[0]
+            # Check for submitter mentioned in approval audit notes
+            for l in scope.approval_log_ids:
+                note = (l.note or '').lower()
+                if 'completed by' in note or 'submitted' in note:
+                    for ename, eids in name_to_emp.items():
+                        if len(ename) >= 3 and ename in note:
+                            if candidate_emp_ids:
+                                matches = [e for e in eids if e in candidate_emp_ids]
+                                if matches:
+                                    return matches[0]
+                            return list(eids)[0]
+
+        # 3. Deliverable documents uploaded_by
+        if scope.document_ids:
+            for doc in scope.document_ids:
+                if doc.uploaded_by:
+                    eid = _resolve_user(doc.uploaded_by)
+                    if eid:
+                        return eid
+
+        # 4. Message logs with submission text
+        if scope.message_ids:
+            for msg in scope.message_ids:
+                body = (msg.body or '').lower()
+                if 'submitted' in body or 'completed' in body:
+                    if msg.author_id and msg.author_id.user_ids:
+                        eid = _resolve_user(msg.author_id.user_ids[0])
+                        if eid:
+                            return eid
+                    if msg.create_uid:
+                        eid = _resolve_user(msg.create_uid)
+                        if eid:
+                            return eid
+                    for ename, eids in name_to_emp.items():
+                        if len(ename) >= 3 and ename in body:
+                            if candidate_emp_ids:
+                                matches = [e for e in eids if e in candidate_emp_ids]
+                                if matches:
+                                    return matches[0]
+                            return list(eids)[0]
+
+        # 5. write_uid if among candidate employees
+        if scope.write_uid:
+            eid = _resolve_user(scope.write_uid)
+            if eid and candidate_emp_ids and eid in candidate_emp_ids:
+                return eid
+
+        # 6. Single assigned responsible employee
+        if candidate_emp_ids and len(candidate_emp_ids) == 1:
+            return list(candidate_emp_ids)[0]
+
+        return None
+
 
     @api.model
     def get_team_employee_performance(self, team_id='all'):
@@ -3287,6 +3465,7 @@ class ProjectManage(models.Model):
         When team_id is 'all', None, False, or '0', returns global performance for ALL consultants
         across all tasks irrespective of teams or projects.
         When team_id is specified, filters to that specific team.
+        Rankings strictly attribute completed tasks to the consultant who submitted and completed them.
         """
         Team = self.env['project.manage.team'].sudo()
         Project = self.env['project.manage'].sudo()
@@ -3374,11 +3553,18 @@ class ProjectManage(models.Model):
 
         today = fields.Date.context_today(self)
 
-        # Map user_id to employee IDs for rapid matching
+        # Build maps for user, email, and name to employee IDs across database
+        all_system_emps = Employee.search([])
         user_to_emp_ids = collections.defaultdict(set)
-        for emp in relevant_emps:
+        email_to_emp_ids = collections.defaultdict(set)
+        name_to_emp_ids = collections.defaultdict(set)
+        for emp in all_system_emps:
             if emp.user_id:
                 user_to_emp_ids[emp.user_id.id].add(emp.id)
+            if emp.work_email:
+                email_to_emp_ids[emp.work_email.strip().lower()].add(emp.id)
+            if emp.name:
+                name_to_emp_ids[emp.name.strip().lower()].add(emp.id)
 
         # Precompute project names for each employee
         emp_project_names_map = collections.defaultdict(set)
@@ -3392,7 +3578,8 @@ class ProjectManage(models.Model):
                     for eid in user_to_emp_ids.get(p.team_lead_id.user_id.id, ()):
                         emp_project_names_map[eid].add(p_name)
 
-        # Group scopes by employee ID in a single fast pass O(N)
+        # Group scopes and accurately identify the submitter/completer of each scope
+        scope_submitter_map = {}
         emp_scopes_dict = collections.defaultdict(list)
         for s in scopes:
             assigned_emp_ids = set()
@@ -3405,7 +3592,21 @@ class ProjectManage(models.Model):
             if s.responsible_id and s.responsible_id.user_id:
                 assigned_emp_ids.update(user_to_emp_ids.get(s.responsible_id.user_id.id, ()))
 
-            for eid in assigned_emp_ids:
+            sub_eid = self._resolve_scope_submitter_employee_id(
+                s,
+                candidate_emp_ids=assigned_emp_ids,
+                user_to_emp=user_to_emp_ids,
+                name_to_emp=name_to_emp_ids,
+                email_to_emp=email_to_emp_ids
+            )
+            scope_submitter_map[s.id] = sub_eid
+
+            # Ensure both assigned employees and actual task submitter have scope recorded
+            involved_eids = set(assigned_emp_ids)
+            if sub_eid:
+                involved_eids.add(sub_eid)
+
+            for eid in involved_eids:
                 emp_scopes_dict[eid].append(s)
                 if s.project_id and s.project_id.name:
                     emp_project_names_map[eid].add(s.project_id.name)
@@ -3428,9 +3629,15 @@ class ProjectManage(models.Model):
             todo = 0
             overdue = 0
             on_time_done = 0
+            submitted_count = 0
 
             for s in emp_scopes:
+                sub_eid = scope_submitter_map.get(s.id)
+                if sub_eid == emp.id:
+                    submitted_count += 1
+
                 if s.state == 'done':
+                    # All consultants assigned to the task receive task completion credit
                     done += 1
                     if not s.end_date or not s.last_approval_date or s.last_approval_date.date() <= s.end_date:
                         on_time_done += 1
@@ -3444,7 +3651,7 @@ class ProjectManage(models.Model):
 
             comp_rate = round((done / tot) * 100) if tot else 0
             on_time_rate = round((on_time_done / done) * 100) if done else 100
-            pts = round((done * 10.0) + (comp_rate * 0.5), 1)
+            pts = round((done * 10.0) + (submitted_count * 2.0) + (comp_rate * 0.5), 1)
 
             sorted_projs = sorted(list(emp_projects))
             if sorted_projs:
@@ -3471,6 +3678,7 @@ class ProjectManage(models.Model):
                 'initial': initial,
                 'total_tasks': tot,
                 'completed_tasks': done,
+                'submitted_count': submitted_count,
                 'in_progress_tasks': in_prog,
                 'todo_tasks': todo,
                 'overdue_tasks': overdue,
@@ -3481,8 +3689,14 @@ class ProjectManage(models.Model):
                 'badge_class': badge_class,
             })
 
-        # Sort strictly by task completion count, then completion percentage, then total tasks
-        emp_stats_list.sort(key=lambda x: (x['completed_tasks'], x['completion_rate'], x['total_tasks'], x['score']), reverse=True)
+        # Sort strictly by task completion count, then completion percentage, then who submitted more tasks, then score
+        emp_stats_list.sort(key=lambda x: (
+            x['completed_tasks'],
+            x['completion_rate'],
+            x.get('submitted_count', 0),
+            x['score'],
+            x['on_time_rate']
+        ), reverse=True)
         for idx, item in enumerate(emp_stats_list, 1):
             item['rank'] = idx
 

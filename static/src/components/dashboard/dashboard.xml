@@ -17,8 +17,8 @@
                     </div>
                 </div>
 
-                <!-- Team Quick Filter Pills (Executives & Managers) -->
-                <div class="pm-header-center" t-if="!state.data.user_info.is_consultant">
+                <!-- Team Quick Filter Pills (Strictly for CEO, VP, Project Manager, Admin) -->
+                <div class="pm-header-center" t-if="this.canSeeTeamsRow and state.data.all_teams_filter and state.data.all_teams_filter.length > 0">
                     <button class="pm-team-filter-pill"
                             t-att-class="state.selectedTeamId === null ? 'active' : ''"
                             t-on-click="() => this.onSelectTeam(null)">
@@ -652,13 +652,11 @@
                     </div>
                 </section>
 
-                <!-- ==================== 3. THIRD ROW: TEAMS ==================== -->
-                <!-- Strictly for Team Leads, Project Managers, VPs, CEOs, and Admins (Hidden for Consultants - not others performance) -->
-                <t t-if="!state.data.user_info.is_consultant">
-                <section class="pm-teams-row">
+                <!-- ==================== 3. THIRD ROW: TEAMS (Strictly for CEO, VP, Project Manager, Admin) ==================== -->
+                <section class="pm-teams-row" t-if="this.canSeeTeamsRow and state.data.teams and state.data.teams.length > 0">
                     <!-- Individual Team Cards -->
                     <t t-foreach="state.data.teams" t-as="tm" t-key="tm.id">
-                        <div class="pm-team-card" t-on-click="(ev) => this.openTeamPerformanceWizard(tm.id, ev)" title="Click to view team &amp; employee performance wizard">
+                        <div class="pm-team-card">
                             <div class="pm-team-card-header">
                                 <div class="pm-team-lead-box">
                                     <h4 class="pm-team-title" t-esc="tm.name"/>
@@ -725,7 +723,6 @@
                         </div>
                     </t>
                 </section>
-                </t>
 
                 <!-- ==================== TASKS COMPLETION BY PROJECT (ALL ROLES: Admin, CEO, VP, PM, Team Lead, Consultant) ==================== -->
                 <t t-if="state.data.consultant_task_stats and state.data.consultant_task_stats.projects_breakdown and state.data.consultant_task_stats.projects_breakdown.length > 0">
@@ -1163,11 +1160,50 @@
                                                                             </button>
                                                                         </div>
                                                                     </t>
-                                                                    <t t-else="">
-                                                                        <span class="pm-scope-summary-text">
-                                                                            Showing all <strong t-esc="state.projectScopesData.unique_scopes.length"/> scopes (<t t-esc="state.projectScopesData.stats.total_items"/> deliverables)
+
+                                                                    <!-- Top Range & Pagination Controls (Circled in Image 2) -->
+                                                                    <div class="pm-scope-top-nav ms-auto d-flex align-items-center flex-wrap gap-2">
+                                                                        <span class="pm-scope-summary-text m-0">
+                                                                            Showing <strong t-esc="this.scopePaginationInfo.start"/>–<strong t-esc="this.scopePaginationInfo.end"/> of <strong class="text-primary" t-esc="this.scopePaginationInfo.total"/> deliverables
+                                                                            <t t-if="!state.selectedScopeName and state.projectScopesData.unique_scopes">
+                                                                                (<strong t-esc="state.projectScopesData.unique_scopes.length"/> scopes)
+                                                                            </t>
                                                                         </span>
-                                                                    </t>
+
+                                                                        <t t-if="this.filteredScopes and this.filteredScopes.length > 10">
+                                                                            <div class="d-flex align-items-center gap-1 ms-2">
+                                                                                <t t-if="this.hasMoreScopes">
+                                                                                    <button type="button"
+                                                                                            class="btn btn-sm btn-outline-primary fw-semibold px-2 py-1 d-flex align-items-center gap-1 shadow-sm pm-scope-mini-btn"
+                                                                                            t-on-click="loadMoreScopes"
+                                                                                            title="Load 10 more tasks into the current view">
+                                                                                        <i class="fa fa-plus-circle"></i>
+                                                                                        <span>Load More (+10)</span>
+                                                                                    </button>
+                                                                                </t>
+
+                                                                                <div class="btn-group btn-group-sm shadow-sm pm-scope-mini-pager">
+                                                                                    <button type="button"
+                                                                                            class="btn btn-outline-secondary px-2 py-1"
+                                                                                            t-att-disabled="state.scopePage === 1"
+                                                                                            t-on-click="prevScopePage"
+                                                                                            title="Previous 10 tasks">
+                                                                                        <i class="fa fa-chevron-left me-1"></i> Prev
+                                                                                    </button>
+                                                                                    <span class="btn btn-light disabled px-2 py-1 text-secondary fw-semibold border" style="font-size: 0.78rem;">
+                                                                                        <strong class="text-dark"><t t-esc="state.scopePage"/></strong> / <strong><t t-esc="this.totalScopePages"/></strong>
+                                                                                    </span>
+                                                                                    <button type="button"
+                                                                                            class="btn btn-primary px-2 py-1 fw-semibold"
+                                                                                            t-att-disabled="state.scopePage >= this.totalScopePages"
+                                                                                            t-on-click="nextScopePage"
+                                                                                            title="Next 10 tasks">
+                                                                                        Next <i class="fa fa-chevron-right ms-1"></i>
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </t>
+                                                                    </div>
                                                                 </div>
                                                             </div>
                                                         </t>
@@ -1216,7 +1252,7 @@
                                                                         </tr>
                                                                     </thead>
                                                                     <tbody>
-                                                                        <t t-foreach="filteredScopes" t-as="item" t-key="item.id">
+                                                                        <t t-foreach="this.paginatedScopes" t-as="item" t-key="item.id">
                                                                             <tr class="pm-scope-item-row" t-on-click="(ev) => this.openScopeWizard(item, ev)" title="Click to edit in wizard">
                                                                                 <!-- Scope Area -->
                                                                                 <td class="pm-td-scope-name">
@@ -1313,6 +1349,65 @@
                                                                         </t>
                                                                     </tbody>
                                                                 </table>
+
+                                                                <!-- Scopes Pagination & Load More Controls Bar (Bottom of Table) -->
+                                                                <div class="pm-scopes-pagination-bar d-flex justify-content-between align-items-center flex-wrap gap-3 px-3 py-2 border-top"
+                                                                     t-if="this.filteredScopes and this.filteredScopes.length > 10"
+                                                                     style="background: var(--pm-tile-bg, #f8fafc); border-color: var(--pm-border, #e2e8f0) !important;">
+                                                                    <!-- Left: Deliverables Range Info & Page Size Selector -->
+                                                                    <div class="d-flex align-items-center flex-wrap gap-3">
+                                                                        <div class="text-muted small">
+                                                                            Showing <span class="fw-bold text-dark"><t t-esc="this.scopePaginationInfo.start"/></span> –
+                                                                            <span class="fw-bold text-dark"><t t-esc="this.scopePaginationInfo.end"/></span> of
+                                                                            <span class="fw-bold text-primary"><t t-esc="this.scopePaginationInfo.total"/></span> deliverables
+                                                                        </div>
+                                                                        <div class="d-flex align-items-center gap-1 text-muted small">
+                                                                            <span>Show:</span>
+                                                                            <select class="form-select form-select-sm py-0 px-2 pm-page-size-select"
+                                                                                    style="font-size: 0.75rem; height: 26px; width: auto;"
+                                                                                    t-att-value="state.scopePageSize"
+                                                                                    t-on-change="(ev) => this.setScopePageSize(ev.target.value)">
+                                                                                <option value="10">10</option>
+                                                                                <option value="25">25</option>
+                                                                                <option value="50">50</option>
+                                                                                <option value="100">100</option>
+                                                                            </select>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <!-- Right: Next / Previous & Load More Buttons -->
+                                                                    <div class="d-flex align-items-center flex-wrap gap-2">
+                                                                        <t t-if="this.hasMoreScopes">
+                                                                            <button type="button"
+                                                                                    class="btn btn-sm btn-outline-primary fw-semibold px-3 d-flex align-items-center gap-1 shadow-sm"
+                                                                                    t-on-click="loadMoreScopes"
+                                                                                    title="Load 10 more tasks into the current view">
+                                                                                <i class="fa fa-plus-circle"></i>
+                                                                                <span>Load More (+10)</span>
+                                                                            </button>
+                                                                        </t>
+
+                                                                        <div class="btn-group btn-group-sm shadow-sm">
+                                                                            <button type="button"
+                                                                                    class="btn btn-outline-secondary px-3"
+                                                                                    t-att-disabled="state.scopePage === 1"
+                                                                                    t-on-click="prevScopePage"
+                                                                                    title="Previous 10 tasks">
+                                                                                <i class="fa fa-chevron-left me-1"></i> Previous
+                                                                            </button>
+                                                                            <span class="btn btn-light disabled px-3 text-secondary fw-semibold border" style="background: var(--pm-card-bg, #ffffff);">
+                                                                                Page <strong class="text-dark"><t t-esc="state.scopePage"/></strong> of <strong><t t-esc="this.totalScopePages"/></strong>
+                                                                            </span>
+                                                                            <button type="button"
+                                                                                    class="btn btn-primary px-3 fw-semibold"
+                                                                                    t-att-disabled="state.scopePage >= this.totalScopePages"
+                                                                                    t-on-click="nextScopePage"
+                                                                                    title="Next 10 tasks">
+                                                                                Next <i class="fa fa-chevron-right ms-1"></i>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
                                                             </t>
                                                         </div>
                                                     </div>
@@ -1856,7 +1951,7 @@
                         <t t-if="state.selectedProjectId">
                             <t t-if="this.mobileFilteredScopes and this.mobileFilteredScopes.length > 0">
                                 <div class="pm-mobile-tasks-list mb-4">
-                                    <t t-foreach="this.mobileFilteredScopes" t-as="item" t-key="item.id">
+                                    <t t-foreach="this.paginatedMobileScopes" t-as="item" t-key="item.id">
                                         <div class="pm-mobile-task-card">
                                             <div class="pm-mtask-header">
                                                 <span class="pm-task-code" t-if="item.code"><t t-esc="item.code"/></span>
@@ -1900,6 +1995,37 @@
                                             </div>
                                         </div>
                                     </t>
+                                </div>
+
+                                <!-- Mobile Pagination & Load More Controls -->
+                                <div class="d-flex flex-column align-items-center gap-2 mt-2 mb-4" t-if="this.mobileFilteredScopes and this.mobileFilteredScopes.length > 10">
+                                    <div class="text-muted small">
+                                        Showing <span class="fw-bold text-dark"><t t-esc="Math.min((state.scopePage - 1) * state.scopePageSize + 1, this.mobileFilteredScopes.length)"/></span> –
+                                        <span class="fw-bold text-dark"><t t-esc="Math.min(state.scopePage * state.scopePageSize, this.mobileFilteredScopes.length)"/></span> of
+                                        <span class="fw-bold text-primary"><t t-esc="this.mobileFilteredScopes.length"/></span> tasks
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 shadow-sm"
+                                                t-if="this.hasMoreMobileScopes"
+                                                t-on-click="loadMoreScopes">
+                                            <i class="fa fa-plus-circle me-1"></i> Load More (+10)
+                                        </button>
+                                        <div class="btn-group btn-group-sm shadow-sm">
+                                            <button type="button" class="btn btn-outline-secondary px-3"
+                                                    t-att-disabled="state.scopePage === 1"
+                                                    t-on-click="prevScopePage">
+                                                <i class="fa fa-chevron-left"></i>
+                                            </button>
+                                            <span class="btn btn-light disabled px-3 text-secondary fw-semibold border" style="background: var(--pm-card-bg, #ffffff);">
+                                                <strong class="text-dark"><t t-esc="state.scopePage"/></strong> / <strong><t t-esc="this.totalMobileScopePages"/></strong>
+                                            </span>
+                                            <button type="button" class="btn btn-outline-secondary px-3"
+                                                    t-att-disabled="state.scopePage >= this.totalMobileScopePages"
+                                                    t-on-click="nextScopePage">
+                                                <i class="fa fa-chevron-right"></i>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </t>
                             <t t-elif="!state.projectScopesLoading">
@@ -2384,13 +2510,6 @@
                                         <i class="fa fa-list"></i> Agenda
                                     </button>
                                 </div>
-
-                                <!-- Quick Task Add Button (Only for Project Managers & Above) -->
-                                <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
-                                    <button type="button" class="pm-cal-add-task-btn" t-on-click="createNewTaskForSelectedDate">
-                                        <i class="fa fa-plus me-1"></i> Schedule
-                                    </button>
-                                </t>
                             </div>
                         </div>
 
@@ -2519,13 +2638,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="d-flex align-items-center gap-2">
-                                        <t t-if="state.data and state.data.user_info and state.data.user_info.is_manager">
-                                            <button type="button" class="btn btn-sm btn-primary" t-on-click="() => this.createNewTaskForDate(this.calendarSelectedDateIso)">
-                                                <i class="fa fa-plus me-1"></i> Add Task
-                                            </button>
-                                        </t>
-                                    </div>
                                 </div>
 
                                 <!-- Day Tasks Cards Grid -->
@@ -2617,13 +2729,6 @@
                                                 <t t-if="!day.events or day.events.length === 0">
                                                     <div class="pm-cal-col-empty-hint"></div>
                                                 </t>
-                                                <!-- Quick Add Button -->
-                                                <button type="button" class="pm-cal-col-add-btn"
-                                                        t-if="state.data and state.data.user_info and state.data.user_info.is_manager"
-                                                        t-on-click="() => this.createNewTaskForDate(day.dateIso)"
-                                                        title="Add task on this day">
-                                                    <i class="fa fa-plus me-1"></i> Add Task
-                                                </button>
                                             </div>
                                         </div>
                                     </t>
@@ -2766,9 +2871,6 @@
                                             <button type="button" class="pm-mob-cal-mode-switch-btn" t-on-click="() => this.setMobileCalendarViewMode('month')">
                                                 Month
                                             </button>
-                                            <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add Task">
-                                                <i class="fa fa-plus"></i>
-                                            </button>
                                         </div>
                                     </div>
                                 </t>
@@ -2793,9 +2895,6 @@
                                             </div>
                                             <button type="button" class="pm-mob-cal-mode-switch-btn" t-on-click="() => this.setMobileCalendarViewMode('week')">
                                                 Week
-                                            </button>
-                                            <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add Task">
-                                                <i class="fa fa-plus"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -2871,13 +2970,8 @@
                                         </div>
                                     </t>
 
-                                    <!-- Bottom spacing / add button -->
-                                    <div class="text-center py-4">
-                                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-4"
-                                                t-on-click="createNewTaskForSelectedDate">
-                                            <i class="fa fa-plus me-1"></i> Add Task for this day
-                                        </button>
-                                    </div>
+                                    <!-- Bottom spacing -->
+                                    <div class="py-3"></div>
                                 </div>
                             </t>
 
@@ -2924,9 +3018,6 @@
                                             </h3>
                                             <i class="fa fa-chevron-down text-muted small"></i>
                                         </div>
-                                        <button type="button" class="pm-mob-cal-add-fab" t-on-click="createNewTaskForSelectedDate" title="Add New Task">
-                                            <i class="fa fa-plus"></i>
-                                        </button>
                                     </div>
 
                                     <!-- Legend / Filter Pills -->
@@ -2965,10 +3056,6 @@
                                                 <i class="fa fa-calendar-check-o text-muted mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
                                                 <div class="fw-semibold">No Tasks Scheduled</div>
                                                 <div class="small text-muted mb-3">No tasks found for this selected date.</div>
-                                                <button type="button" class="btn btn-sm btn-primary rounded-pill px-3"
-                                                        t-on-click="createNewTaskForSelectedDate">
-                                                    <i class="fa fa-plus me-1"></i> Add Task
-                                                </button>
                                             </div>
                                         </t>
                                         <t t-else="">
@@ -3998,10 +4085,18 @@
                                                                                 </div>
                                                                                 <div class="flex-grow-1 text-truncate">
                                                                                     <div class="d-flex align-items-center justify-content-between gap-1">
-                                                                                        <span class="badge bg-secondary-subtle text-secondary small px-1 py-0" style="font-size: 0.68rem;">Scope <t t-esc="scp.scope_no"/></span>
-                                                                                        <span class="badge text-muted bg-white border px-1 py-0 small" style="font-size: 0.68rem;"><t t-esc="scp.tasks_count"/> tasks</span>
+                                                                                        <span class="pm-scope-badge-num"
+                                                                                              t-att-style="this.isStandardScopeSelected(scp.scope_no) ? 'font-size: 0.74rem; font-weight: 700; color: #1d4ed8; background: #dbeafe; border: 1px solid #93c5fd; padding: 2px 7px; border-radius: 5px; letter-spacing: 0.02em;' : 'font-size: 0.74rem; font-weight: 700; color: #1e293b; background: #f1f5f9; border: 1px solid #cbd5e1; padding: 2px 7px; border-radius: 5px; letter-spacing: 0.02em;'">
+                                                                                            Scope <t t-esc="scp.scope_no"/>
+                                                                                        </span>
+                                                                                        <span class="pm-scope-badge-count"
+                                                                                              t-att-style="this.isStandardScopeSelected(scp.scope_no) ? 'font-size: 0.72rem; font-weight: 600; color: #1e40af; background: #ffffff; border: 1px solid #bfdbfe; padding: 2px 7px; border-radius: 5px;' : 'font-size: 0.72rem; font-weight: 600; color: #475569; background: #f8fafc; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 5px;'">
+                                                                                            <t t-esc="scp.tasks_count"/> tasks
+                                                                                        </span>
                                                                                     </div>
-                                                                                    <div class="fw-semibold text-truncate small mt-1" style="font-size: 0.8rem; color: var(--pm-text-heading);" t-att-title="scp.name">
+                                                                                    <div class="fw-bold text-truncate mt-1 pm-scope-card-title"
+                                                                                         t-att-style="this.isStandardScopeSelected(scp.scope_no) ? 'font-size: 0.84rem; font-weight: 700; color: #0f172a;' : 'font-size: 0.84rem; font-weight: 600; color: #1e293b;'"
+                                                                                         t-att-title="scp.name">
                                                                                         <t t-esc="scp.name"/>
                                                                                     </div>
                                                                                 </div>
