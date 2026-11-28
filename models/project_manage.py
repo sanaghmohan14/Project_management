@@ -1074,13 +1074,25 @@ class ProjectManage(models.Model):
         teams_data = []
         filter_teams = []
 
-        if all_teams:
-            for tm in all_teams:
+        # Teams for filter dropdown:
+        # Strictly CEO, VP, and Admin filter across all teams
+        # Consultants and Project Managers do not need other teams filtration button
+        is_executive_role = is_actual_admin or is_actual_ceo or is_actual_vp or (target_role in ('admin', 'ceo', 'vp'))
+        if is_executive_role:
+            teams_for_filter = all_teams
+        else:
+            teams_for_filter = []
+
+        if teams_for_filter:
+            for tm in teams_for_filter:
                 filter_teams.append({
                     'id': tm.id,
                     'name': tm.name,
                     'lead_name': tm.team_lead_id.name if tm.team_lead_id else '',
                 })
+
+        if all_teams:
+            for tm in all_teams:
 
                 tm_projects = tm.project_ids.sudo()
                 tm_tot = len(tm_projects)
@@ -1538,11 +1550,15 @@ class ProjectManage(models.Model):
                 s.state != 'done'
             )
             resp_name = ', '.join(s.responsible_ids.mapped('name')) if s.responsible_ids else (s.responsible_id.name if s.responsible_id else (s.responsible or 'Unassigned'))
+            scope_display_name = s.scope or (f"Scope {s.scope_no}" if s.scope_no is not None else '') or (s.project_id.name if s.project_id else '')
+            is_assigned_flag = bool(s.responsible_ids or s.responsible_id or (s.responsible and str(s.responsible).strip() and str(s.responsible).strip().lower() != 'unassigned'))
+            task_status_color = 'green' if is_completed else ('yellow' if (s.state == 'under_review' or (s.approval_state and s.approval_state.startswith('pending'))) else ('red' if is_late else 'blue'))
             return {
                 'id': s.id,
                 'name': s.name,
                 'code': s.code or (f"S{s.scope_no:02d}" if s.scope_no is not None else '') or s.item_id or '',
                 'scope': s.scope or '',
+                'scope_name': scope_display_name,
                 'project_id': s.project_id.id if s.project_id else False,
                 'project_name': s.project_id.name if s.project_id else 'General Project',
                 'team_name': s.project_id.team_id.name if s.project_id and s.project_id.team_id else '',
@@ -1553,6 +1569,10 @@ class ProjectManage(models.Model):
                 'responsible_ids': s.responsible_ids.ids if s.responsible_ids else ([s.responsible_id.id] if s.responsible_id else []),
                 'responsible_names': s.responsible_ids.mapped('name') if s.responsible_ids else ([s.responsible_id.name] if s.responsible_id else []),
                 'responsible_name': resp_name,
+                'is_assigned': is_assigned_flag,
+                'is_assigned_to_user': is_assigned_to_user,
+                'is_assigned_to_me': is_assigned_to_user,
+                'status_color': task_status_color,
                 'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else '',
                 'start_date_str': s.start_date.strftime('%d %b %Y') if s.start_date else '-',
                 'end_date': s.end_date.strftime('%Y-%m-%d') if s.end_date else '',
@@ -1857,6 +1877,20 @@ class ProjectManage(models.Model):
                         'days_remaining': days_rem_task,
                     })
 
+        selected_team_rec = None
+        if team_id and str(team_id).isdigit():
+            selected_team_rec = self.env['project.manage.team'].sudo().browse(int(team_id))
+            if not selected_team_rec.exists():
+                selected_team_rec = None
+        elif team_id and str(team_id).startswith('lead_'):
+            try:
+                lead_id = int(str(team_id).replace('lead_', ''))
+                emp_rec = self.env['hr.employee'].sudo().browse(lead_id)
+                if emp_rec.exists():
+                    selected_team_rec = type('TeamMock', (), {'name': f"Team {emp_rec.name}"})()
+            except (ValueError, TypeError):
+                pass
+
         return {
             'company_name': self.env.company.name,
             'current_date_str': today.strftime('%d %B %Y'),
@@ -1931,6 +1965,8 @@ class ProjectManage(models.Model):
             'teams': teams_data,
             'top_3_teams': top_3_teams,
             'all_teams_filter': filter_teams,
+            'selected_team_id': int(team_id) if (team_id and str(team_id).isdigit()) else (str(team_id) if team_id else None),
+            'selected_team_name': selected_team_rec.name if selected_team_rec else '',
             'projects': projects_list,
             'all_projects_filter': filter_projects,
             'selected_project_id': selected_project_id,
@@ -2293,6 +2329,8 @@ class ProjectManage(models.Model):
             write_vals['item_type'] = vals['item_type']
         if 'priority' in vals and str(vals['priority']) in ('0', '1', '2', '3'):
             write_vals['priority'] = str(vals['priority'])
+        if 'approval_authority' in vals and str(vals['approval_authority']).upper() in ('TL', 'PM', 'VP', 'CEO'):
+            write_vals['approval_authority'] = str(vals['approval_authority']).upper()
         if 'responsible_ids' in vals:
             raw_ids = vals['responsible_ids'] or []
             emp_ids = [int(i) for i in raw_ids if str(i).isdigit()]
@@ -2360,18 +2398,22 @@ class ProjectManage(models.Model):
             return {'error': _("Access Denied: Only Project Managers can create new scopes or tasks.")}
 
         is_cal_sched = bool(vals.get('is_calendar_schedule'))
+        is_new_scope = bool(vals.get('is_new_scope'))
         requires_approval = (not is_admin_or_ceo) and (not is_cal_sched)
         if requires_approval:
             initial_approval_stage = 'pending_ceo' if is_vp else 'pending_vp'
             valid_states = dict(self.env['project.manage.scope']._fields['state'].selection)
             create_state = 'draft' if 'draft' in valid_states else 'todo'
             is_creation_approval = True
-            notification_msg = _("Scope creation request submitted to Vice President (VP) for approval. Once approved by VP and CEO, it will be automatically activated.") if not is_vp else _("Scope creation request submitted to CEO for final approval.")
+            if is_new_scope:
+                notification_msg = _("New scope creation request submitted to Vice President (VP) for approval. Once approved by VP and CEO, the scope will be automatically activated.") if not is_vp else _("New scope creation request submitted to CEO for final approval.")
+            else:
+                notification_msg = _("Scope creation request submitted to Vice President (VP) for approval. Once approved by VP and CEO, it will be automatically activated.") if not is_vp else _("Scope creation request submitted to CEO for final approval.")
         else:
             create_state = vals.get('state') or 'todo'
             initial_approval_stage = 'approved' if create_state == 'done' else ('in_progress' if create_state == 'in_progress' else 'draft')
             is_creation_approval = False
-            notification_msg = _("Task scheduled successfully on calendar.") if is_cal_sched else _("New scope task created successfully.")
+            notification_msg = _("Task scheduled successfully on calendar.") if is_cal_sched else (_("New scope created successfully.") if is_new_scope else _("New scope task created successfully."))
 
         project = self.browse(project_id)
         if not project.exists():
@@ -2422,13 +2464,16 @@ class ProjectManage(models.Model):
         state_val = vals.get('state') or 'todo'
         appr_state = 'approved' if state_val == 'done' else ('in_progress' if state_val == 'in_progress' else 'draft')
 
-        auth_val = vals.get('approval_authority') or get_default_approval_authority(
-            item_id=item_id,
-            scope_no=scope_no,
-            category=cat_val,
-            item_no=item_no,
-            name=vals.get('name'),
-        ) or 'TL'
+        raw_auth = str(vals.get('approval_authority') or '').upper()
+        auth_val = raw_auth if raw_auth in ('TL', 'PM', 'VP', 'CEO') else (
+            get_default_approval_authority(
+                item_id=item_id,
+                scope_no=scope_no,
+                category=cat_val,
+                item_no=item_no,
+                name=vals.get('name'),
+            ) or 'TL'
+        )
 
         start_d = vals.get('start_date') or False
         end_d = vals.get('end_date') or start_d
@@ -2445,7 +2490,7 @@ class ProjectManage(models.Model):
             'category': cat_val,
             'name': vals.get('name') or 'Untitled Task',
             'item_type': vals.get('item_type') or '',
-            'approval_authority': 'CEO' if requires_approval else auth_val,
+            'approval_authority': auth_val,
             'responsible_id': emp_ids[0] if emp_ids else False,
             'responsible_ids': [(6, 0, emp_ids)] if emp_ids else False,
             'responsible': emp_name,

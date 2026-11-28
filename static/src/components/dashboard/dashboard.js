@@ -86,6 +86,7 @@ export class ProjectManageDashboard extends Component {
             calendarSearchQuery: "",
             mobileCalendarViewMode: 'month', // 'month' (Month Grid) or 'week' (Timeline Week)
             mobileCalendarStatusFilter: 'all', // 'all', 'completed', 'due', 'not_started', 'in_progress'
+            mobileTaskStatusFilter: 'pending', // 'pending' (first / default), 'overdue', 'in_approval', 'completed', 'all'
             selectedTeamId: null,
             activeRoleView: null,
             selectedProjectId: null,
@@ -353,6 +354,48 @@ export class ProjectManageDashboard extends Component {
         await this.loadData();
     }
 
+    async onMobileTeamSelectChange(ev) {
+        const val = ev.target.value;
+        const teamId = val ? (val.startsWith('lead_') ? val : parseInt(val)) : null;
+        this.state.selectedTeamId = teamId;
+        this.state.selectedProjectId = null;
+        this.state.projectScopesData = null;
+        await this.loadData();
+    }
+
+    async clearTeamFilter() {
+        this.state.selectedTeamId = null;
+        this.state.selectedProjectId = null;
+        this.state.projectScopesData = null;
+        await this.loadData();
+    }
+
+    async clearAllMobileFilters() {
+        this.state.selectedTeamId = null;
+        this.state.selectedProjectId = null;
+        this.state.projectScopesData = null;
+        this.state.activeCategoryFilter = 'all';
+        this.state.activeStatusFilter = 'all';
+        this.state.selectedScopeName = null;
+        this.state.searchQuery = "";
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
+        await this.loadData();
+    }
+
+    get selectedTeamName() {
+        if (!this.state.selectedTeamId) return "";
+        if (this.state.data && this.state.data.selected_team_name) {
+            return this.state.data.selected_team_name;
+        }
+        const tm = (this.state.data?.all_teams_filter || []).find(t => String(t.id) === String(this.state.selectedTeamId));
+        return tm ? tm.name : "Team";
+    }
+
+    goToApprovals() {
+        this.setActiveTab('approvals');
+    }
+
     async onProjectSelectChange(ev) {
         const val = ev.target.value;
         const projId = val ? parseInt(val) : null;
@@ -455,6 +498,13 @@ export class ProjectManageDashboard extends Component {
         const val = ev.target.value;
         this.state.selectedScopeName = val ? val : null;
         this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
+    }
+
+    clearScopeFilter() {
+        this.state.selectedScopeName = null;
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
     }
 
     onScopeDropdownChange(ev) {
@@ -552,7 +602,8 @@ export class ProjectManageDashboard extends Component {
     }
 
     nextScopePage() {
-        if (this.state.scopePage < this.totalScopePages) {
+        const maxPages = this.state.isMobile ? this.totalMobileScopePages : this.totalScopePages;
+        if (this.state.scopePage < maxPages) {
             this.state.scopePage++;
             this.scrollToScopesTable();
         }
@@ -566,7 +617,7 @@ export class ProjectManageDashboard extends Component {
     }
 
     loadMoreScopes() {
-        const total = this.filteredScopes.length;
+        const total = this.state.isMobile ? this.mobileFilteredScopes.length : this.filteredScopes.length;
         const currentEnd = (this.state.scopePage || 1) * (this.state.scopePageSize || 10);
         if (currentEnd < total) {
             if (this.state.scopePage > 1) {
@@ -585,6 +636,13 @@ export class ProjectManageDashboard extends Component {
 
     scrollToScopesTable() {
         if (typeof document !== 'undefined') {
+            if (this.state.isMobile) {
+                const el = document.querySelector(".pm-mobile-tasks-list") || document.querySelector(".pm-mobile-task-boxes-row");
+                if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+                return;
+            }
             const el = document.querySelector(".pm-scope-table-wrap");
             if (el) {
                 el.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -599,6 +657,16 @@ export class ProjectManageDashboard extends Component {
         return Boolean(u.is_ceo || u.is_vp || u.is_manager || u.is_admin || u.is_executive || u.can_see_all_teams);
     }
 
+    get canSeeMobileTeamFilter() {
+        const u = this.state.data?.user_info;
+        if (!u) return false;
+        // Consultants and Project Managers do not need other teams filtration button
+        if (u.is_consultant || u.role_code === 'consultant') return false;
+        if (u.role_code === 'manager' && !u.is_ceo && !u.is_vp && !u.is_admin) return false;
+        if (u.role_code === 'team_lead' && !u.is_ceo && !u.is_vp && !u.is_admin) return false;
+        return Boolean(u.is_ceo || u.is_vp || u.is_admin);
+    }
+
     // ==================== MOBILE ASSIGNED SCOPES & TASKS GETTERS ====================
     get isConsultantUser() {
         const u = this.state.data?.user_info;
@@ -606,36 +674,117 @@ export class ProjectManageDashboard extends Component {
     }
 
     get mobileAssignedScopes() {
-        if (!this.state.projectScopesData || !this.state.projectScopesData.scopes) {
-            return [];
-        }
-        let list = this.state.projectScopesData.scopes;
-        const isConsultant = this.isConsultantUser;
-
-        if (isConsultant) {
-            const uid = this.state.data?.user_info?.id;
-            const uname = (this.state.data?.user_info?.name || '').trim().toLowerCase();
-            list = list.filter(s => {
-                if (s.is_assigned_to_me !== undefined) {
-                    return s.is_assigned_to_me;
-                }
-                if (!s.is_assigned && (!s.responsible_name || s.responsible_name === 'Unassigned' || !s.responsible_name.trim())) {
+        // If a specific project was explicitly selected (e.g. from Project Detail "Scopes" button)
+        if (this.state.selectedProjectId && this.state.projectScopesData?.scopes?.length > 0) {
+            let list = this.state.projectScopesData.scopes;
+            if (this.isConsultantUser) {
+                const uid = this.state.data?.user_info?.id;
+                const uname = (this.state.data?.user_info?.name || '').trim().toLowerCase();
+                list = list.filter(s => {
+                    if (s.is_assigned_to_me !== undefined) return s.is_assigned_to_me;
+                    if (uid && s.responsible_user_ids && s.responsible_user_ids.includes(uid)) return true;
+                    if (uname && s.responsible_name && s.responsible_name !== 'Unassigned') {
+                        return s.responsible_name.toLowerCase().includes(uname);
+                    }
                     return false;
-                }
-                if (uid && s.responsible_user_ids && s.responsible_user_ids.includes(uid)) {
-                    return true;
-                }
-                if (uname && s.responsible_name && s.responsible_name !== 'Unassigned') {
-                    return s.responsible_name.toLowerCase().includes(uname);
-                }
-                return false;
-            });
-        } else {
-            // For mobile view, filter out unassigned tasks
-            list = list.filter(s => s.is_assigned !== false && s.responsible_name && s.responsible_name !== 'Unassigned' && s.responsible_name.trim() !== '');
+                });
+            }
+            return list;
         }
 
-        return list;
+        // Complete tasks assigned under them (Manager, Team Lead, Consultant, Admin)
+        const hubTasks = this.state.data?.tasks_hub?.tasks;
+        if (hubTasks && hubTasks.length > 0) return hubTasks;
+        const wsTasks = this.state.data?.consultant_workspace?.my_tasks;
+        if (wsTasks && wsTasks.length > 0) return wsTasks;
+        return [];
+    }
+
+    // ==================== TASK STATUS CLASSIFICATION HELPERS ====================
+    isScopeCompleted(s) {
+        if (!s) return false;
+        return s.state === 'done' || s.state === 'completed' || s.status_color === 'green' || Boolean(s.is_completed);
+    }
+
+    isScopeInApproval(s) {
+        if (!s) return false;
+        if (this.isScopeCompleted(s)) return false;
+        return Boolean(
+            s.state === 'under_review' ||
+            s.state === 'waiting_approval' ||
+            (s.approval_state && s.approval_state.startsWith('pending')) ||
+            s.status_color === 'yellow' ||
+            s.approval_state === 'pending_tl' ||
+            s.approval_state === 'pending_pm' ||
+            s.approval_state === 'pending_vp' ||
+            s.approval_state === 'pending_ceo' ||
+            (s.state_label && s.state_label.toLowerCase().includes('review'))
+        );
+    }
+
+    isScopeOverdue(s) {
+        if (!s || this.isScopeCompleted(s) || s.state === 'cancel' || s.state === 'cancelled') return false;
+        if (this.isScopeInApproval(s)) return false;
+        const todayStr = new Date().toISOString().split('T')[0];
+        return Boolean(s.is_overdue || (s.end_date && s.end_date < todayStr));
+    }
+
+    isScopePending(s) {
+        if (!s || this.isScopeCompleted(s) || s.state === 'cancel' || s.state === 'cancelled') return false;
+        if (this.isScopeInApproval(s)) return false;
+        return true;
+    }
+
+    get mobileTaskBoxStats() {
+        let scopes = this.mobileAssignedScopes || [];
+
+        if (this.state.selectedScopeName) {
+            scopes = scopes.filter(s => (s.scope_name === this.state.selectedScopeName || s.scope === this.state.selectedScopeName));
+            return {
+                pending: scopes.filter(s => this.isScopePending(s)).length,
+                overdue: scopes.filter(s => this.isScopeOverdue(s)).length,
+                in_approval: scopes.filter(s => this.isScopeInApproval(s)).length,
+                completed: scopes.filter(s => this.isScopeCompleted(s)).length,
+            };
+        }
+
+        if (scopes.length > 0) {
+            const completed = scopes.filter(s => this.isScopeCompleted(s)).length;
+            const inApproval = scopes.filter(s => this.isScopeInApproval(s)).length;
+            const overdue = scopes.filter(s => this.isScopeOverdue(s)).length;
+            const pending = scopes.filter(s => this.isScopePending(s)).length;
+
+            return {
+                pending,
+                overdue,
+                in_approval: inApproval,
+                completed,
+            };
+        }
+
+        const ws = this.state.data?.consultant_workspace;
+        const hub = this.state.data?.tasks_hub;
+        const completed = ws?.my_done_count || hub?.completed_count || 0;
+        const inApproval = ws?.my_waiting_approval_count || hub?.waiting_approval_count || 0;
+        const overdue = hub?.overdue_count || 0;
+        const pending = (ws ? (ws.my_todo_count + ws.my_inprogress_count) : Math.max(0, (hub?.pending_count || 0) - inApproval)) || 0;
+
+        return {
+            pending,
+            overdue,
+            in_approval: inApproval,
+            completed,
+        };
+    }
+
+    setMobileTaskStatusFilter(status) {
+        if (this.state.mobileTaskStatusFilter === status) {
+            this.state.mobileTaskStatusFilter = 'all';
+        } else {
+            this.state.mobileTaskStatusFilter = status;
+        }
+        this.state.scopePage = 1;
+        this.state.scopePageSize = 10;
     }
 
     get mobileUniqueScopes() {
@@ -643,7 +792,8 @@ export class ProjectManageDashboard extends Component {
         const scopeMap = {};
         const unique = [];
         for (const s of assignedScopes) {
-            const scName = s.scope_name || s.scope || 'Scope';
+            const scName = (s.scope_name || s.scope || '').trim();
+            if (!scName) continue;
             if (!scopeMap[scName]) {
                 scopeMap[scName] = {
                     name: scName,
@@ -658,6 +808,12 @@ export class ProjectManageDashboard extends Component {
                 scopeMap[scName].done += 1;
             }
         }
+        unique.sort((a, b) => {
+            if (a.scope_no !== undefined && b.scope_no !== undefined && a.scope_no !== b.scope_no) {
+                return a.scope_no - b.scope_no;
+            }
+            return a.name.localeCompare(b.name);
+        });
         return unique;
     }
 
@@ -672,27 +828,20 @@ export class ProjectManageDashboard extends Component {
     get mobileFilteredScopes() {
         let list = this.mobileAssignedScopes;
 
-        // Filter by category
-        if (this.state.activeCategoryFilter === 'documentation') {
-            list = list.filter(s => s.category && s.category.toLowerCase().includes('doc'));
-        } else if (this.state.activeCategoryFilter === 'implementation') {
-            list = list.filter(s => s.category && s.category.toLowerCase().includes('imp'));
+        // Mobile 4-Box Filter: 'all', 'pending', 'overdue', 'in_approval', 'completed'
+        if (this.state.mobileTaskStatusFilter === 'pending') {
+            list = list.filter(s => this.isScopePending(s));
+        } else if (this.state.mobileTaskStatusFilter === 'overdue') {
+            list = list.filter(s => this.isScopeOverdue(s));
+        } else if (this.state.mobileTaskStatusFilter === 'in_approval') {
+            list = list.filter(s => this.isScopeInApproval(s));
+        } else if (this.state.mobileTaskStatusFilter === 'completed') {
+            list = list.filter(s => this.isScopeCompleted(s));
         }
 
-        // Filter by status color
-        if (this.state.activeStatusFilter === 'completed') {
-            list = list.filter(s => s.status_color === 'green');
-        } else if (this.state.activeStatusFilter === 'in_progress') {
-            list = list.filter(s => s.status_color === 'blue');
-        } else if (this.state.activeStatusFilter === 'pending') {
-            list = list.filter(s => s.status_color === 'yellow');
-        } else if (this.state.activeStatusFilter === 'overdue') {
-            list = list.filter(s => s.status_color === 'red');
-        }
-
-        // Filter by specific Scope
+        // Scope-wise filter
         if (this.state.selectedScopeName) {
-            list = list.filter(s => s.scope_name === this.state.selectedScopeName);
+            list = list.filter(s => (s.scope_name === this.state.selectedScopeName || s.scope === this.state.selectedScopeName));
         }
 
         // Search query
@@ -700,8 +849,11 @@ export class ProjectManageDashboard extends Component {
             const q = this.state.searchQuery.toLowerCase();
             list = list.filter(s => 
                 (s.item_id && s.item_id.toLowerCase().includes(q)) ||
+                (s.code && s.code.toLowerCase().includes(q)) ||
                 (s.name && s.name.toLowerCase().includes(q)) ||
                 (s.scope_name && s.scope_name.toLowerCase().includes(q)) ||
+                (s.scope && s.scope.toLowerCase().includes(q)) ||
+                (s.project_name && s.project_name.toLowerCase().includes(q)) ||
                 (s.responsible_name && s.responsible_name.toLowerCase().includes(q))
             );
         }
@@ -937,8 +1089,15 @@ export class ProjectManageDashboard extends Component {
         if (tab !== 'projects') {
             this.state.mobileSelectedProjectId = null;
         }
+        if (this.state.isMobile && tab === 'scopes') {
+            this.state.selectedProjectId = null;
+            this.state.projectScopesData = null;
+            this.state.selectedScopeName = null;
+            this.state.scopePage = 1;
+            this.state.scopePageSize = 10;
+        }
         this.state.activeMainView = tab;
-        if (tab === 'scopes' && !this.state.selectedProjectId) {
+        if (!this.state.isMobile && tab === 'scopes' && !this.state.selectedProjectId) {
             const projs = (this.state.data && this.state.data.projects) || [];
             if (projs.length > 0) {
                 this.selectProjectForScopes(projs[0].id);
@@ -2605,6 +2764,7 @@ export class ProjectManageDashboard extends Component {
                 start_date: item.start_date || '',
                 end_date: item.end_date || '',
                 state: item.state || 'todo',
+                approval_authority: item.approval_authority || 'TL',
                 isCalendarSchedule: false,
             };
         } else {
@@ -2632,6 +2792,8 @@ export class ProjectManageDashboard extends Component {
                 id: null,
                 project_id: targetProjId || null,
                 scope: defaultScope,
+                isNewScope: false,
+                new_scope_name: '',
                 category: cat,
                 name: '',
                 item_type: '',
@@ -2641,10 +2803,33 @@ export class ProjectManageDashboard extends Component {
                 start_date: options.startDate || '',
                 end_date: options.endDate || options.startDate || '',
                 state: 'todo',
+                approval_authority: options.approvalAuthority || 'TL',
                 isCalendarSchedule: Boolean(options.isCalendarSchedule),
             };
         }
         this.state.scopeWizardOpen = true;
+    }
+
+    onWizardScopeSelectChange(ev) {
+        const val = ev.target.value;
+        if (val === '__NEW_SCOPE__') {
+            this.state.wizardData.isNewScope = true;
+            this.state.wizardData.scope = '';
+        } else {
+            this.state.wizardData.isNewScope = false;
+            this.state.wizardData.scope = val;
+        }
+    }
+
+    toggleWizardNewScope(forceState) {
+        const next = typeof forceState === 'boolean' ? forceState : !this.state.wizardData.isNewScope;
+        this.state.wizardData.isNewScope = next;
+        if (!next && !this.state.wizardData.scope) {
+            const avail = this.state.projectScopesData?.available_scopes;
+            if (avail && avail.length > 0) {
+                this.state.wizardData.scope = avail[0];
+            }
+        }
     }
 
     getEmployeeName(empId) {
@@ -2741,9 +2926,16 @@ export class ProjectManageDashboard extends Component {
 
     async saveScopeWizard(andNext = false) {
         if (this.state.savingScope) return;
-        if (!this.state.wizardData.scope || !this.state.wizardData.scope.trim()) {
+        const isCreatingNew = !this.state.wizardData.id && Boolean(this.state.wizardData.isNewScope);
+        const scopeName = isCreatingNew
+            ? (this.state.wizardData.new_scope_name || '').trim()
+            : (this.state.wizardData.scope || '').trim();
+        if (!scopeName) {
             if (this.notification) {
-                this.notification.add("Scope (Functional Area) is required.", { type: "warning" });
+                this.notification.add(
+                    isCreatingNew ? "New Scope Name is required." : "Scope (Functional Area) is required.",
+                    { type: "warning" }
+                );
             }
             return;
         }
@@ -2759,7 +2951,8 @@ export class ProjectManageDashboard extends Component {
             const respIds = Array.isArray(this.state.wizardData.responsible_ids) ? this.state.wizardData.responsible_ids : [];
             const primaryRespId = respIds.length > 0 ? respIds[0] : (this.state.wizardData.responsible_id || false);
             const vals = {
-                scope: this.state.wizardData.scope,
+                scope: scopeName,
+                is_new_scope: isCreatingNew,
                 category: this.state.wizardData.category,
                 name: this.state.wizardData.name,
                 item_type: this.state.wizardData.item_type,
@@ -2769,6 +2962,7 @@ export class ProjectManageDashboard extends Component {
                 start_date: this.state.wizardData.start_date,
                 end_date: this.state.wizardData.end_date,
                 state: this.state.wizardData.state,
+                approval_authority: this.state.wizardData.approval_authority || 'TL',
                 is_calendar_schedule: Boolean(this.state.wizardData.isCalendarSchedule),
             };
 
